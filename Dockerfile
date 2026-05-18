@@ -18,7 +18,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /uvx /usr/local/bin/
 WORKDIR /app
 
 # Instalar deps usando uv (cacheable layer)
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 
