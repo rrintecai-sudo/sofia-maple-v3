@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{TITLE}}</title>
+  <link rel="stylesheet" href="/static/chat.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="avatar">🍁</div>
+    <div class="title-wrap">
+      <h1>Sofía</h1>
+      <span class="subtitle">Maple Collège · Admisiones</span>
+    </div>
+    <div class="status" id="status">
+      <span class="dot"></span>
+      <span class="status-text">en línea</span>
+    </div>
+  </header>
+
+  <main class="messages" id="messages" aria-live="polite">
+    <div class="bubble bubble--bot">
+      ¡Hola! Qué gusto que nos escribas. Soy Sofía, del equipo de admisiones de Maple Collège. Cuéntame, ¿qué te trajo a buscarnos?
+    </div>
+  </main>
+
+  <div class="typing" id="typing" hidden>
+    <span></span><span></span><span></span>
+  </div>
+
+  <footer class="composer">
+    <form id="chat-form" autocomplete="off">
+      <input
+        id="input"
+        type="text"
+        placeholder="Escribe tu mensaje…"
+        maxlength="4000"
+        autocomplete="off"
+        autofocus
+        required
+      />
+      <button type="submit" id="send-btn" aria-label="Enviar">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+      </button>
+    </form>
+    <div class="meta" id="meta"></div>
+  </footer>
+
+  <script>
+    window.SOFIA_SESSION_ID = "{{SESSION_ID}}";
+  </script>
+  <script src="/static/chat.js"></script>
+</body>
+</html>

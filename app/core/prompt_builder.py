@@ -1,0 +1,195 @@
+"""Compositor del system prompt según el estado de la conversación.
+
+Carga archivos modulares de `app/core/prompts/` y los compone en una lista de
+bloques compatible con la API de Anthropic Messages. Marca como cacheables los
+bloques estables (identity, rules, vocabulario, journey de la fase activa).
+
+Decisión: ver ARCHITECTURE §6 y DECISIONS ADR (prompts modulares + caching).
+"""
+
+from __future__ import annotations
+
+import logging
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
+
+from app.config import get_settings
+from app.core.state import EstadoConversacion, FaseJourney, Modo
+
+log = logging.getLogger(__name__)
+
+PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
+
+# Archivos cacheables que se cargan SIEMPRE
+_ALWAYS_FILES = ("identity.md", "rules.md", "vocabulario.md")
+
+# Mapeo fase → archivo journey
+_JOURNEY_FILES: dict[FaseJourney, str] = {
+    FaseJourney.BIENVENIDA: "journey/bienvenida.md",
+    FaseJourney.DESCUBRIMIENTO: "journey/descubrimiento.md",
+    FaseJourney.EDUCACION: "journey/educacion.md",
+    FaseJourney.INFORMACION: "journey/informacion.md",
+    FaseJourney.OBJECIONES: "journey/objeciones.md",
+    FaseJourney.AGENDADO: "journey/agendado.md",
+    FaseJourney.POST_AGENDADO: "journey/post_agendado.md",
+}
+
+
+@lru_cache(maxsize=32)
+def load_prompt_file(relative_path: str) -> str:
+    """Carga un archivo de prompt. Cacheado para performance.
+
+    Strip del frontmatter YAML si existe (sólo deja el cuerpo).
+    """
+    full = PROMPTS_DIR / relative_path
+    if not full.exists():
+        raise FileNotFoundError(f"Prompt file not found: {full} (cwd={Path.cwd()})")
+    text = full.read_text(encoding="utf-8")
+    # Strip YAML frontmatter delimitado por ---
+    if text.startswith("---"):
+        end = text.find("\n---", 3)
+        if end != -1:
+            text = text[end + 4 :].lstrip("\n")
+    return text
+
+
+def clear_cache() -> None:
+    """Para testing: borra el cache de archivos."""
+    load_prompt_file.cache_clear()
+
+
+def _datos_capturados_block(estado: EstadoConversacion) -> str | None:
+    """Construye un bloque dinámico con los datos ya capturados del papá.
+
+    Este bloque es el principal mecanismo anti-pregunta-repetida: si el papá ya
+    dio el nivel, edad, escuela actual, etc., se inyecta aquí para que el modelo
+    "lo sepa" explícitamente.
+    """
+    capt = estado.estado_capturado
+    lines: list[str] = []
+
+    if capt.nombre_papa:
+        lines.append(f"- Nombre del papá/mamá: {capt.nombre_papa}")
+    if capt.telefono:
+        lines.append(f"- Teléfono: {capt.telefono}")
+    if capt.hijos:
+        for i, hijo in enumerate(capt.hijos, 1):
+            partes = []
+            if hijo.nombre:
+                partes.append(f"nombre={hijo.nombre}")
+            if hijo.edad is not None:
+                partes.append(f"edad={hijo.edad}")
+            if hijo.nivel:
+                partes.append(f"nivel={hijo.nivel.value}")
+            if hijo.grado:
+                partes.append(f"grado={hijo.grado}")
+            if hijo.escuela_actual:
+                partes.append(f"escuela_actual={hijo.escuela_actual}")
+            if hijo.diagnostico:
+                partes.append(f"diagnostico={hijo.diagnostico}")
+            lines.append(f"- Hijo {i}: {', '.join(partes)}")
+
+    if capt.nivel_buscado_actual:
+        lines.append(f"- Nivel del que se está hablando AHORA: {capt.nivel_buscado_actual.value}")
+    if capt.miedos:
+        lines.append(f"- Miedos detectados: {', '.join(capt.miedos)}")
+    if capt.resono_con:
+        lines.append(f"- Le resonó: {', '.join(capt.resono_con)}")
+    if capt.objeciones_planteadas:
+        lines.append(f"- Objeciones planteadas: {', '.join(capt.objeciones_planteadas)}")
+    if capt.pidio_costos:
+        niveles = ", ".join(n.value for n in capt.costos_compartidos_niveles) or "sí"
+        lines.append(f"- Ya pidió costos: {niveles}")
+    if capt.cita_agendada:
+        when = capt.fecha_cita.isoformat() if capt.fecha_cita else "sí"
+        campus = capt.campus_cita or "?"
+        lines.append(f"- Cita YA agendada: {when} en {campus}")
+    if capt.vive_fuera_saltillo:
+        lines.append("- Vive fuera de Saltillo (ofrecer video llamada)")
+    if capt.fuente_entrada:
+        lines.append(f"- Fuente de entrada: {capt.fuente_entrada}")
+
+    if estado.frases_usadas:
+        frases_str = "; ".join(f'"{f}"' for f in estado.frases_usadas[-5:])
+        lines.append(f"- Frases de munición YA usadas en este chat (no las repitas): {frases_str}")
+
+    if not lines:
+        return None
+
+    return (
+        "# ESTADO YA CAPTURADO DEL PAPÁ\n\n"
+        "Esto es lo que YA sabes de este papá por mensajes previos. **No vuelvas a preguntar lo que ya está aquí.**\n\n"
+        + "\n".join(lines)
+    )
+
+
+def _meta_block(estado: EstadoConversacion) -> str:
+    """Bloque dinámico con metadata del turno (canal, modo, fase)."""
+    return (
+        f"# CONTEXTO DEL TURNO\n\n"
+        f"- Canal: **{estado.canal.value}**\n"
+        f"- Fase actual del journey: **{estado.fase_journey.value}**\n"
+        f"- Modo: **{estado.modo.value}**\n"
+        f"- Cita ya agendada: **{'sí' if estado.agendado else 'no'}**\n"
+    )
+
+
+def build_system_blocks(estado: EstadoConversacion) -> list[dict[str, Any]]:
+    """Compone el system prompt como lista de bloques para Anthropic Messages API.
+
+    Estructura (en este orden):
+    1. **identity.md** — cacheable
+    2. **rules.md** — cacheable
+    3. **vocabulario.md** — cacheable
+    4. **journey/<fase>.md** — cacheable (cambia por sesión, no por turno)
+    5. **modo_aprendizaje.md** — cacheable, solo si modo=aprendizaje
+    6. *Bloque dinámico*: meta del turno + estado capturado — NO cacheable
+
+    Los primeros bloques se marcan con `cache_control={"type": "ephemeral"}`
+    (5 min TTL). El último bloque NO se cachea (cambia cada turno).
+    """
+    settings = get_settings()
+    cacheable = bool(settings.enable_prompt_caching)
+    blocks: list[dict[str, Any]] = []
+
+    # 1-3. Always-loaded files
+    for fname in _ALWAYS_FILES:
+        blocks.append(_text_block(load_prompt_file(fname), cacheable=cacheable))
+
+    # 4. Journey de la fase activa
+    journey_file = _JOURNEY_FILES.get(estado.fase_journey)
+    if journey_file:
+        blocks.append(_text_block(load_prompt_file(journey_file), cacheable=cacheable))
+
+    # Si está agendado, también cargar post_agendado.md (anti-insistencia)
+    if estado.agendado and estado.fase_journey != FaseJourney.POST_AGENDADO:
+        blocks.append(
+            _text_block(load_prompt_file("journey/post_agendado.md"), cacheable=cacheable)
+        )
+
+    # 5. Modo Aprendizaje
+    if estado.modo == Modo.APRENDIZAJE:
+        blocks.append(_text_block(load_prompt_file("modo_aprendizaje.md"), cacheable=cacheable))
+
+    # 6. Bloque dinámico — meta + estado capturado (NO cacheable)
+    dynamic_parts = [_meta_block(estado)]
+    capt_block = _datos_capturados_block(estado)
+    if capt_block:
+        dynamic_parts.append(capt_block)
+    blocks.append(_text_block("\n\n---\n\n".join(dynamic_parts), cacheable=False))
+
+    return blocks
+
+
+def _text_block(text: str, cacheable: bool) -> dict[str, Any]:
+    block: dict[str, Any] = {"type": "text", "text": text}
+    if cacheable:
+        block["cache_control"] = {"type": "ephemeral"}
+    return block
+
+
+def estimate_total_tokens(blocks: list[dict[str, Any]]) -> int:
+    """Estimación rough: ~4 chars/token. Útil para logging/observabilidad."""
+    total_chars = sum(len(b.get("text", "")) for b in blocks)
+    return total_chars // 4
