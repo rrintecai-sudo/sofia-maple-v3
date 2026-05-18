@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+build/
+dist/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment / secrets
+.env
+.env.local
+.env.production
+*.secret
+credentials.local.md
+credentials*.md
+
+# uv
+.uv-cache/
+
+# Testing / coverage
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.tox/
+.mypy_cache/
+.ruff_cache/
+coverage.xml
+*.cover
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Local data dumps (no commit data sensible)
+data/raw/
+data/exports/
+data/dumps/
+
+# Docker volumes locales
+.docker-volumes/
+
+# Cache de prompts compilados / KB local
+.prompts-cache/
+.kb-cache/
