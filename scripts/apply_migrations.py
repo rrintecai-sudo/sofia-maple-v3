@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 """Aplica las migraciones SQL de `migrations/` a Supabase.
 
+Dos backends soportados (intenta en orden):
+  1. Management API con SUPABASE_PAT (preferido) — `POST /v1/projects/{ref}/database/query`
+  2. Conexión directa con SUPABASE_DB_URL (asyncpg)
+
 Uso:
     uv run python scripts/apply_migrations.py
     uv run python scripts/apply_migrations.py --dry-run
-
-Requisito: SUPABASE_DB_URL en .env.
-Saca la URL de Supabase Dashboard → Database → Connection String → URI.
 
 Las migraciones son idempotentes (CREATE TABLE IF NOT EXISTS, etc.) — se pueden
 correr varias veces sin problema.
@@ -19,57 +20,90 @@ import asyncio
 import sys
 from pathlib import Path
 
-import asyncpg
+import httpx
 from app.config import get_settings
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
 
 
-async def list_migrations() -> list[Path]:
-    """Devuelve los archivos .sql en orden alfabético (= orden de aplicación)."""
+def list_migrations() -> list[Path]:
     files = sorted(MIGRATIONS_DIR.glob("*.sql"))
     if not files:
         print(f"⚠️  No hay archivos .sql en {MIGRATIONS_DIR}", file=sys.stderr)
-        return []
     return files
 
 
-async def apply_one(conn: asyncpg.Connection, path: Path, dry_run: bool) -> None:
-    sql = path.read_text(encoding="utf-8")
-    if dry_run:
-        print(f"[DRY-RUN] {path.name} ({len(sql)} bytes)")
-        return
-    print(f"→ aplicando {path.name} ...", end="", flush=True)
+async def apply_via_management_api(
+    files: list[Path],
+    project_ref: str,
+    pat: str,
+    dry_run: bool,
+) -> None:
+    """Aplica migraciones vía Management API. Usa el endpoint database/query."""
+    url = f"https://api.supabase.com/v1/projects/{project_ref}/database/query"
+    headers = {
+        "Authorization": f"Bearer {pat}",
+        "Content-Type": "application/json",
+    }
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        for path in files:
+            sql = path.read_text(encoding="utf-8")
+            if dry_run:
+                print(f"[DRY-RUN] {path.name} ({len(sql)} bytes)")
+                continue
+            print(f"→ aplicando {path.name} ...", end="", flush=True)
+            resp = await client.post(url, headers=headers, json={"query": sql})
+            if resp.status_code >= 400:
+                print(" ❌")
+                print(f"  HTTP {resp.status_code}: {resp.text[:400]}", file=sys.stderr)
+                raise SystemExit(1)
+            print(" ok")
+
+
+async def apply_via_asyncpg(files: list[Path], dsn: str, dry_run: bool) -> None:
+    """Fallback: conexión directa con asyncpg."""
+    import asyncpg
+
+    conn = await asyncpg.connect(dsn=dsn)
     try:
-        await conn.execute(sql)
-        print(" ok")
-    except Exception as exc:
-        print(f"\n❌ Error en {path.name}: {exc}", file=sys.stderr)
-        raise
+        for path in files:
+            sql = path.read_text(encoding="utf-8")
+            if dry_run:
+                print(f"[DRY-RUN] {path.name} ({len(sql)} bytes)")
+                continue
+            print(f"→ aplicando {path.name} ...", end="", flush=True)
+            await conn.execute(sql)
+            print(" ok")
+    finally:
+        await conn.close()
 
 
 async def main(dry_run: bool) -> int:
     settings = get_settings()
-    if not settings.supabase_db_url:
-        print(
-            "❌ SUPABASE_DB_URL no está configurada.\n"
-            "   Ve a Supabase Dashboard → Project Settings → Database → "
-            "Connection String → URI (modo 'Transaction'). Cópiala en .env.",
-            file=sys.stderr,
-        )
-        return 2
-
-    files = await list_migrations()
+    files = list_migrations()
     if not files:
         return 0
 
-    print(f"Conectando a Postgres ({settings.supabase_url})")
-    conn = await asyncpg.connect(dsn=settings.supabase_db_url)
-    try:
-        for path in files:
-            await apply_one(conn, path, dry_run=dry_run)
-    finally:
-        await conn.close()
+    # Preferir Management API si hay PAT
+    if settings.supabase_pat and settings.supabase_project_ref:
+        print(f"Aplicando vía Management API (project_ref={settings.supabase_project_ref})")
+        await apply_via_management_api(
+            files,
+            project_ref=settings.supabase_project_ref,
+            pat=settings.supabase_pat,
+            dry_run=dry_run,
+        )
+    elif settings.supabase_db_url:
+        print("Aplicando vía asyncpg (SUPABASE_DB_URL)")
+        await apply_via_asyncpg(files, dsn=settings.supabase_db_url, dry_run=dry_run)
+    else:
+        print(
+            "❌ No hay credenciales para DDL.\n"
+            "   Configura SUPABASE_PAT + SUPABASE_PROJECT_REF (recomendado),\n"
+            "   o SUPABASE_DB_URL en el .env.",
+            file=sys.stderr,
+        )
+        return 2
 
     print(f"\n✅ {'Dry-run de' if dry_run else 'Aplicadas'} {len(files)} migraciones.")
     return 0

@@ -62,12 +62,18 @@ Formato: `ADR-XXX — Título`, fecha, contexto, decisión, justificación, alte
 
 ---
 
-## ADR-007 — Migraciones SQL idempotentes, aplicadas con script Python (no Supabase CLI)
+## ADR-007 — Migraciones vía Supabase Management API con PAT (preferido) + asyncpg fallback
 
 **Fecha:** 2026-05-18
-**Contexto:** Necesitamos aplicar migraciones a Supabase. Supabase CLI requiere un setup extra (linkar proyecto, login).
-**Decisión:** Migraciones como archivos `.sql` numerados en `migrations/`, aplicadas por `scripts/apply_migrations.py` que usa asyncpg con el `SUPABASE_DB_URL` del .env. Cada migración es idempotente (`CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`).
-**Justificación:** Setup minimalista, sin dependencias externas. La idempotencia permite correr el script varias veces sin daño.
+**Contexto:** Necesitamos aplicar DDL a Supabase. El `service_role` JWT autoriza PostgREST pero **no permite DDL**. Las dos vías legítimas son:
+  - **Management API** (`POST /v1/projects/{ref}/database/query`) con Personal Access Token (PAT).
+  - **Conexión directa Postgres** con `SUPABASE_DB_URL` y `asyncpg`.
+
+**Decisión:** Migraciones como archivos `.sql` numerados, idempotentes (`CREATE TABLE IF NOT EXISTS`). `scripts/apply_migrations.py` intenta primero Management API (si hay `SUPABASE_PAT`), y fallback a `asyncpg` con `SUPABASE_DB_URL`.
+
+**Justificación:** El PAT es la opción más cómoda porque (a) no expone DB password, (b) tiene scope acotado al proyecto, (c) se revoca con un click si se compromete. asyncpg queda como fallback para casos sin internet a la Management API.
+
+**Verificación de aplicación (2026-05-18):** 3 migraciones aplicadas con éxito vía Management API, 10 tablas nuevas visibles vía PostgREST: `sofia_conversations`, `sofia_messages`, `sofia_turn_logs`, `precios_por_nivel`, `horarios_por_nivel`, `modalidades_estancia`, `campus`, `becas`, `sofia_feedback_pending`, `sofia_messages_legacy`.
 
 ---
 
