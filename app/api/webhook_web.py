@@ -15,7 +15,7 @@ import logging
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Cookie, HTTPException, Request, Response
+from fastapi import APIRouter, Cookie, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
@@ -50,23 +50,21 @@ class WebChatResponse(BaseModel):
 
 @router.get("/chat", response_class=HTMLResponse)
 async def chat_page(
-    response: Response,
     sofia_web_session: str | None = Cookie(default=None),
 ) -> HTMLResponse:
-    """Sirve la UI del chat. Asegura cookie de sesión."""
+    """Sirve la UI del chat. Asegura cookie de sesión.
+
+    Bug fix crítico: el `response.set_cookie(...)` sobre un parámetro
+    `Response` NO se transfiere a un `HTMLResponse(...)` retornado distinto —
+    el header `Set-Cookie` nunca llegaba al cliente. Cada POST llegaba sin
+    cookie y el endpoint generaba un UUID nuevo por request, dejando cada
+    turno como t=0 sin contexto. Fix: setear la cookie sobre el `HTMLResponse`
+    que efectivamente se retorna.
+    """
     settings = get_settings()
-    if not sofia_web_session:
+    is_new_session = not sofia_web_session
+    if is_new_session:
         sofia_web_session = str(uuid.uuid4())
-        # secure=False en dev (HTTP); en prod (HTTPS) esto vendría True
-        is_secure = settings.is_production
-        response.set_cookie(
-            key=settings.web_session_cookie,
-            value=sofia_web_session,
-            httponly=True,
-            secure=is_secure,
-            samesite="lax",
-            max_age=60 * 60 * 24 * 30,  # 30 días
-        )
 
     html_path = WEB_TEMPLATES / "chat.html"
     if not html_path.exists():
@@ -75,7 +73,20 @@ async def chat_page(
     html = html_path.read_text(encoding="utf-8")
     html = html.replace("{{TITLE}}", settings.web_chat_title)
     html = html.replace("{{SESSION_ID}}", f"web:{sofia_web_session}")
-    return HTMLResponse(content=html)
+
+    html_response = HTMLResponse(content=html)
+    if is_new_session:
+        # secure=True solo en prod (HTTPS). httponly y SameSite=Lax protegen
+        # contra CSRF/XSS sin romper el flujo same-origin del JS frontend.
+        html_response.set_cookie(
+            key=settings.web_session_cookie,
+            value=sofia_web_session,
+            httponly=True,
+            secure=settings.is_production,
+            samesite="lax",
+            max_age=60 * 60 * 24 * 30,  # 30 días
+        )
+    return html_response
 
 
 @router.post("/webhook/web", response_model=WebChatResponse)
