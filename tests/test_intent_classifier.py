@@ -160,11 +160,41 @@ def test_respuesta_corta_negative_palabra_aislada_no_categorizada() -> None:
 
 
 def test_respuesta_corta_negative_demasiado_largo() -> None:
-    """>15 chars descarta aunque sea confirmatorio."""
+    """>22 chars descarta aunque sea confirmatorio."""
     assert (
-        es_respuesta_corta_al_turno_previo("Sí claro por supuesto", hay_turno_previo_assistant=True)
+        es_respuesta_corta_al_turno_previo(
+            "Sí claro por supuesto que sí", hay_turno_previo_assistant=True
+        )
         is False
     )
+
+
+def test_respuesta_corta_primer_grado() -> None:
+    """Hotfix gap detectado en debug correction_lost: ordinales escritos."""
+    assert (
+        es_respuesta_corta_al_turno_previo("Primer grado", hay_turno_previo_assistant=True) is True
+    )
+
+
+def test_respuesta_corta_segundo_de_primaria() -> None:
+    assert (
+        es_respuesta_corta_al_turno_previo("segundo de primaria", hay_turno_previo_assistant=True)
+        is True
+    )
+
+
+def test_respuesta_corta_tercero() -> None:
+    assert es_respuesta_corta_al_turno_previo("tercero", hay_turno_previo_assistant=True) is True
+
+
+def test_respuesta_corta_cuarto_grado() -> None:
+    assert (
+        es_respuesta_corta_al_turno_previo("cuarto grado", hay_turno_previo_assistant=True) is True
+    )
+
+
+def test_respuesta_corta_septimo() -> None:
+    assert es_respuesta_corta_al_turno_previo("séptimo", hay_turno_previo_assistant=True) is True
 
 
 def test_respuesta_corta_vacio() -> None:

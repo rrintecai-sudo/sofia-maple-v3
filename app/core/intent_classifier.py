@@ -159,6 +159,9 @@ _RESPUESTA_CORTA_KEYWORDS = re.compile(
     r"que\s+m[aá]s\??|cu[eé]ntame(?:\s+m[aá]s)?|sigue|y\??|y\s+luego|"
     r"\d{1,2}\s*(?:°|to|do|ro|er|vo|no|mo|cuarto|quinto|sexto)?(?:\s+(?:de\s+)?(?:primaria|secundaria|kinder|maternal))?|"
     r"\d{1,2}\s*a[ñn]os?|\d{1,2}\s*meses?|"
+    # Ordinales escritos (hotfix post-debug correction_lost):
+    r"(?:primer|primero|segundo|tercer|tercero|cuarto|quinto|sexto|s[eé]ptimo|octavo|noveno|d[eé]cimo)"
+    r"(?:\s+(?:grado|de)(?:\s+(?:primaria|secundaria|kinder))?)?|"
     r"primaria|secundaria|kinder|maternal|preescolar|"
     r"infants|baby|cubs|toddlers|preschool)\s*[\.\?\!]?\s*$",
     re.IGNORECASE,
@@ -169,8 +172,8 @@ def es_respuesta_corta_al_turno_previo(mensaje: str, hay_turno_previo_assistant:
     """Heurística determinística (Bloque 5.7 ATAQUE 2).
 
     Devuelve True si el mensaje cumple:
-      - ≤15 caracteres después de trim
-      - Encaja en patrones confirmatorios/numéricos/continuación
+      - ≤22 caracteres después de trim (cubre "segundo de primaria", etc.)
+      - Encaja en patrones confirmatorios/numéricos/continuación/ordinales
       - HAY turno previo del assistant en el historial (guard A)
 
     Si NO hay turno previo, el intent NO aplica (sería saludo inicial).
@@ -178,7 +181,7 @@ def es_respuesta_corta_al_turno_previo(mensaje: str, hay_turno_previo_assistant:
     if not hay_turno_previo_assistant:
         return False
     msg = mensaje.strip()
-    if len(msg) == 0 or len(msg) > 15:
+    if len(msg) == 0 or len(msg) > 22:
         return False
     return bool(_RESPUESTA_CORTA_KEYWORDS.match(msg))
 
