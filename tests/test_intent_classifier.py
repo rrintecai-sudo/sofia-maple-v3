@@ -170,3 +170,73 @@ def test_respuesta_corta_negative_demasiado_largo() -> None:
 def test_respuesta_corta_vacio() -> None:
     assert es_respuesta_corta_al_turno_previo("", hay_turno_previo_assistant=True) is False
     assert es_respuesta_corta_al_turno_previo("   ", hay_turno_previo_assistant=True) is False
+
+
+# ============================================================
+# Guard saludo_inicial (hotfix post-5.7): si hay turno previo del assistant,
+# el LLM NO puede clasificar como SALUDO_INICIAL — override a CONFUSO_OTRO.
+# Bug capturado: "interactuara y que aprenda" → LLM marcaba saludo_inicial,
+# Sofía se volvía a presentar a mitad de conversación.
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_guard_saludo_inicial_override_con_historial(monkeypatch) -> None:
+    """LLM devuelve saludo_inicial pero hay_turno_previo_assistant=True →
+    override a CONFUSO_OTRO."""
+    from app.adapters import openai_client
+
+    class FakeOpenAI:
+        settings = Settings(openai_api_key="sk-test")
+
+        def is_configured(self) -> bool:
+            return True
+
+        async def classify(self, text: str, instructions: str, model: str | None = None) -> str:
+            return '{"intent": "saludo_inicial", "confidence": 0.85}'
+
+    monkeypatch.setattr(openai_client, "_singleton", FakeOpenAI())
+    result = await classify_intent("interactuara y que aprenda", hay_turno_previo_assistant=True)
+    # Override a CONFUSO_OTRO — Sofía NO se vuelve a presentar
+    assert result.intent == Intent.CONFUSO_OTRO
+    assert result.confidence == 0.85  # preserva confidence original
+    assert "override hotfix" in (result.razonamiento_breve or "")
+
+
+@pytest.mark.asyncio
+async def test_guard_saludo_inicial_sin_historial_no_override(monkeypatch) -> None:
+    """LLM devuelve saludo_inicial Y hay_turno_previo_assistant=False →
+    NO override. Primer turno legítimo."""
+    from app.adapters import openai_client
+
+    class FakeOpenAI:
+        settings = Settings(openai_api_key="sk-test")
+
+        def is_configured(self) -> bool:
+            return True
+
+        async def classify(self, text: str, instructions: str, model: str | None = None) -> str:
+            return '{"intent": "saludo_inicial", "confidence": 0.95}'
+
+    monkeypatch.setattr(openai_client, "_singleton", FakeOpenAI())
+    result = await classify_intent("Hola", hay_turno_previo_assistant=False)
+    assert result.intent == Intent.SALUDO_INICIAL  # sin override
+
+
+@pytest.mark.asyncio
+async def test_guard_no_aplica_a_otros_intents(monkeypatch) -> None:
+    """Otros intents pasan sin tocar aunque hay_turno_previo_assistant=True."""
+    from app.adapters import openai_client
+
+    class FakeOpenAI:
+        settings = Settings(openai_api_key="sk-test")
+
+        def is_configured(self) -> bool:
+            return True
+
+        async def classify(self, text: str, instructions: str, model: str | None = None) -> str:
+            return '{"intent": "pregunta_costos", "confidence": 0.9}'
+
+    monkeypatch.setattr(openai_client, "_singleton", FakeOpenAI())
+    result = await classify_intent("cuánto cuesta", hay_turno_previo_assistant=True)
+    assert result.intent == Intent.PREGUNTA_COSTOS  # sin override

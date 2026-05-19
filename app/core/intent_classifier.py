@@ -84,12 +84,21 @@ async def classify_intent(
     message: str,
     *,
     historial_reciente: list[str] | None = None,
+    hay_turno_previo_assistant: bool = False,
 ) -> IntentResult:
     """Clasifica la intención de un mensaje.
 
     Args:
         message: el mensaje del usuario a clasificar.
-        historial_reciente: últimos N mensajes del usuario, para contexto opcional.
+        historial_reciente: últimos N mensajes (con prefijo de rol opcional)
+            para que el LLM tenga contexto al desambiguar mensajes ambiguos
+            (ej. "interactuara y que aprenda" → es respuesta de descubrimiento,
+            no saludo inicial). Se inyectan en el user_text.
+        hay_turno_previo_assistant: si True, el guard post-LLM **fuerza override**
+            a `CONFUSO_OTRO` si el LLM devolvió `SALUDO_INICIAL`. Bug fix del
+            hotfix post-5.7: previene que Sofía se vuelva a presentar a mitad
+            de conversación cuando el classifier se confunde con mensajes
+            ambiguos del papá.
 
     Returns:
         IntentResult con intent, confidence y razonamiento_breve.
@@ -117,7 +126,28 @@ async def classify_intent(
         log.warning("intent_classifier api error", extra={"error": str(exc)})
         return IntentResult(intent=Intent.CONFUSO_OTRO, confidence=0.0)
 
-    return _parse_result(raw)
+    result = _parse_result(raw)
+
+    # Hotfix post-5.7: guard duro contra saludo_inicial cuando ya hay historial.
+    # Si el LLM se confunde y clasifica una respuesta de descubrimiento como
+    # saludo, override a CONFUSO_OTRO. El _decidir_fase del orchestrator
+    # tratará CONFUSO_OTRO como "no cambia fase" — la conversación NO retrocede
+    # a BIENVENIDA, y Sofía NO se vuelve a presentar.
+    if result.intent == Intent.SALUDO_INICIAL and hay_turno_previo_assistant:
+        log.warning(
+            "intent_override saludo_inicial→confuso_otro por historial: %r",
+            message[:80],
+        )
+        return IntentResult(
+            intent=Intent.CONFUSO_OTRO,
+            confidence=result.confidence,
+            razonamiento_breve=(
+                f"override hotfix: LLM marcó saludo_inicial pero hay turno previo. "
+                f"original: {result.razonamiento_breve or ''}"
+            )[:200],
+        )
+
+    return result
 
 
 # Bloque 5.7 ATAQUE 2 — detector heurístico de "respuesta corta al turno previo".

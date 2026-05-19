@@ -32,6 +32,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import statistics
 import time
 import uuid
@@ -48,7 +49,8 @@ from app.core.orchestrator import procesar_turno
 from app.core.state import Canal
 from app.observability.costs import calculate_cost
 
-logging.basicConfig(level=logging.WARNING)
+_LOG_LEVEL = os.environ.get("GOLDEN_LOG_LEVEL", "WARNING").upper()
+logging.basicConfig(level=getattr(logging, _LOG_LEVEL, logging.WARNING))
 log = logging.getLogger(__name__)
 
 GOLDEN_DIR = Path(__file__).resolve().parent / "conversations"

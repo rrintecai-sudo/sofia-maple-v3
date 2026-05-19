@@ -176,9 +176,31 @@ async def procesar_turno(
         # Sigue al flujo normal de LLM (con prompt modo_aprendizaje activo) para
         # que Sofía emita el "📝 REGISTRO DE APRENDIZAJE" estructurado.
 
-    # 3. Extraer estado y clasificar intención en paralelo (auxiliares baratos)
+    # 3. Cargar historial reciente PRIMERO (lo necesitamos para guard de
+    # saludo_inicial y para contexto del classifier). Hotfix post-5.7.
+    historial = await repo.list_recent_messages(session_id, limit=20)
+    hay_turno_previo_assistant = any(
+        (m.get("role") or "").lower() in ("assistant", "ai") for m in historial
+    )
+    # Últimos 3 mensajes con prefijo de rol → contexto para desambiguar
+    # mensajes ambiguos del papá (ej. "interactuara y que aprenda").
+    historial_para_classifier: list[str] = []
+    for m in historial[-6:]:
+        role = (m.get("role") or "").lower()
+        role_short = "papá" if role in ("user", "human") else "Sofía"
+        content = (m.get("content") or "").strip()[:200]
+        if content:
+            historial_para_classifier.append(f"{role_short}: {content}")
+
+    # 3b. Extraer estado y clasificar intención en paralelo (auxiliares baratos)
     extraccion_task = asyncio.create_task(extraer_de_mensaje(mensaje, estado.estado_capturado))
-    intent_task = asyncio.create_task(classify_intent(mensaje))
+    intent_task = asyncio.create_task(
+        classify_intent(
+            mensaje,
+            historial_reciente=historial_para_classifier,
+            hay_turno_previo_assistant=hay_turno_previo_assistant,
+        )
+    )
     extraccion, intent_result = await asyncio.gather(extraccion_task, intent_task)
 
     # 4. Aplicar extracción al estado
@@ -221,8 +243,7 @@ async def procesar_turno(
     # 6. Componer prompt
     system_blocks = build_system_blocks(estado)
 
-    # 7. Recuperar historial reciente (últimos 15 turnos)
-    historial = await repo.list_recent_messages(session_id, limit=20)
+    # 7. Convertir historial (cargado en paso 3) al formato Anthropic
     messages_llm = [
         {"role": _normalize_role(m["role"]), "content": m["content"]} for m in historial
     ]
@@ -238,20 +259,14 @@ async def procesar_turno(
             ultimo_assistant_msg = m.get("content")
             break
 
-    hay_turno_previo_assistant = ultimo_assistant_msg is not None
+    hay_turno_previo_assistant_local = ultimo_assistant_msg is not None
     es_resp_corta = es_respuesta_corta_al_turno_previo(
-        mensaje, hay_turno_previo_assistant=hay_turno_previo_assistant
+        mensaje, hay_turno_previo_assistant=hay_turno_previo_assistant_local
     )
     # Override del intent del LLM si la heurística determinística matchea:
-    # el LLM puede confundirse y marcar otro intent, pero la regla es clara.
     if es_resp_corta and intent_result.intent != Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO:
         log.info(
-            "intent override → RESPUESTA_CORTA_AL_TURNO_PREVIO",
-            extra={
-                "session_id": session_id,
-                "intent_llm": intent_result.intent.value,
-                "mensaje": mensaje[:30],
-            },
+            "intent_override → RESPUESTA_CORTA_AL_TURNO_PREVIO (heurístico)",
         )
         intent_result = IntentResult(
             intent=Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO,
