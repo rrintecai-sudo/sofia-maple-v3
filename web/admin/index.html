@@ -1,0 +1,120 @@
+{% extends "_base.html" %}
+{% block title %}Admin · Sofía 2.0{% endblock %}
+
+{% block content %}
+
+<h2>Métricas (período: todo el tiempo)</h2>
+<div class="cards">
+  <div class="card">
+    <div class="label">Conversaciones</div>
+    <div class="value">{{ stats.total_conversations }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Turnos</div>
+    <div class="value">{{ stats.total_turns }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Agendados</div>
+    <div class="value">{{ stats.total_agendados }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Costo total</div>
+    <div class="value">${{ "%.4f"|format(stats.total_cost_usd) }}</div>
+  </div>
+  <div class="card">
+    <div class="label">$ / turno</div>
+    <div class="value small">${{ "%.5f"|format(stats.avg_cost_per_turn_usd) }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Cache ratio</div>
+    <div class="value small">{{ "%.0f"|format(stats.cache_ratio * 100) }}%</div>
+  </div>
+  <div class="card">
+    <div class="label">Tokens in / out</div>
+    <div class="value small">{{ stats.total_tokens_input }} / {{ stats.total_tokens_output }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Feedback pendiente</div>
+    <div class="value">{{ feedback|length }}</div>
+  </div>
+</div>
+
+<h2>Top intents</h2>
+<table>
+  <thead><tr><th>Intent</th><th style="width: 100px;">Veces</th></tr></thead>
+  <tbody>
+    {% for intent, n in stats.top_intents %}
+      <tr><td>{{ intent }}</td><td>{{ n }}</td></tr>
+    {% else %}
+      <tr><td colspan="2" style="color: #8a8472;">Sin datos aún.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Conversaciones recientes</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Canal</th>
+      <th>Identificador</th>
+      <th>Fase</th>
+      <th>Agendado</th>
+      <th>Modo</th>
+      <th>Tester</th>
+      <th>Actualizada</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in conversations %}
+      <tr>
+        <td><span class="pill pill-{{ c.canal }}">{{ c.canal }}</span></td>
+        <td><code>{{ c.identificador[:24] }}{% if c.identificador|length > 24 %}…{% endif %}</code></td>
+        <td><span class="pill pill-fase">{{ c.fase_journey or '—' }}</span></td>
+        <td>{% if c.agendado %}<span class="pill pill-agendado">SÍ</span>{% else %}—{% endif %}</td>
+        <td>{% if c.modo == 'aprendizaje' %}<span class="pill pill-modo-aprendizaje">aprendizaje</span>{% else %}normal{% endif %}</td>
+        <td>{% if c.tester %}🧪{% endif %}</td>
+        <td>{{ c.updated_at[:19] }}</td>
+        <td><a href="/admin/conv/{{ c.session_id }}?k={{ admin_key }}">ver →</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8" style="color: #8a8472;">Sin conversaciones aún.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Top conversaciones por costo</h2>
+<table class="top-expensive">
+  <thead><tr><th>Session</th><th>Turnos</th><th>$ Total</th></tr></thead>
+  <tbody>
+    {% for row in stats.top_expensive_conversations %}
+      <tr>
+        <td><a href="/admin/conv/{{ row.session_id }}?k={{ admin_key }}">{{ row.session_id[:50] }}</a></td>
+        <td>{{ row.turns }}</td>
+        <td>${{ "%.5f"|format(row.cost_usd) }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="3" style="color: #8a8472;">Sin datos.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Modo Aprendizaje — feedback pendiente</h2>
+<table>
+  <thead><tr><th>ID</th><th>Session</th><th>Categoría</th><th>Feedback</th><th>Creado</th></tr></thead>
+  <tbody>
+    {% for f in feedback %}
+      <tr>
+        <td>{{ f.id }}</td>
+        <td><code>{{ f.session_id[:30] }}</code></td>
+        <td>{{ f.categoria or '—' }}</td>
+        <td>{{ f.feedback_text[:120] }}{% if f.feedback_text|length > 120 %}…{% endif %}</td>
+        <td>{{ f.created_at[:19] }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" style="color: #8a8472;">Sin feedback pendiente.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% endblock %}

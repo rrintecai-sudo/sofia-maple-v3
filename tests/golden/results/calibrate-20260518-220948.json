@@ -1,0 +1,82 @@
+{
+  "started_at": "2026-05-19T02:09:14.178886+00:00",
+  "finished_at": "2026-05-19T02:09:48.122349+00:00",
+  "mode": "calibrate",
+  "total_conversations": 1,
+  "total_turns": 5,
+  "total_cost_usd": 0.024502,
+  "by_category": {
+    "equivalente": 4,
+    "peor": 1
+  },
+  "results": [
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "source_file": "sofia_v1_n8n_chat_histories",
+      "total_turns": 5,
+      "comparisons": [
+        {
+          "turn_index": 0,
+          "user_msg": "Hola",
+          "original": "¡Hola! Qué gusto que nos escribas 😊  \nSoy Sofía, de Maple Collège. Cuéntame, ¿qué nivel estás buscando para tu hijo? 🍁",
+          "new": "¡Hola! Qué gusto que nos escribas. Soy Sofía, del equipo de admisiones de Maple Collège.\n\nCuéntame, ¿qué te trajo a buscarnos?",
+          "category": "equivalente",
+          "razonamiento": "Ambas respuestas saludan con calidez, se presentan como Sofía de Maple Collège y abren con una pregunta para conocer al papá, con diferencias menores de redacción que no afectan el valor ni la dirección del journey.",
+          "judge_cost_usd": 0.002847,
+          "new_cost_usd": 0.001136,
+          "new_latency_ms": 4974,
+          "new_validators_failed": []
+        },
+        {
+          "turn_index": 1,
+          "user_msg": "Maple2026",
+          "original": "🔧 Modo Aprendizaje activado.\nHola equipo. Estoy lista para recibir su feedback. Pueden decirme:\n- Qué respondí mal y cómo debí responder\n- Información nueva que debo aprender\n- Reglas o prohibiciones que debo agregar\n- Ajustes a mi tono o comportamiento\n\nEscucho y tomo nota.",
+          "new": "🔧 Modo Aprendizaje activado.\nHola equipo. Estoy lista para recibir su feedback. Pueden decirme:\n- Qué respondí mal y cómo debí responder\n- Información nueva que debo aprender\n- Reglas o prohibiciones que debo agregar\n- Ajustes a mi tono o comportamiento\n\nEscucho y tomo nota.",
+          "category": "equivalente",
+          "razonamiento": "Ambas respuestas son idénticas en contenido, tono y estructura.",
+          "judge_cost_usd": 0.002424,
+          "new_cost_usd": 0.0,
+          "new_latency_ms": 475,
+          "new_validators_failed": []
+        },
+        {
+          "turn_index": 2,
+          "user_msg": "Debes presentarte como Sofía, del Equipo de Admisiones de  Maple Collège",
+          "original": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** tono / identidad\n- **Lo que aprendí:** Debo presentarme como “Sofía, del Equipo de Admisiones de Maple Collège” cuando corresponda.\n- **Cómo lo voy a aplicar:** Ajustaré mi presentación para que suene más clara y alineada con la forma en que el equipo quiere que me identifique.\n- **Ejemplo de respuesta corregida:** “¡Hola! Soy Sofía, del Equipo de Admisiones d",
+          "new": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** Presentación / Identidad\n- **Lo que aprendí:** Debo presentarme explícitamente como \"Sofía, del Equipo de Admisiones de Maple Collège\" en mi saludo inicial, no solo al final de la frase o de forma implícita.\n- **Cómo lo voy a aplicar:** En el primer mensaje de cada conversación nueva, voy a abrir con mi nombre y rol de forma clara y directa: \"Soy Sofía, del Eq",
+          "category": "equivalente",
+          "razonamiento": "Ambas respuestas registran el mismo aprendizaje de identidad/presentación con igual utilidad, diferenciándose solo en detalles de redacción y estructura.",
+          "judge_cost_usd": 0.003408,
+          "new_cost_usd": 0.003253,
+          "new_latency_ms": 7290,
+          "new_validators_failed": []
+        },
+        {
+          "turn_index": 3,
+          "user_msg": "Perfecto es correcto",
+          "original": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** tono / muletillas\n- **Lo que aprendí:** Debo evitar empezar con “Perfecto” como muletilla.\n- **Cómo lo voy a aplicar:** Responderé más directo y natural, sin recurrir a palabras de relleno al inicio.\n- **Ejemplo de respuesta corregida:** “Entendido, gracias por decírmelo. Lo tomaré en cuenta para responderte de una forma más natural 😊”",
+          "new": "✅ Confirmado.\n\nQuedo atenta a más feedback o instrucciones.",
+          "category": "equivalente",
+          "razonamiento": "Ambas respuestas acusan recibo del feedback de forma breve y natural, sin violar reglas duras; la NUEVA es más escueta pero igualmente válida en este contexto de ajuste interno.",
+          "judge_cost_usd": 0.002754,
+          "new_cost_usd": 0.002802,
+          "new_latency_ms": 4186,
+          "new_validators_failed": []
+        },
+        {
+          "turn_index": 4,
+          "user_msg": "No",
+          "original": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** tono / muletillas\n- **Lo que aprendí:** Debo evitar responder con una sola palabra seca como “No” cuando estoy en Modo Aprendizaje.\n- **Cómo lo voy a aplicar:** Voy a contestar de forma más humana y completa, incluso si el mensaje es breve.\n- **Ejemplo de respuesta corregida:** “Entendido, gracias. Lo tendré en cuenta para cuidar mejor el tono de mis respuesta",
+          "new": "🟢 Modo Normal activado. Volví a mi rol de admisiones. Lista para atender prospectos.",
+          "category": "peor",
+          "razonamiento": "La NUEVA ignora completamente el contexto de aprendizaje y responde con una declaración de estado operativo que no aporta valor ni al papá ni al proceso de mejora, mientras que la ORIGINAL genera un registro útil de aprendizaje con aplicación concreta.",
+          "judge_cost_usd": 0.003006,
+          "new_cost_usd": 0.002872,
+          "new_latency_ms": 4777,
+          "new_validators_failed": []
+        }
+      ]
+    }
+  ],
+  "judge_model": "claude-sonnet-4-6"
+}

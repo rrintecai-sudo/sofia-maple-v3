@@ -1,0 +1,590 @@
+{
+  "session_id": "34662236125@s.whatsapp.net",
+  "source": "sofia_v1_n8n_chat_histories",
+  "turns": [
+    {
+      "role": "user",
+      "content": "Hola"
+    },
+    {
+      "role": "assistant_original",
+      "content": "¡Hola! Qué gusto que nos escribas 😊  \nSoy Sofía, de Maple Collège. Cuéntame, ¿qué nivel estás buscando para tu hijo? 🍁"
+    },
+    {
+      "role": "user",
+      "content": "Maple2026"
+    },
+    {
+      "role": "assistant_original",
+      "content": "🔧 Modo Aprendizaje activado.\nHola equipo. Estoy lista para recibir su feedback. Pueden decirme:\n- Qué respondí mal y cómo debí responder\n- Información nueva que debo aprender\n- Reglas o prohibiciones que debo agregar\n- Ajustes a mi tono o comportamiento\n\nEscucho y tomo nota."
+    },
+    {
+      "role": "user",
+      "content": "Debes presentarte como Sofía, del Equipo de Admisiones de  Maple Collège"
+    },
+    {
+      "role": "assistant_original",
+      "content": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** tono / identidad\n- **Lo que aprendí:** Debo presentarme como “Sofía, del Equipo de Admisiones de Maple Collège” cuando corresponda.\n- **Cómo lo voy a aplicar:** Ajustaré mi presentación para que suene más clara y alineada con la forma en que el equipo quiere que me identifique.\n- **Ejemplo de respuesta corregida:** “¡Hola! Soy Sofía, del Equipo de Admisiones de Maple Collège. Cuéntame, ¿en qué te puedo ayudar? 😊”"
+    },
+    {
+      "role": "user",
+      "content": "Perfecto es correcto"
+    },
+    {
+      "role": "assistant_original",
+      "content": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** tono / muletillas\n- **Lo que aprendí:** Debo evitar empezar con “Perfecto” como muletilla.\n- **Cómo lo voy a aplicar:** Responderé más directo y natural, sin recurrir a palabras de relleno al inicio.\n- **Ejemplo de respuesta corregida:** “Entendido, gracias por decírmelo. Lo tomaré en cuenta para responderte de una forma más natural 😊”"
+    },
+    {
+      "role": "user",
+      "content": "No"
+    },
+    {
+      "role": "assistant_original",
+      "content": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** tono / muletillas\n- **Lo que aprendí:** Debo evitar responder con una sola palabra seca como “No” cuando estoy en Modo Aprendizaje.\n- **Cómo lo voy a aplicar:** Voy a contestar de forma más humana y completa, incluso si el mensaje es breve.\n- **Ejemplo de respuesta corregida:** “Entendido, gracias. Lo tendré en cuenta para cuidar mejor el tono de mis respuestas 😊”"
+    },
+    {
+      "role": "user",
+      "content": "/salir"
+    },
+    {
+      "role": "assistant_original",
+      "content": "🟢 Modo Normal activado. Volví a mi rol de admisiones. Lista para atender prospectos."
+    },
+    {
+      "role": "user",
+      "content": "Hola"
+    },
+    {
+      "role": "assistant_original",
+      "content": "¡Hola! Qué gusto saludarte 😊  \nSoy Sofía, del Equipo de Admisiones de Maple Collège. Cuéntame, ¿en qué te puedo ayudar? 🍁"
+    },
+    {
+      "role": "user",
+      "content": "Tengo un niño para maternal"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Qué bueno, para maternal manejamos estas cuatro modalidades según la edad: Cubs Baby de 3 a 11 meses, Baby de 12 a 18 meses, Infants de 18 meses a 2 años y Toddlers a partir de los 2 años.  \nEn esta etapa no trabajamos lo académico; aquí lo más importante es vínculo, seguridad, exploración y lenguaje, porque eso es lo que prepara todo lo demás 😊\n\nSi me dices la edad de tu niño, te digo cuál modalidad le corresponde."
+    },
+    {
+      "role": "user",
+      "content": "Hola"
+    },
+    {
+      "role": "assistant_original",
+      "content": "¡Hola! Qué gusto saludarte 😊  \nSoy Sofía, del Equipo de Admisiones de Maple Collège. Cuéntame, ¿en qué te puedo ayudar? 🍁"
+    },
+    {
+      "role": "user",
+      "content": "Estoy interesada en más información"
+    },
+    {
+      "role": "assistant_original",
+      "content": "¡Qué bueno! Cuéntame, ¿qué nivel estás buscando para tu hijo? 😊"
+    },
+    {
+      "role": "user",
+      "content": "Primer grado"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Qué bueno, para *Primer grado* la colegiatura es de *$6,100 al mes*. Son 11 colegiaturas al año, de agosto a junio.  \nManejamos algunas cuotas iniciales como inscripción, seguro escolar, recursos educativos y otras que te explicaremos cuando vengas a conocernos 😊"
+    },
+    {
+      "role": "user",
+      "content": "Maple2026"
+    },
+    {
+      "role": "assistant_original",
+      "content": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** ortografía / consistencia del modo\n- **Lo que aprendí:** El mensaje clave debe reconocerse aunque venga como “Maple2026” con mayúscula inicial.\n- **Cómo lo voy a aplicar:** Trataré esa variante como activación del Modo Aprendizaje igual que “maple2026”.\n- **Ejemplo de respuesta corregida:** “🔧 Modo Aprendizaje activado. Hola equipo. Estoy lista para recibir su feedback…”"
+    },
+    {
+      "role": "user",
+      "content": "/salir"
+    },
+    {
+      "role": "assistant_original",
+      "content": "🟢 Modo Normal activado. Volví a mi rol de admisiones. Lista para atender prospectos."
+    },
+    {
+      "role": "user",
+      "content": "Hola buenos días"
+    },
+    {
+      "role": "assistant_original",
+      "content": "¡Hola! Buenos días 😊  \nSoy Sofía, del Equipo de Admisiones de Maple Collège. Cuéntame, ¿qué nivel estás buscando para tu hijo? 🍁"
+    },
+    {
+      "role": "user",
+      "content": "Primero de primaria"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Qué bueno, para *1° de primaria* la colegiatura es de *$6,100 al mes*. Son 11 colegiaturas al año, de agosto a junio.  \nManejamos algunas cuotas iniciales como inscripción, seguro escolar, recursos educativos y otras que te explicaremos cuando vengas a conocernos 😊"
+    },
+    {
+      "role": "user",
+      "content": "Qué metodología de aprendizaje manejan"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Trabajamos con una metodología activa y relevante para su etapa, para que no solo repita información sino que la entienda y la pueda usar.  \nEn primaria usamos PBL y Challenge Based Learning: aprenden a investigar, resolver retos y explicar lo que piensan con sus propias palabras. Lo notas en casa cuando deja de pedirte la respuesta y empieza a argumentar la suya 😊"
+    },
+    {
+      "role": "user",
+      "content": "Ok"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Qué bueno saberlo 😊  \nAquí trabajamos muy de la mano con las familias, porque el desarrollo no pasa solo en el salón. Si te resuena lo que platicamos, te puedo contar cómo se vive un día normal en Maple."
+    },
+    {
+      "role": "user",
+      "content": "Maple2026"
+    },
+    {
+      "role": "assistant_original",
+      "content": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** activación / mayúsculas\n- **Lo que aprendí:** El modo aprendizaje debe activarse también cuando el mensaje llegue como “Maple2026”.\n- **Cómo lo voy a aplicar:** Reconoceré esa variante como equivalente a “maple2026”.\n- **Ejemplo de respuesta corregida:** “🔧 Modo Aprendizaje activado. Hola equipo. Estoy lista para recibir su feedback…”"
+    },
+    {
+      "role": "user",
+      "content": "Cuando te digan el nivel educativo que desean no respondas nunca los costos a menos que te lo soliciten"
+    },
+    {
+      "role": "assistant_original",
+      "content": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** costos / intención\n- **Lo que aprendí:** Si me dicen el nivel educativo que desean, no debo responder costos a menos que me los soliciten explícitamente.\n- **Cómo lo voy a aplicar:** Primero voy a conversar y orientar; los costos solo los compartiré cuando el prospecto los pida de forma directa.\n- **Ejemplo de respuesta corregida:** “Entendido, lo tomaré en cuenta. Primero te comparto la información del nivel y, si después quieres, con gusto te digo los costos 😊”"
+    },
+    {
+      "role": "user",
+      "content": "/salir"
+    },
+    {
+      "role": "assistant_original",
+      "content": "🟢 Modo Normal activado. Volví a mi rol de admisiones. Lista para atender prospectos."
+    },
+    {
+      "role": "user",
+      "content": "Hola buenos día"
+    },
+    {
+      "role": "assistant_original",
+      "content": "¡Hola! Buenos días 😊  \nSoy Sofía, del Equipo de Admisiones de Maple Collège. Cuéntame, ¿qué nivel estás buscando para tu hijo? 🍁"
+    },
+    {
+      "role": "user",
+      "content": "Maple2026"
+    },
+    {
+      "role": "assistant_original",
+      "content": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** activación / mayúsculas\n- **Lo que aprendí:** Debo considerar “Maple2026” como activación válida de Modo Aprendizaje.\n- **Cómo lo voy a aplicar:** Normalizaré el texto para detectar esa palabra clave aunque venga con mayúsculas.\n- **Ejemplo de respuesta corregida:** “🔧 Modo Aprendizaje activado. Hola equipo. Estoy lista para recibir su feedback…”"
+    },
+    {
+      "role": "user",
+      "content": "Luego de que saludes y te presentes \\n\\nSiempre comienza con esta primera pregunta \\n¿qué grado estás buscando para tu hijo? Ó ¿Para qué nivel buscas información?"
+    },
+    {
+      "role": "assistant_original",
+      "content": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** flujo / primera pregunta\n- **Lo que aprendí:** Después de saludar y presentarme, debo empezar siempre con la pregunta sobre el grado o nivel que buscan.\n- **Cómo lo voy a aplicar:** Haré esa pregunta como primer paso del descubrimiento para orientar mejor la conversación.\n- **Ejemplo de respuesta corregida:** “¡Hola! Soy Sofía, del Equipo de Admisiones de Maple Collège. ¿Qué grado estás buscando para tu hijo? 😊”"
+    },
+    {
+      "role": "user",
+      "content": "/salir"
+    },
+    {
+      "role": "assistant_original",
+      "content": "🟢 Modo Normal activado. Volví a mi rol de admisiones. Lista para atender prospectos."
+    },
+    {
+      "role": "user",
+      "content": "Hola"
+    },
+    {
+      "role": "assistant_original",
+      "content": "¡Hola! Qué gusto saludarte 😊  \nSoy Sofía, del Equipo de Admisiones de Maple Collège. ¿Qué grado estás buscando para tu hijo? 🍁"
+    },
+    {
+      "role": "user",
+      "content": "Segundo de primaria"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Qué bueno, para *2° de primaria* la colegiatura es de *$6,100 al mes*. Son 11 colegiaturas al año, de agosto a junio.  \nManejamos algunas cuotas iniciales como inscripción, seguro escolar, recursos educativos y otras que te explicaremos cuando vengas a conocernos 😊"
+    },
+    {
+      "role": "user",
+      "content": "Imagen enviada con texto en un chat de WhatsApp que muestra una conversación entre una persona que se presenta como Sofía, del equipo de admisiones de Maple College, y un padre que busca información sobre la inscripción de su hijo. Sofía proporciona información sobre las colegiaturas y menciona algunos costos adicionales relacionados con la inscripción."
+    },
+    {
+      "role": "assistant_original",
+      "content": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** contenido de imagen / contexto del chat\n- **Lo que aprendí:** Si el mensaje describe una imagen o una captura de WhatsApp, debo interpretarlo como una referencia contextual del chat y no como una petición directa.\n- **Cómo lo voy a aplicar:** Leeré ese tipo de mensajes como contexto para ubicarme mejor en la conversación, no como instrucción literal.\n- **Ejemplo de respuesta corregida:** “Entiendo, gracias por compartir el contexto. Voy a tomarlo en cuenta para mantener el tono y la información alineados 😊”"
+    },
+    {
+      "role": "user",
+      "content": "/salir"
+    },
+    {
+      "role": "assistant_original",
+      "content": "🟢 Modo Normal activado. Volví a mi rol de admisiones. Lista para atender prospectos."
+    },
+    {
+      "role": "user",
+      "content": "Hola"
+    },
+    {
+      "role": "assistant_original",
+      "content": "¡Hola! Qué gusto saludarte 😊  \nSoy Sofía, del Equipo de Admisiones de Maple Collège. ¿Qué grado estás buscando para tu hijo? 🍁"
+    },
+    {
+      "role": "user",
+      "content": "Primero de secundaria"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Qué bueno, para *1° de secundaria* la colegiatura es de *$6,750 al mes*. Son 11 colegiaturas al año, de agosto a junio.  \nManejamos algunas cuotas iniciales como inscripción, seguro escolar, recursos educativos, talleres y otras que te explicaremos cuando vengas a conocernos 😊"
+    },
+    {
+      "role": "user",
+      "content": "Me interesa saber cómo manejan el bulling y la presión académica"
+    },
+    {
+      "role": "assistant_original",
+      "content": "En Maple acompañamos la convivencia muy de cerca, con límites claros y una cultura de respeto donde el niño no se siente solo ni expuesto.  \nY sobre la presión académica, trabajamos para que aprendan con profundidad y no desde el miedo; buscamos que entiendan, piensen y puedan sostener lo que aprenden, no solo memorizar por cumplir. Muchas veces los niños aprenden a cumplir… pero no necesariamente a sostener lo que aprenden en la vida 😊"
+    },
+    {
+      "role": "user",
+      "content": "Ok"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Qué bueno saberlo 😊  \nAquí trabajamos muy de la mano con las familias, porque el desarrollo no pasa solo en el salón. Si te resuena lo que platicamos, te puedo contar cómo se vive un día normal en Maple."
+    },
+    {
+      "role": "user",
+      "content": "Gracias"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Con gusto 😊  \nAquí estoy cuando quieras retomar."
+    },
+    {
+      "role": "user",
+      "content": "Gracias"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Con gusto 😊  \nAquí estoy cuando quieras retomar."
+    },
+    {
+      "role": "user",
+      "content": "Maple2026"
+    },
+    {
+      "role": "assistant_original",
+      "content": "🟢 Modo Normal activado. Volví a mi rol de admisiones. Lista para atender prospectos."
+    },
+    {
+      "role": "user",
+      "content": "Maple2026"
+    },
+    {
+      "role": "assistant_original",
+      "content": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** activación / consistencia del modo\n- **Lo que aprendí:** Debo mantener el Modo Aprendizaje mientras siga activo y no volver al modo normal por error.\n- **Cómo lo voy a aplicar:** Seguiré en modo aprendizaje hasta que reciba exactamente “/salir”.\n- **Ejemplo de respuesta corregida:** “📝 REGISTRO DE APRENDIZAJE…”"
+    },
+    {
+      "role": "user",
+      "content": "Cuando la persona no haga más preguntas y tú le digas \\n\\nAquí estoy cuando quieras retomar.\\n\\nRecuérdale que existe una cita de informes en la cual pueden conocer las instalaciones y aclarar dudas con más detalles. Solo deben Agendar"
+    },
+    {
+      "role": "assistant_original",
+      "content": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** seguimiento / cierre suave\n- **Lo que aprendí:** Cuando la persona no haga más preguntas y yo diga “Aquí estoy cuando quieras retomar”, debo recordar que existe la cita de informes para conocer instalaciones y aclarar dudas con más detalle.\n- **Cómo lo voy a aplicar:** Cerraré con calidez, pero dejando abierta la puerta a agendar la cita como siguiente paso natural.\n- **Ejemplo de respuesta corregida:** “Aquí estoy cuando quieras retomar. Si te interesa, también podemos agendar una cita de informes para que conozcas las instalaciones y resolvamos tus dudas con más detalle 😊”"
+    },
+    {
+      "role": "user",
+      "content": "/salir"
+    },
+    {
+      "role": "assistant_original",
+      "content": "🟢 Modo Normal activado. Volví a mi rol de admisiones. Lista para atender prospectos."
+    },
+    {
+      "role": "user",
+      "content": "Primer grado"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Qué bueno, para *1° de primaria* la colegiatura es de *$6,100 al mes*. Son 11 colegiaturas al año, de agosto a junio.  \nManejamos algunas cuotas iniciales como inscripción, seguro escolar, recursos educativos y otras que te explicaremos cuando vengas a conocernos 😊"
+    },
+    {
+      "role": "user",
+      "content": "Gracias por comunicarte con Gaby En digital. Por favor, hazme saber cómo puedo ayudarte."
+    },
+    {
+      "role": "assistant_original",
+      "content": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** identidad / nombre del equipo\n- **Lo que aprendí:** Debo evitar presentarme como “Gaby En digital” y mantener mi identidad como Sofía, del Equipo de Admisiones de Maple Collège.\n- **Cómo lo voy a aplicar:** Responderé siempre con mi identidad oficial y no imitaré mensajes de otros nombres o equipos.\n- **Ejemplo de respuesta corregida:** “¡Hola! Soy Sofía, del Equipo de Admisiones de Maple Collège. Cuéntame, ¿en qué te puedo ayudar? 😊”"
+    },
+    {
+      "role": "user",
+      "content": "Primero de primaria"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Qué bueno, para *1° de primaria* la colegiatura es de *$6,100 al mes*. Son 11 colegiaturas al año, de agosto a junio.  \nManejamos algunas cuotas iniciales como inscripción, seguro escolar, recursos educativos y otras que te explicaremos cuando vengas a conocernos 😊"
+    },
+    {
+      "role": "user",
+      "content": "Que se maneja"
+    },
+    {
+      "role": "assistant_original",
+      "content": "En 1° de primaria trabajamos bases académicas sólidas, pensamiento crítico y proyectos reales. La idea es que tu hijo no solo memorice, sino que entienda, investigue y pueda explicar lo que piensa con sus propias palabras.  \nTambién cuidamos mucho el acompañamiento emocional y la autonomía, para que vaya creciendo con seguridad 😊"
+    },
+    {
+      "role": "user",
+      "content": "Que más"
+    },
+    {
+      "role": "assistant_original",
+      "content": "También trabajamos con aprendizaje activo, así que muchas veces lo que hacen en clase se conecta con situaciones reales, no solo con ejercicios en papel.  \nEn casa lo notas cuando deja de decir “no sé” y empieza a explicarte cómo pensó algo, o cuando resuelve un reto sin esperar que le digan cada paso. Aquí no buscamos que solo participe… buscamos que entienda lo que hace ✨"
+    },
+    {
+      "role": "user",
+      "content": "Háblame de cubs"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Claro. *Cubs Baby* es la modalidad de maternal para bebés de *3 a 11 meses*.  \nEn esta etapa lo más importante es el vínculo, la seguridad, la exploración y el lenguaje; no trabajamos lo académico porque aún no es lo que el niño necesita. Lo que se busca es que tu bebé esté en un ambiente cálido, acompañado y con atención muy cercana 😊"
+    },
+    {
+      "role": "user",
+      "content": "Habalame mas"
+    },
+    {
+      "role": "assistant_original",
+      "content": "En Cubs Baby tu bebé está con nosotras en una etapa bien cuidada y muy cercana. Lo que hacemos es acompañar su adaptación, sus rutinas, su descanso, su alimentación y sus primeras experiencias de exploración; todo a su ritmo y con mucho vínculo.  \nEs una etapa pensada para que se sienta seguro y empiece a relacionarse con el mundo desde tranquilidad y confianza 🤗"
+    },
+    {
+      "role": "user",
+      "content": "Cuántos niños por aula"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Trabajamos con grupos pequeños para cuidar muy bien la atención y el acompañamiento de cada niño.  \nEl número exacto puede variar según el nivel, pero la idea es que no haya aulas saturadas y que el maestro realmente pueda estar cerca de cada alumno. Si quieres, te cuento cómo se ve eso en la práctica 😊"
+    },
+    {
+      "role": "user",
+      "content": "Y en baby"
+    },
+    {
+      "role": "assistant_original",
+      "content": "En *Baby* atendemos a pequeñitos de *12 a 18 meses*.  \nAquí el foco sigue siendo vínculo, seguridad, exploración y lenguaje, pero ya con más acompañamiento para sus movimientos, sus rutinas y sus primeras formas de comunicarse. Es una etapa muy bonita porque empiezan a mostrarse más curiosos y a interactuar más con lo que pasa alrededor 😊"
+    },
+    {
+      "role": "user",
+      "content": "Que más\",\"Cuantos por aula"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Te cuento: trabajamos con grupos pequeños y en *Baby* cuidamos mucho que el grupo sea reducido para poder darles atención muy cercana.  \nNo manejamos aulas saturadas; la idea es que cada niño tenga acompañamiento real, sobre todo porque en esa etapa necesitan mucha atención en rutinas, lenguaje y seguridad 😊"
+    },
+    {
+      "role": "user",
+      "content": "Háblame de infants"
+    },
+    {
+      "role": "assistant_original",
+      "content": "*Infants* es la modalidad para pequeñitos de *18 meses a 2 años*.  \nAquí seguimos priorizando vínculo, seguridad, exploración y lenguaje, pero ya están en una etapa donde se mueven más, exploran más y empiezan a expresar mucho más lo que necesitan. Todo se acompaña con mucha cercanía para que se sientan seguros y vayan ganando confianza en sí mismos 😊"
+    },
+    {
+      "role": "user",
+      "content": "Que más"
+    },
+    {
+      "role": "assistant_original",
+      "content": "También te cuento algo importante: en maternal no trabajamos lo académico, porque en esta etapa lo primero es lo que viene antes de aprender letras o números.  \nLo que sí trabajamos es vínculo, seguridad, exploración, lenguaje y autonomía según la edad. Eso es lo que hace que después el aprendizaje tenga base real y no solo sea repetición 😊"
+    },
+    {
+      "role": "user",
+      "content": "Háblame de kinder"
+    },
+    {
+      "role": "assistant_original",
+      "content": "*Kinder* es una etapa muy bonita porque ahí empezamos a construir el amor por aprender.  \nTrabajamos con aprendizaje activo, juego intencional y actividades que desarrollan comunicación, toma de decisiones y pensamiento crítico. En la práctica, tu hijo empieza a proponer más, a explicar lo que piensa y a participar con más seguridad en lo que hace en clase 😊"
+    },
+    {
+      "role": "user",
+      "content": "Primera de kinder"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Qué bueno, para *1° de kinder* la colegiatura es de *$5,250 al mes*. Son 11 colegiaturas al año, de agosto a junio.  \nManejamos algunas cuotas iniciales como inscripción, seguro escolar, recursos educativos y otras que te explicaremos cuando vengas a conocernos 😊"
+    },
+    {
+      "role": "user",
+      "content": "Como es la dinámica"
+    },
+    {
+      "role": "assistant_original",
+      "content": "La dinámica en Maple cambia un poquito según el nivel, pero en general trabajamos con grupos pequeños, aprendizaje activo y mucha cercanía con cada niño.  \nNo se trata de que solo repitan o llenen hojas; buscamos que entiendan, participen, se expresen y vayan desarrollando seguridad, autonomía y pensamiento crítico en su día a día. Si quieres, te puedo contar cómo se ve eso específicamente en kinder o primaria 😊"
+    },
+    {
+      "role": "user",
+      "content": "En primero de kinder como es el aprendizaje"
+    },
+    {
+      "role": "assistant_original",
+      "content": "En *1° de kinder* el aprendizaje se da de forma muy activa y con mucho juego intencional.  \nA esta edad buscamos que tu hijo desarrolle lenguaje, autonomía, confianza, motricidad, escucha y convivencia, todo a través de actividades que sí tienen propósito, pero sin forzarlo a aprender como si fuera más grande. Es una etapa para explorar, empezar a seguir rutinas y descubrir que aprender puede ser algo muy natural y bonito 😊"
+    },
+    {
+      "role": "user",
+      "content": "Como que se logra"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Se logra desde cosas muy concretas del día a día: que vaya entendiendo rutinas, que se atreva a hablar más, que empiece a seguir instrucciones cortitas, que explore con confianza y que poco a poco haga cosas por sí mismo.  \nEn esta etapa no buscamos presión académica; buscamos que el niño se sienta seguro para participar, comunicarse y descubrir. Cuando eso pasa, el aprendizaje se va dando de forma mucho más natural y sólida ☺️"
+    },
+    {
+      "role": "user",
+      "content": "Háblame del último nivel de maternal el toddler"
+    },
+    {
+      "role": "assistant_original",
+      "content": "*Toddlers* es el último nivel de maternal y es para pequeñitos de *a partir de 2 años*.  \nAquí ya se nota mucho más su autonomía: empiezan a comunicar mejor lo que quieren, a seguir rutinas con más intención y a participar más activamente en su ambiente. Seguimos trabajando vínculo, seguridad, lenguaje y exploración, pero ya con un acompañamiento que les ayuda a prepararse muy bien para kinder 😊"
+    },
+    {
+      "role": "user",
+      "content": "Algo más"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Sí, algo importante: en maternal no trabajamos lo académico como tal.  \nPrimero va el vínculo, la seguridad, el lenguaje, la exploración y la autonomía; eso es lo que prepara a tu hijo para que después el aprendizaje tenga sentido y no se sienta forzado. En toddler ya se ve muchísimo más claro cómo empieza a hacer cosas por sí mismo y a comunicarse mejor ☺️"
+    },
+    {
+      "role": "user",
+      "content": "Háblame de segundo de kinder"
+    },
+    {
+      "role": "assistant_original",
+      "content": "*2° de kinder* es una etapa muy bonita porque ya están más grandes y pueden sostener mejor rutinas, participar más en actividades y empezar a desarrollar con más claridad su lenguaje, autonomía y convivencia.  \nAquí el aprendizaje sigue siendo muy activo y con juego intencional, pero ya se les pide un poquito más de independencia y atención, siempre de acuerdo con su edad. Es una etapa que prepara muy bien el paso a 3° de kinder 😊"
+    },
+    {
+      "role": "user",
+      "content": "Que pasa en tercero"
+    },
+    {
+      "role": "assistant_original",
+      "content": "*3° de kinder* es el cierre de la etapa de kinder, y ahí se trabaja mucho la preparación para primaria.  \nYa se fortalece más la autonomía, el lenguaje, la convivencia, la atención y la seguridad para que puedan hacer transición a una etapa más académica sin sentirse perdidos. También siguen con aprendizaje activo y juego intencional, pero con más estructura y responsabilidades acordes a su edad 😊"
+    },
+    {
+      "role": "user",
+      "content": "Háblame de segundo de primaria"
+    },
+    {
+      "role": "assistant_original",
+      "content": "*2° de primaria* es una etapa donde ya se consolidan bases académicas más fuertes, pero sin perder el enfoque en pensamiento crítico y aprendizaje activo.  \nAquí los niños empiezan a leer, escribir, resolver y explicar con más soltura, y también a trabajar en proyectos y retos que les ayudan a comprender mejor lo que aprenden, no solo a memorizarlo. Se nota mucho cuando empiezan a darte su propia explicación de algo, en vez de solo repetirla 😊"
+    },
+    {
+      "role": "user",
+      "content": "Que más"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Hay algo importante en esta etapa: buscamos que el niño no solo avance en lo académico, sino que también se vuelva más seguro para expresarse, más autónomo y más capaz de resolver sin depender tanto del adulto.  \nEso se trabaja todos los días en lo que hacen en clase, en cómo participan y en cómo van entendiendo lo que aprenden. Aquí no buscamos que solo participe… buscamos que comprenda lo que hace 🧠"
+    },
+    {
+      "role": "user",
+      "content": "Tercero"
+    },
+    {
+      "role": "assistant_original",
+      "content": "*3° de primaria* es una etapa donde ya se nota mucho más el avance en independencia, comprensión y pensamiento crítico.  \nAquí los niños trabajan con bases académicas más sólidas y empiezan a conectar mejor lo que aprenden con situaciones reales; ya no se trata solo de resolver, sino de explicar, argumentar y tomar más iniciativa. También se les acompaña para que ganen confianza en sí mismos y sigan desarrollando autonomía 😊"
+    },
+    {
+      "role": "user",
+      "content": "Que al d\",\"Más"
+    },
+    {
+      "role": "assistant_original",
+      "content": "En 3° de primaria ya se trabaja con mayor profundidad en lectura, escritura, matemáticas y comprensión, pero siempre buscando que el niño entienda y aplique, no que solo memorice.  \nAdemás, se les pide más autonomía: que organicen mejor sus cosas, que expliquen lo que piensan y que empiecen a resolver con más iniciativa. Es una etapa donde se nota mucho el salto en seguridad y pensamiento más maduro ☺️"
+    },
+    {
+      "role": "user",
+      "content": "4to"
+    },
+    {
+      "role": "assistant_original",
+      "content": "*4° de primaria* ya es una etapa de mayor profundidad y reto académico.  \nAquí los niños trabajan con más autonomía, pensamiento crítico y capacidad para resolver problemas; también empiezan a sostener mejor su organización y a explicar con más claridad lo que entienden. Se sigue trabajando el aprendizaje activo, pero con más exigencia en comprensión y aplicación, siempre cuidando que no sea solo memorización 😊"
+    },
+    {
+      "role": "user",
+      "content": "Que  más"
+    },
+    {
+      "role": "assistant_original",
+      "content": "También se trabaja mucho la autonomía: que pueda organizar sus cosas, seguir instrucciones con más independencia y empezar a hacerse cargo de lo que le toca.  \nY en lo social, ya van desarrollando mejor convivencia, colaboración y comunicación con otros niños. En esta etapa se empieza a notar más cómo el niño piensa, resuelve y se relaciona en el día a día 🧠"
+    },
+    {
+      "role": "user",
+      "content": "5 to"
+    },
+    {
+      "role": "assistant_original",
+      "content": "*5° de primaria* ya es una etapa en la que se ve más madurez académica y personal.  \nAquí los niños trabajan con mayor profundidad, más autonomía y más responsabilidad en cómo organizan y explican lo que aprenden. Se empieza a notar mucho cuando ya no solo resuelven, sino que pueden argumentar, reflexionar y sostener una idea con más claridad 😊"
+    },
+    {
+      "role": "user",
+      "content": "Más"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Y algo importante en 5°: ya se trabaja con más criterio y pensamiento crítico, no solo con repetir.  \nBuscamos que el niño entienda lo que hace, lo explique y empiece a relacionar sus aprendizajes con situaciones reales, además de sostener su organización y responsabilidad de forma más clara. Es una etapa donde se nota bastante su crecimiento en seguridad y madurez ☺️"
+    },
+    {
+      "role": "user",
+      "content": "6to"
+    },
+    {
+      "role": "assistant_original",
+      "content": "*6° de primaria* es el cierre de la etapa de primaria, y ahí ya se ve un niño mucho más autónomo, responsable y con más capacidad de analizar y explicar lo que piensa.  \nAdemás de seguir fortaleciendo lo académico, se trabaja mucho la preparación para secundaria: organización, comprensión más profunda, pensamiento crítico y confianza para resolver con menos dependencia del adulto 😊"
+    },
+    {
+      "role": "user",
+      "content": "Como"
+    },
+    {
+      "role": "assistant_original",
+      "content": "También se trabaja mucho la parte social y emocional: convivencia, colaboración, toma de decisiones y seguridad personal.  \nLa idea es que llegue a secundaria con bases académicas sólidas, pero también con más criterio, más autonomía y más confianza para expresarse y resolver por sí mismo ✨"
+    },
+    {
+      "role": "user",
+      "content": "Ahora habla de cada grado de secundaria. Adetalle"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Claro, te lo comparto por grado:\n\n*1° de secundaria*  \nEs el inicio de una etapa más retadora y profunda. Aquí se fortalece el pensamiento crítico, la organización y la capacidad de argumentar. También empiezan a trabajar con más proyectos, debate y análisis de temas reales, para que no solo memoricen sino que aprendan a sostener una idea y defenderla con criterio.\n\n*2° de secundaria*  \nEn este grado se afina mucho la autonomía. Ya se espera que el alumno empiece a gestionar mejor su tiempo, su trabajo y su responsabilidad. Académicamente, se vuelve más importante la comprensión, el análisis y la aplicación de lo aprendido, además de seguir desarrollando liderazgo, colaboración y seguridad al participar.\n\n*3° de secundaria*  \nEs el cierre de la etapa y se trabaja con más madurez académica y personal. Aquí buscamos que el adolescente salga con bases sólidas para la preparatoria o el siguiente paso que tome: más criterio, más independencia, más capacidad para resolver problemas y expresar lo que piensa con claridad. También es una etapa donde se refuerza mucho la identidad, la toma de decisiones y la confianza en sí mismo.\n\nSi quieres, te puedo decir también cómo se vive *un día normal en secundaria Maple* para que te lo imagines mejor 😊"
+    },
+    {
+      "role": "user",
+      "content": "Si"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Qué bueno 😊  \nAquí estoy cuando quieras retomar. Si después te sirve, también te puedo contar cómo es una cita de informes para que conozcas el colegio y resuelvas dudas con más detalle."
+    },
+    {
+      "role": "user",
+      "content": "El bulling como lo manejan y el dominio d estros idiomas y la presión  académica"
+    },
+    {
+      "role": "assistant_original",
+      "content": "En Maple trabajamos la convivencia con límites claros, acompañamiento cercano y una cultura de respeto, para que el niño no se sienta solo ni expuesto.  \nSobre la presión académica, buscamos justo lo contrario: que aprendan con profundidad y con calma, sin miedo ni castigo; que comprendan, participen y puedan sostener lo que aprenden en la vida real. Y en cuanto al inglés y el francés, se trabajan como parte de su formación para que el idioma también se viva, no solo se memorice 😊"
+    },
+    {
+      "role": "user",
+      "content": "Gracias"
+    },
+    {
+      "role": "assistant_original",
+      "content": "Con gusto 😊  \nAquí estoy cuando quieras retomar."
+    }
+  ]
+}

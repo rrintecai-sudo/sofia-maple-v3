@@ -41,7 +41,9 @@ def extract_text_from_file(path: Path) -> str:
         try:
             from pypdf import PdfReader  # type: ignore
         except ImportError as exc:
-            raise SystemExit("Para PDFs necesitas pypdf: `uv add pypdf` y vuelve a correr.") from exc
+            raise SystemExit(
+                "Para PDFs necesitas pypdf: `uv add pypdf` y vuelve a correr."
+            ) from exc
         reader = PdfReader(str(path))
         pages = [page.extract_text() or "" for page in reader.pages]
         return "\n\n".join(pages)

@@ -1,0 +1,45 @@
+{
+  "started_at": "2026-05-19T02:08:06.453356+00:00",
+  "finished_at": "2026-05-19T02:08:23.498896+00:00",
+  "mode": "calibrate",
+  "total_conversations": 1,
+  "total_turns": 2,
+  "total_cost_usd": 0.006407,
+  "by_category": {
+    "equivalente": 2
+  },
+  "results": [
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "source_file": "sofia_v1_n8n_chat_histories",
+      "total_turns": 5,
+      "comparisons": [
+        {
+          "turn_index": 0,
+          "user_msg": "Hola",
+          "original": "¡Hola! Qué gusto que nos escribas 😊  \nSoy Sofía, de Maple Collège. Cuéntame, ¿qué nivel estás buscando para tu hijo? 🍁",
+          "new": "¡Hola! Qué gusto que nos escribas. Soy Sofía, del equipo de admisiones de Maple Collège.\n\nCuéntame, ¿qué te trajo a buscarnos?",
+          "category": "equivalente",
+          "razonamiento": "Ambas respuestas saludan con calidez, se presentan como Sofía de Maple Collège y abren con una pregunta para conocer al papá, con diferencias menores de redacción que no afectan el valor ni la dirección del journey.",
+          "judge_cost_usd": 0.002847,
+          "new_cost_usd": 0.001136,
+          "new_latency_ms": 4494,
+          "new_validators_failed": []
+        },
+        {
+          "turn_index": 1,
+          "user_msg": "Maple2026",
+          "original": "🔧 Modo Aprendizaje activado.\nHola equipo. Estoy lista para recibir su feedback. Pueden decirme:\n- Qué respondí mal y cómo debí responder\n- Información nueva que debo aprender\n- Reglas o prohibiciones que debo agregar\n- Ajustes a mi tono o comportamiento\n\nEscucho y tomo nota.",
+          "new": "🔧 Modo Aprendizaje activado.\nHola equipo. Estoy lista para recibir su feedback. Pueden decirme:\n- Qué respondí mal y cómo debí responder\n- Información nueva que debo aprender\n- Reglas o prohibiciones que debo agregar\n- Ajustes a mi tono o comportamiento\n\nEscucho y tomo nota.",
+          "category": "equivalente",
+          "razonamiento": "Ambas respuestas son idénticas en contenido, tono y estructura.",
+          "judge_cost_usd": 0.002424,
+          "new_cost_usd": 0.0,
+          "new_latency_ms": 460,
+          "new_validators_failed": []
+        }
+      ]
+    }
+  ],
+  "judge_model": "claude-sonnet-4-6"
+}

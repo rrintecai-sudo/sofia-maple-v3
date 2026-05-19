@@ -1,0 +1,84 @@
+{
+  "started_at": "2026-05-19T02:06:19.915089+00:00",
+  "finished_at": "2026-05-19T02:07:04.665362+00:00",
+  "mode": "calibrate",
+  "total_conversations": 1,
+  "total_turns": 5,
+  "total_cost_usd": 0.031927,
+  "by_category": {
+    "regresion_critica": 1,
+    "equivalente": 1,
+    "mejor": 2,
+    "peor": 1
+  },
+  "results": [
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "source_file": "sofia_v1_n8n_chat_histories",
+      "total_turns": 5,
+      "comparisons": [
+        {
+          "turn_index": 0,
+          "user_msg": "Como que se logra",
+          "original": "Se logra desde cosas muy concretas del día a día: que vaya entendiendo rutinas, que se atreva a hablar más, que empiece a seguir instrucciones cortitas, que explore con confianza y que poco a poco haga cosas por sí mismo.  \nEn esta etapa no buscamos presión académica; buscamos que el niño se sienta seguro para participar, comunicarse y descubrir. Cuando eso pasa, el aprendizaje se va dando de form",
+          "new": "Tienes razón — eso quedó incompleto en mi contexto. \n\nDéjame empezar de cero: **¿Cuéntame, qué te trajo a buscarnos?** ¿Hay algo específico que te inquieta sobre la educación de tu hijo en este momento?",
+          "category": "regresion_critica",
+          "razonamiento": "La NUEVA evade completamente la pregunta directa del papá y reinicia la conversación con una pregunta genérica, perdiendo todo el valor explicativo de la ORIGINAL sobre cómo se logra el desarrollo en esta etapa.",
+          "judge_cost_usd": 0.003042,
+          "new_cost_usd": 0.001952,
+          "new_latency_ms": 5841,
+          "new_validators_failed": []
+        },
+        {
+          "turn_index": 1,
+          "user_msg": "/salir",
+          "original": "🟢 Modo Normal activado. Volví a mi rol de admisiones. Lista para atender prospectos.",
+          "new": "Perfecto. Aquí estoy cuando quieras retomar. \n\nUn abrazo. 🤍",
+          "category": "equivalente",
+          "razonamiento": "Ambas respuestas salen del modo especial y quedan disponibles para continuar, con tono cálido y sin perder el rol de admisiones.",
+          "judge_cost_usd": 0.002271,
+          "new_cost_usd": 0.001238,
+          "new_latency_ms": 4280,
+          "new_validators_failed": []
+        },
+        {
+          "turn_index": 2,
+          "user_msg": "Háblame del último nivel de maternal el toddler",
+          "original": "*Toddlers* es el último nivel de maternal y es para pequeñitos de *a partir de 2 años*.  \nAquí ya se nota mucho más su autonomía: empiezan a comunicar mejor lo que quieren, a seguir rutinas con más intención y a participar más activamente en su ambiente. Seguimos trabajando vínculo, seguridad, lenguaje y exploración, pero ya con un acompañamiento que les ayuda a prepararse muy bien para kinder 😊",
+          "new": "El programa **Toddlers** es para niños a partir de 2 años.\n\nEs la etapa donde tu hijo empieza a tener más palabras, más independencia y más curiosidad por todo. Aquí trabajamos tres cosas fundamentales:\n\n**Lenguaje.** No solo hablamos *con* él — le damos espacio para que él exprese lo que piensa y siente. Lo ves en casa cuando de repente llega con palabras nuevas que no le enseñaste.\n\n**Autonomía ",
+          "category": "mejor",
+          "razonamiento": "La NUEVA respuesta es más concreta y vivencial: desglosa los tres pilares con escenas observables en casa (palabras nuevas, quitarse zapatos, contar lo que vio), lo que genera más valor y conexión emocional que la descripción general de ORIGINAL.",
+          "judge_cost_usd": 0.003813,
+          "new_cost_usd": 0.005202,
+          "new_latency_ms": 7379,
+          "new_validators_failed": []
+        },
+        {
+          "turn_index": 3,
+          "user_msg": "Háblame de segundo de kinder",
+          "original": "*2° de kinder* es una etapa muy bonita porque ya están más grandes y pueden sostener mejor rutinas, participar más en actividades y empezar a desarrollar con más claridad su lenguaje, autonomía y convivencia.  \nAquí el aprendizaje sigue siendo muy activo y con juego intencional, pero ya se les pide un poquito más de independencia y atención, siempre de acuerdo con su edad. Es una etapa que prepara",
+          "new": "Segundo de Kinder es donde tu hijo ya tiene bases — sabe cómo funciona la escuela, tiene amigos, se siente seguro.\n\nAhora el foco cambia: **de adaptarse, a crecer.**\n\nTrabajamos más profundidad en comunicación, toma de decisiones y pensamiento. No es solo participar — es que empiece a *elegir* y a explicar por qué elige. Lo ves cuando en casa te dice \"yo quiero hacer esto porque…\" sin que le pregu",
+          "category": "mejor",
+          "razonamiento": "La NUEVA respuesta es más concreta y vivida: describe escenas observables en casa, explica el 'para qué' del aprendizaje activo, y cierra con una pregunta relevante que avanza el journey, sin repetir preguntas ni violar reglas duras.",
+          "judge_cost_usd": 0.003846,
+          "new_cost_usd": 0.003074,
+          "new_latency_ms": 7753,
+          "new_validators_failed": []
+        },
+        {
+          "turn_index": 4,
+          "user_msg": "4to",
+          "original": "*4° de primaria* ya es una etapa de mayor profundidad y reto académico.  \nAquí los niños trabajan con más autonomía, pensamiento crítico y capacidad para resolver problemas; también empiezan a sostener mejor su organización y a explicar con más claridad lo que entienden. Se sigue trabajando el aprendizaje activo, pero con más exigencia en comprensión y aplicación, siempre cuidando que no sea solo ",
+          "new": "Ah, tu hijo está en **cuarto de Kinder** — la etapa final antes de Primaria.\n\nEste es un año especial. Ya no es solo aprender — es **prepararse para la transición**, pero sin presión ni saltos bruscos.\n\nSeguimos con aprendizaje activo, pero con más **autonomía y responsabilidad**. Tu hijo empieza a organizarse solo (su mochila, sus cosas), a seguir instrucciones sin repetición, a trabajar en equip",
+          "category": "peor",
+          "razonamiento": "La NUEVA asume incorrectamente que '4to' se refiere a cuarto de Kinder cuando el contexto (y la ORIGINAL) lo interpreta como 4° de primaria, lo que genera una respuesta completamente desalineada con la realidad del papá.",
+          "judge_cost_usd": 0.003828,
+          "new_cost_usd": 0.003661,
+          "new_latency_ms": 7496,
+          "new_validators_failed": []
+        }
+      ]
+    }
+  ],
+  "judge_model": "claude-sonnet-4-6"
+}

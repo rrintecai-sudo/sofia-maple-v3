@@ -143,34 +143,32 @@ def build_system_blocks(estado: EstadoConversacion) -> list[dict[str, Any]]:
     2. **rules.md** — cacheable
     3. **vocabulario.md** — cacheable
     4. **journey/<fase>.md** — cacheable (cambia por sesión, no por turno)
-    5. **modo_aprendizaje.md** — cacheable, solo si modo=aprendizaje
+    5. **modo_aprendizaje.md** / **post_agendado.md** — solo si aplica, SIN cache
     6. *Bloque dinámico*: meta del turno + estado capturado — NO cacheable
 
-    Los primeros bloques se marcan con `cache_control={"type": "ephemeral"}`
-    (5 min TTL). El último bloque NO se cachea (cambia cada turno).
+    Límite de Anthropic: **máximo 4 bloques con cache_control**. Por eso los
+    bloques opcionales (modo, post_agendado) van sin cache. Si esos crecen mucho
+    en frecuencia, considerar consolidarlos en `identity.md`.
     """
     settings = get_settings()
     cacheable = bool(settings.enable_prompt_caching)
     blocks: list[dict[str, Any]] = []
 
-    # 1-3. Always-loaded files
+    # 1-3. Always-loaded files (cacheables)
     for fname in _ALWAYS_FILES:
         blocks.append(_text_block(load_prompt_file(fname), cacheable=cacheable))
 
-    # 4. Journey de la fase activa
+    # 4. Journey de la fase activa (cacheable — 4to y último bloque con cache)
     journey_file = _JOURNEY_FILES.get(estado.fase_journey)
     if journey_file:
         blocks.append(_text_block(load_prompt_file(journey_file), cacheable=cacheable))
 
-    # Si está agendado, también cargar post_agendado.md (anti-insistencia)
+    # 5. Bloques opcionales — SIN cache (ya tenemos 4 cacheados, Anthropic permite max 4)
     if estado.agendado and estado.fase_journey != FaseJourney.POST_AGENDADO:
-        blocks.append(
-            _text_block(load_prompt_file("journey/post_agendado.md"), cacheable=cacheable)
-        )
+        blocks.append(_text_block(load_prompt_file("journey/post_agendado.md"), cacheable=False))
 
-    # 5. Modo Aprendizaje
     if estado.modo == Modo.APRENDIZAJE:
-        blocks.append(_text_block(load_prompt_file("modo_aprendizaje.md"), cacheable=cacheable))
+        blocks.append(_text_block(load_prompt_file("modo_aprendizaje.md"), cacheable=False))
 
     # 6. Bloque dinámico — meta + estado capturado (NO cacheable)
     dynamic_parts = [_meta_block(estado)]

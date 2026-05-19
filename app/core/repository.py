@@ -238,6 +238,151 @@ class Repository:
         total = cr.split("/")[-1]
         return int(total) if total.isdigit() else 0
 
+    # ----------------------------------------------------------------
+    # Admin queries (Bloque 5)
+    # ----------------------------------------------------------------
+
+    async def list_conversations(
+        self,
+        *,
+        canal: str | None = None,
+        since: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Lista conversaciones para el admin dashboard."""
+        params: dict[str, str] = {
+            "select": "session_id,canal,identificador,fase_journey,agendado,modo,tester,created_at,updated_at",
+            "order": "updated_at.desc",
+            "limit": str(limit),
+        }
+        if canal:
+            params["canal"] = f"eq.{canal}"
+        if since:
+            params["updated_at"] = f"gte.{since}"
+        resp = await self.client.get("/sofia_conversations", params=params)
+        resp.raise_for_status()
+        return list(resp.json())
+
+    async def get_conversation_raw(self, session_id: str) -> dict[str, Any] | None:
+        resp = await self.client.get(
+            "/sofia_conversations",
+            params={"session_id": f"eq.{session_id}", "select": "*"},
+        )
+        resp.raise_for_status()
+        rows = resp.json()
+        return rows[0] if rows else None
+
+    async def list_all_messages(self, session_id: str) -> list[dict[str, Any]]:
+        """Devuelve TODOS los mensajes de la sesión, ordenados cronológicamente."""
+        resp = await self.client.get(
+            "/sofia_messages",
+            params={
+                "session_id": f"eq.{session_id}",
+                "select": "id,role,content,tipo,metadata,created_at,tokens_input,tokens_output,cost_usd,model_used,cache_hit,latency_ms",
+                "order": "id.asc",
+            },
+        )
+        resp.raise_for_status()
+        return list(resp.json())
+
+    async def list_turn_logs(self, session_id: str) -> list[dict[str, Any]]:
+        resp = await self.client.get(
+            "/sofia_turn_logs",
+            params={
+                "session_id": f"eq.{session_id}",
+                "select": "*",
+                "order": "turn_number.asc",
+            },
+        )
+        resp.raise_for_status()
+        return list(resp.json())
+
+    async def stats(
+        self,
+        *,
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> dict[str, Any]:
+        """Agrega métricas del período. Retorna dict para `/admin/stats`."""
+        from collections import Counter
+        from decimal import Decimal
+
+        params: dict[str, str] = {"select": "*", "limit": "10000"}
+        if from_date:
+            params["created_at"] = f"gte.{from_date}"
+        if to_date:
+            params["created_at"] = f"lte.{to_date}" if not from_date else params["created_at"]
+        resp = await self.client.get("/sofia_turn_logs", params=params)
+        resp.raise_for_status()
+        rows: list[dict[str, Any]] = resp.json()
+
+        total_turns = len(rows)
+        total_cost = sum(Decimal(str(r.get("cost_usd") or 0)) for r in rows)
+        total_input = sum(int(r.get("tokens_input") or 0) for r in rows)
+        total_output = sum(int(r.get("tokens_output") or 0) for r in rows)
+        total_cached = sum(int(r.get("tokens_cached") or 0) for r in rows)
+        intents = Counter(r.get("intent") for r in rows if r.get("intent"))
+        models = Counter(r.get("model_used") for r in rows if r.get("model_used"))
+
+        # Conversaciones únicas + agendadas
+        sessions = {r.get("session_id") for r in rows}
+        conv_count = len(sessions)
+
+        # Agendados — leer de sofia_conversations
+        agendados_resp = await self.client.head(
+            "/sofia_conversations",
+            params={"agendado": "eq.true", "select": "session_id"},
+            headers={"Prefer": "count=exact"},
+        )
+        agendados_resp.raise_for_status()
+        cr = agendados_resp.headers.get("content-range", "0/0")
+        agendados_total = int(cr.split("/")[-1]) if cr.split("/")[-1].isdigit() else 0
+
+        avg_cost = float(total_cost / total_turns) if total_turns else 0.0
+        cache_ratio = (
+            (total_cached / (total_input + total_cached)) if (total_input + total_cached) else 0.0
+        )
+
+        return {
+            "total_turns": total_turns,
+            "total_conversations": conv_count,
+            "total_agendados": agendados_total,
+            "total_cost_usd": float(total_cost),
+            "avg_cost_per_turn_usd": avg_cost,
+            "total_tokens_input": total_input,
+            "total_tokens_output": total_output,
+            "total_tokens_cached": total_cached,
+            "cache_ratio": round(cache_ratio, 3),
+            "top_intents": intents.most_common(10),
+            "models_used": dict(models),
+            "from_date": from_date,
+            "to_date": to_date,
+        }
+
+    async def top_expensive_conversations(self, limit: int = 10) -> list[dict[str, Any]]:
+        """Top sesiones por costo acumulado."""
+        from collections import defaultdict
+        from decimal import Decimal
+
+        resp = await self.client.get(
+            "/sofia_turn_logs",
+            params={"select": "session_id,cost_usd,turn_number", "limit": "10000"},
+        )
+        resp.raise_for_status()
+        rows = resp.json()
+        agg: dict[str, dict[str, Any]] = defaultdict(lambda: {"cost": Decimal(0), "turns": 0})
+        for r in rows:
+            sid = r.get("session_id")
+            if not sid:
+                continue
+            agg[sid]["cost"] += Decimal(str(r.get("cost_usd") or 0))
+            agg[sid]["turns"] += 1
+        ranked = sorted(agg.items(), key=lambda x: x[1]["cost"], reverse=True)[:limit]
+        return [
+            {"session_id": sid, "cost_usd": float(d["cost"]), "turns": d["turns"]}
+            for sid, d in ranked
+        ]
+
 
 # ----------------------------------------------------------------
 # Helpers de mapeo
