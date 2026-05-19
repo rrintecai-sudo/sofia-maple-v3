@@ -1,0 +1,133 @@
+{
+  "name": "correction_lost",
+  "description": "Turnos donde el papá da una corrección o instrucción ('No preguntes X', 'Cuando te diga Y'), y Sofía v2 ignora la corrección, responde a otro tema, repite preguntas ya contestadas, o pierde el hilo del journey.",
+  "selection_criteria": "Razonamiento del juez en >=1 run incluye keywords de ignorar corrección/contexto, registrar mal aprendizaje, responder a tema distinto. Categoría peor o crítica.",
+  "source_runs": [
+    "full-20260518-222305.json",
+    "full-20260518-225554.json",
+    "full-20260518-232113.json"
+  ],
+  "total_candidates": 15,
+  "items": [
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 4,
+      "user_msg": "No",
+      "expected_pattern": "Sofía debe reconocer humildemente la corrección, confirmar el dato correcto, y continuar el journey desde el punto corregido (sin repetir preguntas ya respondidas ni cambiar de tema).",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA ignora el propósito del Modo Aprendizaje: no genera un registro estructurado ni reflexiona sobre qué aprender, perdiendo todo el valor formativo que sí tiene la ORIGINAL.",
+        "La NUEVA registra un aprendizaje diferente (exceso de negritas) que no corresponde al feedback implícito del mensaje 'No', mientras que la ORIGINAL identifica correctamente que el problema era responder con una sola palabra seca, lo que hace la NUEVA irrelevante e incorrecta respecto al contexto."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 38,
+      "user_msg": "Primer grado",
+      "expected_pattern": "Sofía debe reconocer humildemente la corrección, confirmar el dato correcto, y continuar el journey desde el punto corregido (sin repetir preguntas ya respondidas ni cambiar de tema).",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA ignora el contexto implícito (papá interesado en colegio, probablemente primaria) y en lugar de avanzar el journey hace una pregunta innecesaria que retrasa la conversación, mientras que la ORIGINAL ya entregaba información concreta de valor.",
+        "La NUEVA ignora completamente el contexto y responde con una pregunta genérica, perdiendo toda la información de valor que la ORIGINAL entregaba sobre colegiatura y cuotas."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 70,
+      "user_msg": "Si",
+      "expected_pattern": "Sofía debe reconocer humildemente la corrección, confirmar el dato correcto, y continuar el journey desde el punto corregido (sin repetir preguntas ya respondidas ni cambiar de tema).",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA responde a un simple 'Sí' con una presentación extensa y no solicitada sobre Tercero de Secundaria, perdiendo el tono cálido y la dirección natural del journey que tenía la ORIGINAL, que simplemente se mantenía disponible y ofrecía el siguiente paso (cita de informes).",
+        "La NUEVA respuesta ignora completamente el mensaje del papá ('Si') y el contexto de la conversación, enviando contenido irrelevante sobre Segundo de Secundaria sin ninguna relación con lo que se estaba hablando, lo que constituye una desconexión total del journey conversacional."
+      ]
+    },
+    {
+      "session_id": "5218441302112@s.whatsapp.net",
+      "turn_index": 11,
+      "user_msg": "Si por favor",
+      "expected_pattern": "Sofía debe reconocer humildemente la corrección, confirmar el dato correcto, y continuar el journey desde el punto corregido (sin repetir preguntas ya respondidas ni cambiar de tema).",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La respuesta nueva ignora completamente el contexto de la conversación (secundaria y desarrollo del adolescente) y responde con información de estancias y horarios que nadie pidió, además de revelar costos/servicios detallados sin que el papá los solicitara.",
+        "La respuesta NUEVA ignora completamente el contexto de la conversación (secundaria y desarrollo del adolescente) y responde con información de estancias y horarios que el papá no solicitó, evadiendo la pregunta implícita y rompiendo el hilo del journey."
+      ]
+    },
+    {
+      "session_id": "5218441302112@s.whatsapp.net",
+      "turn_index": 16,
+      "user_msg": "Si por favor",
+      "expected_pattern": "Sofía debe reconocer humildemente la corrección, confirmar el dato correcto, y continuar el journey desde el punto corregido (sin repetir preguntas ya respondidas ni cambiar de tema).",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA ignora completamente el contexto donde el papá confirmó querer la dirección, y en su lugar propone agendar una visita con horarios, perdiendo la respuesta concreta que el papá esperaba.",
+        "La NUEVA ignora completamente el contexto donde el papá dijo 'sí' a recibir la dirección/ubicación, y en cambio pregunta sobre horarios, perdiendo la continuidad del journey y dejando al papá sin la información que confirmó querer recibir."
+      ]
+    },
+    {
+      "session_id": "5218441302112@s.whatsapp.net",
+      "turn_index": 18,
+      "user_msg": "https://www.instagram.com/p/DYSuU4IATTZ/?igsh=MTV0amNncHYzMzVsdQ==",
+      "expected_pattern": "Sofía debe reconocer humildemente la corrección, confirmar el dato correcto, y continuar el journey desde el punto corregido (sin repetir preguntas ya respondidas ni cambiar de tema).",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA ignora completamente el enlace compartido, asume contexto sin confirmarlo y fuerza un agendado sin haber generado valor ni entendido qué motivó al papá a compartir ese contenido.",
+        "La NUEVA afirma haber visto el contenido del link ('Vi el link de Instagram') cuando en realidad no puede acceder a él, lo cual es una afirmación falsa, y además presiona prematuramente hacia agendar una cita sin haber establecido contexto ni valor previo."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 10,
+      "user_msg": "Primer grado",
+      "expected_pattern": "Sofía debe reconocer humildemente la corrección, confirmar el dato correcto, y continuar el journey desde el punto corregido (sin repetir preguntas ya respondidas ni cambiar de tema).",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "NUEVA evade completamente la información de colegiatura que el papá implícitamente busca al indicar el grado, y en cambio lanza una pregunta genérica que ignora el contexto, perdiendo el valor concreto que ORIGINAL sí entrega.",
+        "NUEVA evade dar la información de colegiatura que el papá implícitamente busca al responder 'Primer grado', y en cambio hace preguntas adicionales que demoran el journey, mientras ORIGINAL responde directamente con el dato solicitado."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 16,
+      "user_msg": "Ok",
+      "expected_pattern": "Sofía debe reconocer humildemente la corrección, confirmar el dato correcto, y continuar el journey desde el punto corregido (sin repetir preguntas ya respondidas ni cambiar de tema).",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA hace dos preguntas nuevas cuando el papá solo respondió 'Ok', lo que puede sentirse invasivo y frío, mientras que la ORIGINAL avanza el journey con calidez ofreciendo valor concreto (cómo se vive un día en Maple).",
+        "La NUEVA es más fría y transaccional —salta directo a agendar sin generar valor ni calidez— mientras que ORIGINAL invita naturalmente a conocer el día a día del colegio, manteniendo el tono de acompañamiento que define el rol de Sofía."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 49,
+      "user_msg": "Que más",
+      "expected_pattern": "Sofía debe reconocer humildemente la corrección, confirmar el dato correcto, y continuar el journey desde el punto corregido (sin repetir preguntas ya respondidas ni cambiar de tema).",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "NUEVA usa el nombre 'Gaby' sin que el papá lo haya proporcionado en el mensaje, lo cual es un error que puede resultar extraño o invasivo, además de ser más fría y menos cálida que ORIGINAL.",
+        "La NUEVA repite una pregunta sobre la edad del hijo que ya fue respondida implícitamente en el contexto, y su tono es más frío y estructurado (con bullets y negritas) comparado con la calidez natural de la ORIGINAL que explica el enfoque pedagógico de forma más cálida y conectada."
+      ]
+    },
+    {
+      "session_id": "5218441302112@s.whatsapp.net",
+      "turn_index": 13,
+      "user_msg": "Si",
+      "expected_pattern": "Sofía debe reconocer humildemente la corrección, confirmar el dato correcto, y continuar el journey desde el punto corregido (sin repetir preguntas ya respondidas ni cambiar de tema).",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA respuesta pierde todo el momentum generado: no avanza hacia el agendado, no explica qué es la cita de informes, y la pregunta abierta '¿Qué te gustaría conocer?' retrocede en el journey en lugar de guiar naturalmente hacia agendar una visita.",
+        "La NUEVA ignora el contexto del journey (agendar visita) y retrocede a preguntas exploratorias, perdiendo el momentum natural hacia la cita que ORIGINAL aprovecha con claridad y calidez."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "name": "transactional_bullets",
+  "description": "Turnos donde Sofía v2 responde con bullets/listas/markdown en momentos íntimos o emocionales (descubrimiento, despedidas, respuestas cortas), cuando el contexto pide prosa cálida.",
+  "selection_criteria": "Razonamiento del juez en >=1 run incluye keywords de bullets/lista/pitch/estructura comercial. Categoría peor o crítica.",
+  "source_runs": [
+    "full-20260518-222305.json",
+    "full-20260518-225554.json",
+    "full-20260518-232113.json"
+  ],
+  "total_candidates": 7,
+  "items": [
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 71,
+      "user_msg": "El bulling como lo manejan y el dominio d estros idiomas y la presión  académica",
+      "expected_pattern": "Sofía debe responder en prosa fluida (sin bullets, sin numeración, sin negritas excesivas) cuando el papá hace una pregunta corta, se despide, o expresa una emoción. Los bullets sólo cuando explícitamente listan opciones.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA usa formato de lista numerada con encabezados markdown, afirma que el bullying 'casi no existe' (promesa no verificable), y la respuesta queda cortada al final, perdiendo el cierre cálido y la dirección natural del journey que sí tiene la ORIGINAL.",
+        "La NUEVA suena más a pitch de ventas con estructura de lista y afirmaciones muy específicas no verificables ('nos sentamos los tres', 'francés, alemán, mandarín'), pierde la calidez conversacional de ORIGINAL y adopta un tono más frío y corporativo que no corresponde al rol de acompañamiento cercano"
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 70,
+      "user_msg": "Si",
+      "expected_pattern": "Sofía debe responder en prosa fluida (sin bullets, sin numeración, sin negritas excesivas) cuando el papá hace una pregunta corta, se despide, o expresa una emoción. Los bullets sólo cuando explícitamente listan opciones.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA responde a un simple 'Sí' con una presentación extensa y no solicitada sobre Tercero de Secundaria, perdiendo el tono cálido y la dirección natural del journey que tenía la ORIGINAL, que simplemente se mantenía disponible y ofrecía el siguiente paso (cita de informes).",
+        "La NUEVA respuesta ignora completamente el mensaje del papá ('Si') y el contexto de la conversación, enviando contenido irrelevante sobre Segundo de Secundaria sin ninguna relación con lo que se estaba hablando, lo que constituye una desconexión total del journey conversacional."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 49,
+      "user_msg": "Que más",
+      "expected_pattern": "Sofía debe responder en prosa fluida (sin bullets, sin numeración, sin negritas excesivas) cuando el papá hace una pregunta corta, se despide, o expresa una emoción. Los bullets sólo cuando explícitamente listan opciones.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "NUEVA usa el nombre 'Gaby' sin que el papá lo haya proporcionado en el mensaje, lo cual es un error que puede resultar extraño o invasivo, además de ser más fría y menos cálida que ORIGINAL.",
+        "La NUEVA repite una pregunta sobre la edad del hijo que ya fue respondida implícitamente en el contexto, y su tono es más frío y estructurado (con bullets y negritas) comparado con la calidez natural de la ORIGINAL que explica el enfoque pedagógico de forma más cálida y conectada."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 65,
+      "user_msg": "5 to",
+      "expected_pattern": "Sofía debe responder en prosa fluida (sin bullets, sin numeración, sin negritas excesivas) cuando el papá hace una pregunta corta, se despide, o expresa una emoción. Los bullets sólo cuando explícitamente listan opciones.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 2,
+      "judge_reasoning_excerpts": [
+        "La NUEVA usa formato de lista con bullets y negritas que fragmenta el mensaje y lo hace sonar más a folleto de ventas que a conversación cálida, además de llamar al papá 'Gaby' sin que ese nombre haya aparecido en el contexto, lo cual es un error que rompe la confianza.",
+        "La NUEVA es excesivamente larga, recita una lista detallada de contenidos académicos que suena a folleto de ventas, y pierde el tono cálido y conversacional de la ORIGINAL que destacaba el crecimiento personal del niño con calidez."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 68,
+      "user_msg": "Como",
+      "expected_pattern": "Sofía debe responder en prosa fluida (sin bullets, sin numeración, sin negritas excesivas) cuando el papá hace una pregunta corta, se despide, o expresa una emoción. Los bullets sólo cuando explícitamente listan opciones.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 2,
+      "judge_reasoning_excerpts": [
+        "La NUEVA respuesta no aporta valor educativo ni acompaña la decisión del papá; simplemente pide aclaración con una lista de opciones que fragmenta la conversación, mientras que la ORIGINAL entrega contenido concreto y cálido sobre el desarrollo del alumno.",
+        "La NUEVA responde como si el papá hubiera preguntado por Primero de Secundaria, pero el mensaje del papá es solo 'Como', lo que sugiere que es un mensaje incompleto o cortado; la ORIGINAL continúa una conversación sobre primaria con calidez y coherencia, mientras que la NUEVA introduce un tema no so"
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 62,
+      "user_msg": "Que al d\",\"Más",
+      "expected_pattern": "Sofía debe responder en prosa fluida (sin bullets, sin numeración, sin negritas excesivas) cuando el papá hace una pregunta corta, se despide, o expresa una emoción. Los bullets sólo cuando explícitamente listan opciones.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 2,
+      "judge_reasoning_excerpts": [
+        "La NUEVA llama al papá 'Gaby' (nombre incorrecto o inventado) y el mensaje original del papá es fragmentado e incomprensible, por lo que la respuesta elaborada sobre pensamiento crítico en tercero parece desconectada del contexto real, además de sonar más genérica y menos cálida que la ORIGINAL.",
+        "La NUEVA respuesta es fría y no aporta valor, mientras que la ORIGINAL aprovecha el contexto previo para dar información útil sobre 3° de primaria con calidez y profundidad."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 63,
+      "user_msg": "4to",
+      "expected_pattern": "Sofía debe responder en prosa fluida (sin bullets, sin numeración, sin negritas excesivas) cuando el papá hace una pregunta corta, se despide, o expresa una emoción. Los bullets sólo cuando explícitamente listan opciones.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 1,
+      "judge_reasoning_excerpts": [
+        "La NUEVA es más larga, más genérica y suena a folleto informativo, pierde el tono cálido y personalizado de ORIGINAL, y la pregunta final es redundante porque el papá ya dijo '4to'."
+      ]
+    }
+  ]
+}

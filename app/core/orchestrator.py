@@ -83,6 +83,8 @@ class TurnResult:
     turn_number: int = 0
     skip_persistencia: bool = False  # para mensajes de sistema (modo aprendizaje)
     metadata: dict[str, Any] = field(default_factory=dict)
+    validators_failed: list[str] = field(default_factory=list)
+    regenerations: int = 0
 
 
 async def procesar_turno(
@@ -380,6 +382,8 @@ async def procesar_turno(
         latency_ms=total_latency,
         model_used=settings.anthropic_model_principal,
         turn_number=turn_number,
+        validators_failed=list(validators_failed.keys()) if validators_failed else [],
+        regenerations=regenerations,
     )
 
 

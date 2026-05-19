@@ -1,0 +1,95 @@
+{
+  "name": "factual_accuracy",
+  "description": "Turnos donde Sofía v2 da datos factuales incorrectos: edad de un nivel mal, dirección de campus equivocada, costos imprecisos, niveles inexistentes.",
+  "selection_criteria": "Razonamiento del juez en >=1 run incluye keywords sobre incorrección factual (edad equivocada, dirección distinta, dato incorrecto). Categoría peor o crítica.",
+  "source_runs": [
+    "full-20260518-222305.json",
+    "full-20260518-225554.json",
+    "full-20260518-232113.json"
+  ],
+  "total_candidates": 7,
+  "items": [
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 48,
+      "user_msg": "Háblame de infants",
+      "expected_pattern": "Sofía debe usar datos factuales correctos: edades por nivel, direcciones por campus, costos por nivel. Si no tiene certeza, debe llamar la tool correspondiente o pedir disculpas.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA pierde el tono cálido y la descripción evocadora de la ORIGINAL, suena más fría y transaccional, y además afirma datos específicos (grupos de máximo 8 niños) que no están respaldados en la ORIGINAL, lo que podría ser información falsa.",
+        "La NUEVA respuesta da información factualmente incorrecta sobre el rango de edad de Infants (dice 3 a 12 meses en lugar de 18 meses a 2 años), lo que constituye una desinformación crítica que puede confundir al papá en su decisión educativa."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 43,
+      "user_msg": "Háblame de cubs",
+      "expected_pattern": "Sofía debe usar datos factuales correctos: edades por nivel, direcciones por campus, costos por nivel. Si no tiene certeza, debe llamar la tool correspondiente o pedir disculpas.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA omite información valiosa sobre Cubs (rango de edad completo hasta 11 meses, enfoque en vínculo/seguridad/exploración/lenguaje, ambiente cálido) y en cambio hace una pregunta que puede sonar cuestionadora o contradictoria, perdiendo la calidez y el contenido informativo de la ORIGINAL.",
+        "La NUEVA omite información valiosa sobre Cubs (rango de edad completo hasta 11 meses, enfoque en vínculo/seguridad/exploración) y desvía innecesariamente hacia primaria, perdiendo la oportunidad de responder con calidez la pregunta directa del papá."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 58,
+      "user_msg": "Que pasa en tercero",
+      "expected_pattern": "Sofía debe usar datos factuales correctos: edades por nivel, direcciones por campus, costos por nivel. Si no tiene certeza, debe llamar la tool correspondiente o pedir disculpas.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA respuesta no responde la pregunta del papá sobre qué pasa en tercero, sino que niega su existencia sin ofrecer información de valor sobre la etapa equivalente, perdiendo la oportunidad de acompañar la decisión educativa con calidez.",
+        "La NUEVA afirma que Maple no tiene tercero de Kinder como dato confirmado, lo cual puede ser información incorrecta o que Sofía no debería asumir, y además describe el grado en detalle antes de aclarar que no lo ofrecen, generando confusión y potencial desconfianza."
+      ]
+    },
+    {
+      "session_id": "5218441302112@s.whatsapp.net",
+      "turn_index": 15,
+      "user_msg": "Me puedes mandar la ubicación?",
+      "expected_pattern": "Sofía debe usar datos factuales correctos: edades por nivel, direcciones por campus, costos por nivel. Si no tiene certeza, debe llamar la tool correspondiente o pedir disculpas.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA da una dirección diferente a la ORIGINAL (Blvd. V. Carranza 5064 vs José Figueroa Siller 156), lo que puede confundir al papá con información potencialmente incorrecta, además de omitir el ofrecimiento del link de Google Maps que sí incluía la ORIGINAL.",
+        "La NUEVA da una dirección diferente (Campus 2) sin contexto previo que justifique ese campus, lo que puede confundir al papá si la cita ya estaba asignada a Campus 1, y además no ofrece el link de Google Maps que sí ofrecía la ORIGINAL."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 46,
+      "user_msg": "Y en baby",
+      "expected_pattern": "Sofía debe usar datos factuales correctos: edades por nivel, direcciones por campus, costos por nivel. Si no tiene certeza, debe llamar la tool correspondiente o pedir disculpas.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 2,
+      "judge_reasoning_excerpts": [
+        "La NUEVA da información incorrecta sobre el rango de edad de Baby (dice 6-12 meses en lugar de 12-18 meses) y además hace una pregunta innecesaria que interrumpe el flujo natural de la conversación.",
+        "La NUEVA omite el rango de edad (12-18 meses) que es información clave, usa un tono más frío y comercial ('es crítico'), afirma datos específicos sobre grupos (máximo 8 niños) que podrían no ser verificables, y la pregunta final es innecesariamente disyuntiva cuando el papá solo preguntó sobre Baby."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 45,
+      "user_msg": "Cuántos niños por aula",
+      "expected_pattern": "Sofía debe usar datos factuales correctos: edades por nivel, direcciones por campus, costos por nivel. Si no tiene certeza, debe llamar la tool correspondiente o pedir disculpas.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 1,
+      "judge_reasoning_excerpts": [
+        "La NUEVA afirma un número específico (máximo 20 niños) que podría ser incorrecto y no fue validado, mientras que ORIGINAL maneja apropiadamente la incertidumbre diciendo que varía según el nivel, evitando comprometer al colegio con datos que Sofía no puede confirmar."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 67,
+      "user_msg": "6to",
+      "expected_pattern": "Sofía debe usar datos factuales correctos: edades por nivel, direcciones por campus, costos por nivel. Si no tiene certeza, debe llamar la tool correspondiente o pedir disculpas.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 1,
+      "judge_reasoning_excerpts": [
+        "La NUEVA respuesta afirma que 6to de primaria no existe en Maple sin tener certeza de eso, lo cual puede ser información incorrecta y confusa para el papá, mientras que ORIGINAL aprovecha el dato del grado para generar valor educativo y continuar el journey de admisiones con calidez."
+      ]
+    }
+  ]
+}

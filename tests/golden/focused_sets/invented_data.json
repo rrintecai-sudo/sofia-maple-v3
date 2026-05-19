@@ -1,0 +1,133 @@
+{
+  "name": "invented_data",
+  "description": "Turnos donde Sofía v2 afirma información que NO está en la conversación: nombre/edad/nivel del hijo no mencionado, afirmar haber visto enlaces o imágenes, asumir Campus 2 cuando el contexto indica Campus 1, inventar citas agendadas, etc.",
+  "selection_criteria": "Razonamiento del juez en >=1 de los 3 golden runs incluye keywords de invención (afirma sin que el papá mencionara, asume, inventa, vi el link/imagen, sin contexto). Categoría peor o regresion_critica.",
+  "source_runs": [
+    "full-20260518-222305.json",
+    "full-20260518-225554.json",
+    "full-20260518-232113.json"
+  ],
+  "total_candidates": 17,
+  "items": [
+    {
+      "session_id": "5218441302112@s.whatsapp.net",
+      "turn_index": 18,
+      "user_msg": "https://www.instagram.com/p/DYSuU4IATTZ/?igsh=MTV0amNncHYzMzVsdQ==",
+      "expected_pattern": "Sofía NO debe afirmar entidades (nombre del hijo, edad, nivel, escuela, género) que no aparezcan en estado_capturado ni en mensajes previos del papá. Si necesita un dato y no lo tiene, debe preguntarlo.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA ignora completamente el enlace compartido, asume contexto sin confirmarlo y fuerza un agendado sin haber generado valor ni entendido qué motivó al papá a compartir ese contenido.",
+        "La NUEVA afirma haber visto el contenido del link ('Vi el link de Instagram') cuando en realidad no puede acceder a él, lo cual es una afirmación falsa, y además presiona prematuramente hacia agendar una cita sin haber establecido contexto ni valor previo."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 39,
+      "user_msg": "Gracias por comunicarte con Gaby En digital. Por favor, hazme saber cómo puedo ayudarte.",
+      "expected_pattern": "Sofía NO debe afirmar entidades (nombre del hijo, edad, nivel, escuela, género) que no aparezcan en estado_capturado ni en mensajes previos del papá. Si necesita un dato y no lo tiene, debe preguntarlo.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA responde como si el mensaje fuera de un papá llamado Gaby, cuando en realidad es un mensaje automático de un sistema externo ('Gaby En digital'); además pierde el aprendizaje interno que ORIGINAL registra correctamente sobre mantener la identidad de Sofía.",
+        "La NUEVA asume incorrectamente que el papá tiene un hijo en primero de secundaria, inventando contexto que no existe en el mensaje, mientras que la ORIGINAL simplemente registra el aprendizaje de identidad sin hacer suposiciones."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 4,
+      "user_msg": "No",
+      "expected_pattern": "Sofía NO debe afirmar entidades (nombre del hijo, edad, nivel, escuela, género) que no aparezcan en estado_capturado ni en mensajes previos del papá. Si necesita un dato y no lo tiene, debe preguntarlo.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA ignora el propósito del Modo Aprendizaje: no genera un registro estructurado ni reflexiona sobre qué aprender, perdiendo todo el valor formativo que sí tiene la ORIGINAL.",
+        "La NUEVA registra un aprendizaje diferente (exceso de negritas) que no corresponde al feedback implícito del mensaje 'No', mientras que la ORIGINAL identifica correctamente que el problema era responder con una sola palabra seca, lo que hace la NUEVA irrelevante e incorrecta respecto al contexto."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 7,
+      "user_msg": "Tengo un niño para maternal",
+      "expected_pattern": "Sofía NO debe afirmar entidades (nombre del hijo, edad, nivel, escuela, género) que no aparezcan en estado_capturado ni en mensajes previos del papá. Si necesita un dato y no lo tiene, debe preguntarlo.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA omite toda la información de valor sobre las modalidades de maternal y el enfoque pedagógico de la etapa, quedando como una respuesta vacía que solo hace una pregunta, perdiendo la calidez y el contenido útil que tenía la ORIGINAL.",
+        "La NUEVA pierde todo el valor informativo sobre las modalidades de maternal y la filosofía educativa de la etapa, resultando fría y sin contexto útil para el papá."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 22,
+      "user_msg": "Luego de que saludes y te presentes \\n\\nSiempre comienza con esta primera pregunta \\n¿qué grado estás buscando para tu hijo? Ó ¿Para qué nivel buscas información?",
+      "expected_pattern": "Sofía NO debe afirmar entidades (nombre del hijo, edad, nivel, escuela, género) que no aparezcan en estado_capturado ni en mensajes previos del papá. Si necesita un dato y no lo tiene, debe preguntarlo.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA responde a un escenario diferente (cuando el nivel ya fue mencionado), ignorando la instrucción original que pide aprender a hacer la primera pregunta de grado/nivel tras el saludo, lo que hace el registro de aprendizaje irrelevante para el contexto dado.",
+        "La NUEVA responde a una corrección sobre markdown excesivo cuando el mensaje del papá trata sobre la primera pregunta del flujo de admisiones, ignorando completamente la instrucción de aprender a preguntar por el grado o nivel buscado."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 48,
+      "user_msg": "Háblame de infants",
+      "expected_pattern": "Sofía NO debe afirmar entidades (nombre del hijo, edad, nivel, escuela, género) que no aparezcan en estado_capturado ni en mensajes previos del papá. Si necesita un dato y no lo tiene, debe preguntarlo.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA pierde el tono cálido y la descripción evocadora de la ORIGINAL, suena más fría y transaccional, y además afirma datos específicos (grupos de máximo 8 niños) que no están respaldados en la ORIGINAL, lo que podría ser información falsa.",
+        "La NUEVA respuesta da información factualmente incorrecta sobre el rango de edad de Infants (dice 3 a 12 meses en lugar de 18 meses a 2 años), lo que constituye una desinformación crítica que puede confundir al papá en su decisión educativa."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 49,
+      "user_msg": "Que más",
+      "expected_pattern": "Sofía NO debe afirmar entidades (nombre del hijo, edad, nivel, escuela, género) que no aparezcan en estado_capturado ni en mensajes previos del papá. Si necesita un dato y no lo tiene, debe preguntarlo.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "NUEVA usa el nombre 'Gaby' sin que el papá lo haya proporcionado en el mensaje, lo cual es un error que puede resultar extraño o invasivo, además de ser más fría y menos cálida que ORIGINAL.",
+        "La NUEVA repite una pregunta sobre la edad del hijo que ya fue respondida implícitamente en el contexto, y su tono es más frío y estructurado (con bullets y negritas) comparado con la calidez natural de la ORIGINAL que explica el enfoque pedagógico de forma más cálida y conectada."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 58,
+      "user_msg": "Que pasa en tercero",
+      "expected_pattern": "Sofía NO debe afirmar entidades (nombre del hijo, edad, nivel, escuela, género) que no aparezcan en estado_capturado ni en mensajes previos del papá. Si necesita un dato y no lo tiene, debe preguntarlo.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA respuesta no responde la pregunta del papá sobre qué pasa en tercero, sino que niega su existencia sin ofrecer información de valor sobre la etapa equivalente, perdiendo la oportunidad de acompañar la decisión educativa con calidez.",
+        "La NUEVA afirma que Maple no tiene tercero de Kinder como dato confirmado, lo cual puede ser información incorrecta o que Sofía no debería asumir, y además describe el grado en detalle antes de aclarar que no lo ofrecen, generando confusión y potencial desconfianza."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 71,
+      "user_msg": "El bulling como lo manejan y el dominio d estros idiomas y la presión  académica",
+      "expected_pattern": "Sofía NO debe afirmar entidades (nombre del hijo, edad, nivel, escuela, género) que no aparezcan en estado_capturado ni en mensajes previos del papá. Si necesita un dato y no lo tiene, debe preguntarlo.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA usa formato de lista numerada con encabezados markdown, afirma que el bullying 'casi no existe' (promesa no verificable), y la respuesta queda cortada al final, perdiendo el cierre cálido y la dirección natural del journey que sí tiene la ORIGINAL.",
+        "La NUEVA suena más a pitch de ventas con estructura de lista y afirmaciones muy específicas no verificables ('nos sentamos los tres', 'francés, alemán, mandarín'), pierde la calidez conversacional de ORIGINAL y adopta un tono más frío y corporativo que no corresponde al rol de acompañamiento cercano"
+      ]
+    },
+    {
+      "session_id": "5218441302112@s.whatsapp.net",
+      "turn_index": 15,
+      "user_msg": "Me puedes mandar la ubicación?",
+      "expected_pattern": "Sofía NO debe afirmar entidades (nombre del hijo, edad, nivel, escuela, género) que no aparezcan en estado_capturado ni en mensajes previos del papá. Si necesita un dato y no lo tiene, debe preguntarlo.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA da una dirección diferente a la ORIGINAL (Blvd. V. Carranza 5064 vs José Figueroa Siller 156), lo que puede confundir al papá con información potencialmente incorrecta, además de omitir el ofrecimiento del link de Google Maps que sí incluía la ORIGINAL.",
+        "La NUEVA da una dirección diferente (Campus 2) sin contexto previo que justifique ese campus, lo que puede confundir al papá si la cita ya estaba asignada a Campus 1, y además no ofrece el link de Google Maps que sí ofrecía la ORIGINAL."
+      ]
+    }
+  ]
+}

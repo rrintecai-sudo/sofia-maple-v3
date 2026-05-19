@@ -145,3 +145,44 @@ Sin una métrica más estable, iterar prompts es contraproducente — el ruido v
 **Justificación:** Atacar 4 causas raíz en paralelo sin validación de datos puede repetir el patrón de 5.5 (empeorar todo). Mejor: secuenciar — primero auditoría factual con Cecilia, luego prompt fixes guiados por cada categoría.
 
 ---
+
+## ADR-011 — Bloque 5.6 PASO 0: sistema de evaluación robusto (multi-run + métrica determinística + focused sets)
+
+**Fecha:** 2026-05-19
+**Contexto:** En ADR-009 documentamos que el juez Sonnet 4.6 tiene varianza ±10-15pp entre runs idénticos. Eso invalida iteraciones de prompts basadas en deltas pequeños del golden test con n=92. Antes de atacar las 4 causas raíz (ADR-010) necesitamos una métrica más estable.
+
+**Decisión — 3 mejoras al runner:**
+
+1. **Multi-run averaging (`--runs N`)** — Cada turno se ejecuta N veces (default 1, recomendado 3 para validación). Por cada turno se reporta:
+   - Categoría moda (en empate, prioridad peor > critica > equiv > mejor)
+   - Distribución de categorías entre runs
+   - Desviación estándar del % equiv/mejor inter-run
+   - Razonamiento del juez del primer run que coincide con la moda
+
+2. **Métrica determinística complementaria (`pct_all_validators_pass`)** — Por cada turno, contamos cuántos runs pasaron TODOS los validators. La métrica global es % de turnos donde al menos 1 run pasó todos. Esta métrica es 100% reproducible dada la respuesta del modelo (validators son determinísticos), aunque el modelo principal sí tiene varianza. Implementado en `tests/golden/runner.py` + módulo separado `tests/golden/deterministic_metrics.py` para análisis post-hoc de archivos JSON viejos.
+   - **Cambio de contrato:** `TurnResult` (en `app/core/orchestrator.py`) ahora expone `validators_failed: list[str]` y `regenerations: int` para que el runner pueda capturar la métrica sin tocar DB.
+
+3. **Focused sets (`--focused <name>`)** — Sub-conjuntos curados de turnos donde el baseline falla por un patrón específico. 4 sets generados en `tests/golden/focused_sets/`:
+   - `invented_data.json` — 10 items (Sofía afirma datos no presentes)
+   - `transactional_bullets.json` — 7 items (bullets/markdown en momentos íntimos)
+   - `correction_lost.json` — 10 items (Sofía pierde el hilo cuando el papá corrige)
+   - `factual_accuracy.json` — 7 items (datos factuales incorrectos)
+
+   La curación es **automática** (regex sobre razonamientos del juez de los 3 runs de Bloque 5.5) más **validación manual** del usuario antes de avanzar al PASO 1.
+
+   Estructura de cada item:
+   - `session_id`, `turn_index`, `user_msg`
+   - `expected_pattern`: qué debería hacer Sofía bien
+   - `baseline_failed: true`, `baseline_bad_runs: N` (en cuántos de los 3 runs falló)
+   - `judge_reasoning_excerpts`: hasta 2 razonamientos del juez como evidencia
+
+   El runner en modo `--focused` carga la conversación origen, procesa todos los turnos hasta el último target como **contexto silencioso** (para mantener el flujo conversacional), y solo juzga los turnos del focused set.
+
+**Costo esperado:**
+- `--full --runs 3`: ~$1.65 por iteración (vs $0.55 single-run)
+- `--focused X --runs 3`: ~$0.10-0.20 según tamaño del set
+- Total Bloque 5.6: $3-5 USD aprobado por Oscar
+
+**Justificación:** Sin métrica estable, iterar prompts es contraproducente — el ruido del juez enmascara la señal real. Multi-run reduce la varianza a ~±3-5pp; métrica determinística es 100% reproducible; focused sets dan mediciones específicas por causa raíz que el % global no captura.
+
+---
