@@ -186,3 +186,40 @@ Sin una métrica más estable, iterar prompts es contraproducente — el ruido v
 **Justificación:** Sin métrica estable, iterar prompts es contraproducente — el ruido del juez enmascara la señal real. Multi-run reduce la varianza a ~±3-5pp; métrica determinística es 100% reproducible; focused sets dan mediciones específicas por causa raíz que el % global no captura.
 
 ---
+
+## ADR-012 — Bloque 5.6 PASO 1: validator `no_inventa_datos` + regla "Integridad de información"
+
+**Fecha:** 2026-05-19
+**Contexto:** Causa raíz #1 del baseline (Sofía afirma información que no está en la conversación) es la más frecuente y la más dañina para la confianza del papá. Necesitamos defensa en dos capas: prompt + validator post-hoc.
+
+**Decisión:**
+
+1. **Validator `validar_no_inventa_datos(respuesta, estado, mensajes_papa)`** en `app/core/validators.py` con 7 sub-chequeos:
+   - Afirmar haber visto contenido externo (link/imagen/video/post) — siempre falla; Sofía no tiene visión web.
+   - Afirmar nombre del papá no presente en `estado.nombre_papa` ni en mensajes previos.
+   - Afirmar nivel del hijo (Kinder/Maternal/etc.) no presente en estado ni mensajes.
+   - Afirmar edad del hijo no presente.
+   - Afirmar género (hijo vs hija) cuando NO hay ningún referente — toleramos si hay nivel_buscado_actual o hijos en estado.
+   - Afirmar Campus específico que contradiga `estado.campus_cita`.
+   - Afirmar cita agendada cuando `estado.cita_agendada=False`.
+
+   Conservador por diseño: preguntas hipotéticas ("¿para Maternal?") NO fallan. Solo afirmaciones declarativas.
+
+2. **TurnResult expone `validators_failed: list[str]` y `regenerations: int`** (cambio del Bloque 5.6 PASO 0) para que el runner capture la métrica determinística.
+
+3. **Nuevo flujo en orchestrator:** se pasa `mensajes_papa` (extraídos del historial) al `run_all_validators`. Cuando el validator falla, el feedback va al loop de regeneración existente.
+
+4. **Regla "Integridad de información"** en `app/core/prompts/rules.md` (sección nueva, después de regla 22). Cubre:
+   - Nombre del papá (con ejemplo concreto del bug detectado: "Gracias por comunicarte con Gaby En digital" → Gaby es sistema, no papá).
+   - Género del hijo (usar "tu peque" si no se sabe).
+   - Edad/nivel/escuela actual.
+   - Eventos pasados (cita agendada).
+   - Campus.
+   - Contenido externo (URLs/imágenes).
+   - Datos cuantitativos específicos (debe venir de tool/tabla, no del prompt).
+
+**Tests:** 15 tests nuevos en `tests/test_validators.py` cubriendo los 7 sub-chequeos (positivos y negativos). 254/254 total.
+
+**Justificación:** Defensa en profundidad: el prompt previene la mayoría de las invenciones; el validator captura las que pasan. La regla del prompt enseña al modelo el principio ("silencio honesto > afirmación cómoda pero falsa"); el validator hace el chequeo determinístico y, al regenerar, inyecta el motivo específico.
+
+---

@@ -259,12 +259,17 @@ async def procesar_turno(
             final_report = None
             break
 
+        # Bloque 5.6: pasar mensajes previos del papá para validar invenciones
+        mensajes_papa = [
+            m["content"] for m in historial if (m.get("role") or "").lower() in ("user", "human")
+        ]
         final_report = run_all_validators(
             respuesta=response_text,
             estado=estado.estado_capturado,
             intent=intent_result.intent,
             tools_called=[],  # Bloque 4 introducirá tools reales
             frases_usadas=estado.frases_usadas,
+            mensajes_papa=[*mensajes_papa, mensaje],
         )
 
         if final_report.all_passed:
