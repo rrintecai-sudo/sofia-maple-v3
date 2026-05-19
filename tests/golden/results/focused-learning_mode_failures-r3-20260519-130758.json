@@ -1,0 +1,200 @@
+{
+  "started_at": "2026-05-19T16:56:04.050446+00:00",
+  "finished_at": "2026-05-19T17:07:58.186413+00:00",
+  "mode": "focused",
+  "runs_per_turn": 3,
+  "focused_set": "learning_mode_failures",
+  "total_conversations": 1,
+  "total_turns": 6,
+  "total_cost_usd": 0.290239,
+  "by_category": {
+    "peor": 6
+  },
+  "results": [
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "source_file": "sofia_v1_n8n_chat_histories",
+      "total_turns": 37,
+      "comparisons": [
+        {
+          "turn_index": 2,
+          "user_msg": "Debes presentarte como Sofía, del Equipo de Admisiones de  Maple Collège",
+          "original": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** tono / identidad\n- **Lo que aprendí:** Debo presentarme como “Sofía, del Equipo de Admisiones de Maple Collège” cuando corresponda.\n- **Cómo lo voy a aplicar:** Ajustaré mi presentación para que suene más clara y alineada con la forma en que el equipo quiere que me identifique.\n- **Ejemplo de respuesta corregida:** “¡Hola! Soy Sofía, del Equipo de Admisiones d",
+          "new": "📝 REGISTRO DE APRENDIZAJE\n\n**Tema:** Formato de respuesta en Modo Aprendizaje — reducir markdown y prosa fluida.\n\nLo que aprendí es que mis registros tienen demasiada estructura cuando el contexto pide calidez. Debo usar máximo 2-3 negritas, eliminar bullets en momentos íntimos, y escribir como una persona que escucha, no como un sistema que reporta.\n\nCómo lo voy a aplicar: en futuras respuestas d",
+          "category": "peor",
+          "razonamiento": "La NUEVA responde a una corrección diferente (formato/markdown) en lugar de registrar el aprendizaje real del mensaje —presentarse como Sofía del Equipo de Admisiones—, perdiendo el foco y generando confusión sobre qué se aprendió.",
+          "judge_cost_usd": 0.011367,
+          "new_cost_usd": 0.039125,
+          "new_latency_ms": 12943,
+          "new_validators_failed": [
+            "no_markdown_excesivo",
+            "no_bullets_intimo"
+          ],
+          "run_categories": [
+            "peor",
+            "peor",
+            "peor"
+          ],
+          "run_reasonings": [
+            "La NUEVA responde a una corrección diferente (formato/markdown) en lugar de registrar el aprendizaje real del mensaje —presentarse como Sofía del Equipo de Admisiones—, perdiendo el foco y generando c",
+            "La NUEVA ignora completamente la instrucción del papá de presentarse como Sofía del Equipo de Admisiones, y en cambio registra un aprendizaje sobre markdown/estructura que no tiene relación con el fee",
+            "La NUEVA respuesta suena fría y técnica, como si Sofía estuviera hablando con un supervisor en lugar de acompañar a un papá interesado, perdiendo el tono cálido y la orientación al journey que tiene l"
+          ],
+          "category_distribution": {
+            "peor": 3
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 2
+        },
+        {
+          "turn_index": 4,
+          "user_msg": "No",
+          "original": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** tono / muletillas\n- **Lo que aprendí:** Debo evitar responder con una sola palabra seca como “No” cuando estoy en Modo Aprendizaje.\n- **Cómo lo voy a aplicar:** Voy a contestar de forma más humana y completa, incluso si el mensaje es breve.\n- **Ejemplo de respuesta corregida:** “Entendido, gracias. Lo tendré en cuenta para cuidar mejor el tono de mis respuesta",
+          "new": "Perfecto. Estoy lista para lo que siga.",
+          "category": "peor",
+          "razonamiento": "La NUEVA ignora completamente que el contexto es Modo Aprendizaje y no genera ningún registro ni reflexión, perdiendo el valor pedagógico que sí tiene la ORIGINAL.",
+          "judge_cost_usd": 0.009102,
+          "new_cost_usd": 0.013023,
+          "new_latency_ms": 7966,
+          "new_validators_failed": [
+            "no_markdown_excesivo"
+          ],
+          "run_categories": [
+            "peor",
+            "peor",
+            "peor"
+          ],
+          "run_reasonings": [
+            "La NUEVA ignora completamente que el contexto es Modo Aprendizaje y no genera ningún registro ni reflexión, perdiendo el valor pedagógico que sí tiene la ORIGINAL.",
+            "La NUEVA responde a un tema diferente (markdown excesivo) que no tiene relación con el mensaje 'No' del papá, mientras que la ORIGINAL correctamente identifica y corrige el error de responder secament",
+            "La NUEVA ignora que el contexto es Modo Aprendizaje y no genera un registro de aprendizaje estructurado como hace la ORIGINAL, perdiendo el valor formativo de la interacción."
+          ],
+          "category_distribution": {
+            "peor": 3
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 2
+        },
+        {
+          "turn_index": 18,
+          "user_msg": "Cuando te digan el nivel educativo que desean no respondas nunca los costos a menos que te lo soliciten",
+          "original": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** costos / intención\n- **Lo que aprendí:** Si me dicen el nivel educativo que desean, no debo responder costos a menos que me los soliciten explícitamente.\n- **Cómo lo voy a aplicar:** Primero voy a conversar y orientar; los costos solo los compartiré cuando el prospecto los pida de forma directa.\n- **Ejemplo de respuesta corregida:** “Entendido, lo tomaré en cu",
+          "new": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** Formato / énfasis visual\n- **Lo que aprendí:** Usé 9 negritas en mi respuesta anterior. Eso se ve como venta agresiva y distrae. Debo reducir a máximo 2-3 negritas por mensaje, solo en puntos realmente clave.\n- **Cómo lo voy a aplicar:** Antes de enviar, cuento las negritas. Si hay más de 3, elimino las menos críticas. Las negritas resaltan solo lo esencial, n",
+          "category": "peor",
+          "razonamiento": "La NUEVA ignora completamente la instrucción del papá sobre no revelar costos al mencionar el nivel educativo, y en cambio registra un aprendizaje sobre negritas que no fue lo que se le pidió corregir.",
+          "judge_cost_usd": 0.011925,
+          "new_cost_usd": 0.045752,
+          "new_latency_ms": 13597,
+          "new_validators_failed": [
+            "no_markdown_excesivo"
+          ],
+          "run_categories": [
+            "peor",
+            "regresion_critica",
+            "peor"
+          ],
+          "run_reasonings": [
+            "La NUEVA ignora completamente la instrucción del papá sobre no revelar costos al mencionar el nivel educativo, y en cambio registra un aprendizaje sobre negritas que no fue lo que se le pidió corregir",
+            "La NUEVA respuesta ignora completamente la instrucción recibida (no revelar costos al mencionar nivel educativo) y registra un aprendizaje totalmente diferente sobre uso de markdown, perdiendo la corr",
+            "La NUEVA ignora completamente la instrucción del papá sobre costos y registra un aprendizaje totalmente diferente (uso de markdown), perdiendo el contenido crítico que debía capturarse."
+          ],
+          "category_distribution": {
+            "peor": 2,
+            "regresion_critica": 1
+          },
+          "all_validators_pass": false,
+          "all_validators_pass_count": 0
+        },
+        {
+          "turn_index": 22,
+          "user_msg": "Luego de que saludes y te presentes \\n\\nSiempre comienza con esta primera pregunta \\n¿qué grado estás buscando para tu hijo? Ó ¿Para qué nivel buscas información?",
+          "original": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** flujo / primera pregunta\n- **Lo que aprendí:** Después de saludar y presentarme, debo empezar siempre con la pregunta sobre el grado o nivel que buscan.\n- **Cómo lo voy a aplicar:** Haré esa pregunta como primer paso del descubrimiento para orientar mejor la conversación.\n- **Ejemplo de respuesta corregida:** “¡Hola! Soy Sofía, del Equipo de Admisiones de Mapl",
+          "new": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** Markdown excesivo / énfasis visual\n- **Lo que aprendí:** Usé 5 negritas en mi respuesta anterior. Eso se ve como venta agresiva y distrae del mensaje. Debo reducir a máximo 2-3 negritas por mensaje, solo en puntos realmente clave.\n- **Cómo lo voy a aplicar:** Antes de enviar, cuento las negritas. Si hay más de 3, elimino las menos críticas. Las negritas resalt",
+          "category": "peor",
+          "razonamiento": "La NUEVA responde a un tema completamente diferente (markdown excesivo) ignorando la instrucción del papá sobre la primera pregunta de grado/nivel, por lo que no registra ni aplica el aprendizaje correcto que se le pidió.",
+          "judge_cost_usd": 0.012048,
+          "new_cost_usd": 0.050645,
+          "new_latency_ms": 16418,
+          "new_validators_failed": [
+            "no_markdown_excesivo",
+            "no_pregunta_repetida"
+          ],
+          "run_categories": [
+            "peor",
+            "peor",
+            "peor"
+          ],
+          "run_reasonings": [
+            "La NUEVA responde a un tema completamente diferente (markdown excesivo) ignorando la instrucción del papá sobre la primera pregunta de grado/nivel, por lo que no registra ni aplica el aprendizaje corr",
+            "La NUEVA responde a un error completamente diferente (pregunta repetida + markdown excesivo) ignorando la instrucción real del papá, que era aprender a hacer la primera pregunta sobre grado/nivel tras",
+            "La NUEVA extrae una lección incorrecta (sobre exceso de markdown) ignorando la instrucción real del mensaje, que era aprender a hacer la pregunta de apertura sobre el grado/nivel como primer paso del "
+          ],
+          "category_distribution": {
+            "peor": 3
+          },
+          "all_validators_pass": false,
+          "all_validators_pass_count": 0
+        },
+        {
+          "turn_index": 26,
+          "user_msg": "Imagen enviada con texto en un chat de WhatsApp que muestra una conversación entre una persona que se presenta como Sofía, del equipo de admisiones de Maple College, y un padre que busca información s",
+          "original": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** contenido de imagen / contexto del chat\n- **Lo que aprendí:** Si el mensaje describe una imagen o una captura de WhatsApp, debo interpretarlo como una referencia contextual del chat y no como una petición directa.\n- **Cómo lo voy a aplicar:** Leeré ese tipo de mensajes como contexto para ubicarme mejor en la conversación, no como instrucción literal.\n- **Ejemp",
+          "new": "Perfecto, estamos hablando de Segundo de Primaria.\n\n¿Es para un hijo que ya está en otra escuela, o es el primer ingreso a primaria?",
+          "category": "peor",
+          "razonamiento": "La NUEVA ignora completamente el contexto del mensaje (una imagen de chat donde ya se compartieron costos) y lanza una pregunta sobre nivel escolar sin ninguna relación con lo que el papá envió, perdiendo coherencia conversacional.",
+          "judge_cost_usd": 0.009783,
+          "new_cost_usd": 0.02187,
+          "new_latency_ms": 8565,
+          "new_validators_failed": [],
+          "run_categories": [
+            "peor",
+            "peor",
+            "peor"
+          ],
+          "run_reasonings": [
+            "La NUEVA ignora completamente el contexto del mensaje (una imagen de chat donde ya se compartieron costos) y lanza una pregunta sobre nivel escolar sin ninguna relación con lo que el papá envió, perdi",
+            "La NUEVA respuesta ignora completamente el contexto del mensaje (una imagen de chat donde ya se compartieron costos) y hace una pregunta genérica desconectada, mientras que la ORIGINAL al menos recono",
+            "La NUEVA respuesta ignora completamente el mensaje del papá (que describe una imagen con información de colegiaturas) y responde como si fuera parte de una conversación diferente, perdiendo contexto y"
+          ],
+          "category_distribution": {
+            "peor": 3
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 3
+        },
+        {
+          "turn_index": 36,
+          "user_msg": "Cuando la persona no haga más preguntas y tú le digas \\n\\nAquí estoy cuando quieras retomar.\\n\\nRecuérdale que existe una cita de informes en la cual pueden conocer las instalaciones y aclarar dudas c",
+          "original": "📝 REGISTRO DE APRENDIZAJE\n- **Tema:** seguimiento / cierre suave\n- **Lo que aprendí:** Cuando la persona no haga más preguntas y yo diga “Aquí estoy cuando quieras retomar”, debo recordar que existe la cita de informes para conocer instalaciones y aclarar dudas con más detalle.\n- **Cómo lo voy a aplicar:** Cerraré con calidez, pero dejando abierta la puerta a agendar la cita como siguiente paso na",
+          "new": "📝 REGISTRO DE APRENDIZAJE\n\n- **Tema:** Exceso de markdown en respuestas\n\n- **Lo que aprendí:** Usé 4 negritas en mi respuesta anterior cuando el máximo permitido es 2-3. El énfasis excesivo suena a venta agresiva y rompe la calidez natural de Sofía.\n\n- **Cómo lo voy a aplicar:** Antes de enviar cada respuesta, cuento las negritas. Elimino las que no sean críticas. Solo resalto lo que realmente nec",
+          "category": "peor",
+          "razonamiento": "La NUEVA respuesta aprende una lección diferente (exceso de markdown) que no corresponde al feedback del papá, quien pidió específicamente que al cerrar con 'Aquí estoy cuando quieras retomar' se recuerde la opción de agendar la cita de informes; la ORIGINAL captura exactamente esa instrucción.",
+          "judge_cost_usd": 0.013197,
+          "new_cost_usd": 0.052402,
+          "new_latency_ms": 15930,
+          "new_validators_failed": [
+            "no_markdown_excesivo"
+          ],
+          "run_categories": [
+            "peor",
+            "peor",
+            "peor"
+          ],
+          "run_reasonings": [
+            "La NUEVA respuesta aprende una lección diferente (exceso de markdown) que no corresponde al feedback del papá, quien pidió específicamente que al cerrar con 'Aquí estoy cuando quieras retomar' se recu",
+            "La NUEVA respuesta aprende sobre un problema de markdown que no fue señalado en el mensaje del papá, ignorando la instrucción real: recordar la cita de informes al cerrar con 'Aquí estoy cuando quiera",
+            "La NUEVA respuesta ignora completamente la instrucción del papá sobre recordar la cita de informes al cerrar con 'Aquí estoy cuando quieras retomar', y en cambio registra un aprendizaje sobre uso de n"
+          ],
+          "category_distribution": {
+            "peor": 3
+          },
+          "all_validators_pass": false,
+          "all_validators_pass_count": 0
+        }
+      ]
+    }
+  ],
+  "judge_model": "claude-sonnet-4-6",
+  "pct_all_validators_pass": 50.0,
+  "judge_stddev_pct": 0.0
+}

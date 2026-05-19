@@ -1,0 +1,198 @@
+{
+  "started_at": "2026-05-19T15:31:21.078632+00:00",
+  "finished_at": "2026-05-19T15:59:10.516993+00:00",
+  "mode": "focused",
+  "runs_per_turn": 3,
+  "focused_set": "factual_accuracy",
+  "total_conversations": 2,
+  "total_turns": 6,
+  "total_cost_usd": 0.136751,
+  "by_category": {
+    "peor": 3,
+    "mejor": 3
+  },
+  "results": [
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "source_file": "sofia_v1_n8n_chat_histories",
+      "total_turns": 68,
+      "comparisons": [
+        {
+          "turn_index": 45,
+          "user_msg": "Cuántos niños por aula",
+          "original": "Trabajamos con grupos pequeños para cuidar muy bien la atención y el acompañamiento de cada niño.  \nEl número exacto puede variar según el nivel, pero la idea es que no haya aulas saturadas y que el maestro realmente pueda estar cerca de cada alumno. Si quieres, te cuento cómo se ve eso en la práctica 😊",
+          "new": "En Cubs Baby los grupos son muy pequeños — máximo 4 bebés por adulto. Eso permite que cada uno reciba atención personalizada y el vínculo sea real.\n\n¿Estás considerando Cubs Baby para un bebé que tienes, o seguimos hablando de primero de primaria?",
+          "category": "peor",
+          "razonamiento": "La NUEVA asume que el papá pregunta por Cubs Baby (nivel de bebés) sin tener contexto de eso, y además repite una pregunta sobre el nivel cuando la conversación ya debería tener ese dato, lo que puede confundir o desviar la conversación.",
+          "judge_cost_usd": 0.009435,
+          "new_cost_usd": 0.008968,
+          "new_latency_ms": 7036,
+          "new_validators_failed": [],
+          "run_categories": [
+            "peor",
+            "peor",
+            "peor"
+          ],
+          "run_reasonings": [
+            "La NUEVA asume que el papá pregunta por Cubs Baby (nivel de bebés) sin tener contexto de eso, y además repite una pregunta sobre el nivel cuando la conversación ya debería tener ese dato, lo que puede",
+            "La NUEVA afirma que va a confirmar y responder 'a la brevedad', lo cual es un envío falso (Sofía no puede realmente ir a buscar información y volver), y además pierde la calidez y la invitación natura",
+            "La NUEVA respuesta habla de 'Cubs Baby' y 'bebés', que no corresponde al colegio Maple Collège, y además afirma que va a confirmar con el equipo (envío falso implícito), perdiendo coherencia con el co"
+          ],
+          "category_distribution": {
+            "peor": 3
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 3
+        },
+        {
+          "turn_index": 46,
+          "user_msg": "Y en baby",
+          "original": "En *Baby* atendemos a pequeñitos de *12 a 18 meses*.  \nAquí el foco sigue siendo vínculo, seguridad, exploración y lenguaje, pero ya con más acompañamiento para sus movimientos, sus rutinas y sus primeras formas de comunicarse. Es una etapa muy bonita porque empiezan a mostrarse más curiosos y a interactuar más con lo que pasa alrededor 😊",
+          "new": "En Baby (12 a 18 meses) también mantenemos grupos muy pequeños — máximo 4 bebés por adulto.\n\nA esa edad el enfoque es similar: vínculo seguro, exploración motriz y los primeros sonidos del lenguaje. Todo acompañado de cerca.\n\n¿Tienes un bebé en esa edad también, o estamos explorando opciones para distintos hijos?",
+          "category": "mejor",
+          "razonamiento": "La NUEVA agrega un dato concreto y valioso (máximo 4 bebés por adulto) que la ORIGINAL no tenía, y cierra con una pregunta que ayuda a entender la situación familiar del papá para personalizar mejor el acompañamiento.",
+          "judge_cost_usd": 0.009138,
+          "new_cost_usd": 0.009597,
+          "new_latency_ms": 6038,
+          "new_validators_failed": [],
+          "run_categories": [
+            "mejor",
+            "mejor",
+            "mejor"
+          ],
+          "run_reasonings": [
+            "La NUEVA agrega un dato concreto y valioso (máximo 4 bebés por adulto) que la ORIGINAL no tenía, y cierra con una pregunta que ayuda a entender la situación familiar del papá para personalizar mejor e",
+            "La NUEVA responde igual de bien sobre Baby y además hace una observación perspicaz sobre el doble interés del papá, abriendo una conversación más personalizada sin perder calidez.",
+            "NUEVA agrega una escena observable concreta (bebé caminando, primeras palabras, explorando con seguridad) que hace más vívida y útil la descripción, sin perder calidez ni agregar elementos problemátic"
+          ],
+          "category_distribution": {
+            "mejor": 3
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 3
+        },
+        {
+          "turn_index": 48,
+          "user_msg": "Háblame de infants",
+          "original": "*Infants* es la modalidad para pequeñitos de *18 meses a 2 años*.  \nAquí seguimos priorizando vínculo, seguridad, exploración y lenguaje, pero ya están en una etapa donde se mueven más, exploran más y empiezan a expresar mucho más lo que necesitan. Todo se acompaña con mucha cercanía para que se sientan seguros y vayan ganando confianza en sí mismos 😊",
+          "new": "En **Infants** (18 meses a 2 años) el niño está en plena exploración del mundo.\n\nLo que hacemos es acompañar esa curiosidad con seguridad. Trabajan lenguaje a través del juego, movimiento libre, y empiezan a relacionarse con otros niños — pero siempre con un adulto cerca que los sostiene emocionalmente.\n\nNo memorizan ni aprenden letras. Lo que importa es que se sienta seguro explorando, que desarr",
+          "category": "mejor",
+          "razonamiento": "La NUEVA es más concreta y descriptiva (movimiento libre, relación con otros niños, aclara explícitamente qué NO se hace), lo que genera más valor informativo para el papá sin perder calidez ni agregar muletillas.",
+          "judge_cost_usd": 0.010041,
+          "new_cost_usd": 0.009097,
+          "new_latency_ms": 6437,
+          "new_validators_failed": [],
+          "run_categories": [
+            "mejor",
+            "peor",
+            "mejor"
+          ],
+          "run_reasonings": [
+            "La NUEVA es más concreta y descriptiva (movimiento libre, relación con otros niños, aclara explícitamente qué NO se hace), lo que genera más valor informativo para el papá sin perder calidez ni agrega",
+            "La NUEVA pierde la calidez y el detalle descriptivo de la ORIGINAL (vínculo, seguridad, cercanía, confianza), suena más fría y transaccional, y además hace dos preguntas seguidas más una invitación a ",
+            "La NUEVA es más concreta y observable: describe comportamientos reales del niño en casa y en el aula, lo que hace más tangible el valor del programa para el papá, sin perder calidez ni agregar muletil"
+          ],
+          "category_distribution": {
+            "mejor": 2,
+            "peor": 1
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 3
+        },
+        {
+          "turn_index": 58,
+          "user_msg": "Que pasa en tercero",
+          "original": "*3° de kinder* es el cierre de la etapa de kinder, y ahí se trabaja mucho la preparación para primaria.  \nYa se fortalece más la autonomía, el lenguaje, la convivencia, la atención y la seguridad para que puedan hacer transición a una etapa más académica sin sentirse perdidos. También siguen con aprendizaje activo y juego intencional, pero con más estructura y responsabilidades acordes a su edad 😊",
+          "new": "En **Tercero de Kinder** (6 a 7 años) tu hijo está en la puerta de Primaria — ya tiene herramientas, ya piensa, ya colabora.\n\nAquí la estructura se solidifica un poco más, pero sin perder el juego. Los proyectos son más ambiciosos — pueden investigar un tema durante semanas, hacer presentaciones, resolver problemas reales.\n\nLectura y escritura ya son más formales — no porque sea obligatorio, sino ",
+          "category": "mejor",
+          "razonamiento": "La NUEVA es más concreta y descriptiva, con ejemplos observables (proyectos de semanas, presentaciones, medir y contar) que dan al papá una imagen real de lo que vive su hijo, superando la versión más genérica de ORIGINAL.",
+          "judge_cost_usd": 0.011844,
+          "new_cost_usd": 0.021818,
+          "new_latency_ms": 8927,
+          "new_validators_failed": [],
+          "run_categories": [
+            "mejor",
+            "mejor",
+            "mejor"
+          ],
+          "run_reasonings": [
+            "La NUEVA es más concreta y descriptiva, con ejemplos observables (proyectos de semanas, presentaciones, medir y contar) que dan al papá una imagen real de lo que vive su hijo, superando la versión más",
+            "La NUEVA es más concreta y observable — da ejemplos específicos de lo que el niño hace académica y socialmente, y cierra con una escena en casa que el papá puede reconocer, además de avanzar el journe",
+            "La NUEVA respuesta es más concreta y vivida: describe habilidades específicas observables (leer palabras, escribir frases, suma/resta), usa escenas del hogar reconocibles para el papá, y conecta emoci"
+          ],
+          "category_distribution": {
+            "mejor": 3
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 3
+        },
+        {
+          "turn_index": 67,
+          "user_msg": "6to",
+          "original": "*6° de primaria* es el cierre de la etapa de primaria, y ahí ya se ve un niño mucho más autónomo, responsable y con más capacidad de analizar y explicar lo que piensa.  \nAdemás de seguir fortaleciendo lo académico, se trabaja mucho la preparación para secundaria: organización, comprensión más profunda, pensamiento crítico y confianza para resolver con menos dependencia del adulto 😊",
+          "new": "En **Sexto de Primaria** (11 a 12 años) tu hijo está en la puerta de Secundaria — ya es casi adolescente, ya tiene criterio propio, ya sabe quién es.\n\nLos proyectos son investigaciones serias con impacto real. Pueden estudiar un problema, proponer soluciones, presentarlas a personas que toman decisiones. Eso es aprendizaje con consecuencias.\n\nLectura y escritura son herramientas de pensamiento com",
+          "category": "peor",
+          "razonamiento": "La NUEVA exagera con afirmaciones grandilocuentes ('crea conocimiento', 'identidad y liderazgo están claros', 'pensamiento crítico es adulto') que suenan más a folleto de ventas que a acompañamiento cálido, y la pregunta final es innecesariamente interrogativa y presuntuosa sobre el comportamiento del papá en lugar de fluir naturalmente como en ORIGINAL.",
+          "judge_cost_usd": 0.012213,
+          "new_cost_usd": 0.017248,
+          "new_latency_ms": 7675,
+          "new_validators_failed": [],
+          "run_categories": [
+            "equivalente",
+            "peor",
+            "mejor"
+          ],
+          "run_reasonings": [
+            "Ambas respuestas describen 6° de primaria con foco en autonomía, pensamiento crítico y preparación para secundaria, con tono cálido y orientado al journey; la nueva es más detallada pero transmite el ",
+            "La NUEVA exagera con afirmaciones grandilocuentes ('crea conocimiento', 'identidad y liderazgo están claros', 'pensamiento crítico es adulto') que suenan más a folleto de ventas que a acompañamiento c",
+            "La NUEVA respuesta es más concreta y detallada, describiendo escenas observables del desarrollo académico, emocional y social de un niño de 6to, lo que genera más valor para el papá en su decisión edu"
+          ],
+          "category_distribution": {
+            "equivalente": 1,
+            "peor": 1,
+            "mejor": 1
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 3
+        }
+      ]
+    },
+    {
+      "session_id": "5218441302112@s.whatsapp.net",
+      "source_file": "sofia_v1_n8n_chat_histories",
+      "total_turns": 16,
+      "comparisons": [
+        {
+          "turn_index": 15,
+          "user_msg": "Me puedes mandar la ubicación?",
+          "original": "Sí, claro 😊  \nLa cita es en *Campus 1: José Figueroa Siller 156, Col. Doctores, Saltillo, Coah.*  \n\nSi quieres, también te puedo compartir la ubicación por Google Maps.",
+          "new": "Para 1ero de secundaria, Maple está en:\n\n**Campus 2**\nBlvd. V. Carranza 5064, Col. Doctores, Saltillo, Coah.\n\n¿Te queda bien venir el próximo lunes? ¿A qué hora prefieres?",
+          "category": "peor",
+          "razonamiento": "La NUEVA da una dirección diferente (Campus 2) sin contexto previo que justifique ese campus, omite ofrecer Google Maps, y lanza dos preguntas de agendado sin haber confirmado si el papá ya tiene cita, lo que puede generar confusión o parecer apresurado.",
+          "judge_cost_usd": 0.008859,
+          "new_cost_usd": 0.008493,
+          "new_latency_ms": 6081,
+          "new_validators_failed": [],
+          "run_categories": [
+            "peor",
+            "peor",
+            "peor"
+          ],
+          "run_reasonings": [
+            "La NUEVA da una dirección diferente (Campus 2) sin contexto previo que justifique ese campus, omite ofrecer Google Maps, y lanza dos preguntas de agendado sin haber confirmado si el papá ya tiene cita",
+            "La NUEVA da un campus y dirección diferente al ORIGINAL sin justificación, lo que podría desorientar al papá con información incorrecta, además de no ofrecer el link de Google Maps que sí ofrecía la O",
+            "La NUEVA responde con un campus diferente al de ORIGINAL sin contexto que justifique el cambio, y además añade preguntas de agendado que el papá no solicitó, desviándose de la petición concreta de ubi"
+          ],
+          "category_distribution": {
+            "peor": 3
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 3
+        }
+      ]
+    }
+  ],
+  "judge_model": "claude-sonnet-4-6",
+  "pct_all_validators_pass": 100.0,
+  "judge_stddev_pct": 19.245008972987527
+}

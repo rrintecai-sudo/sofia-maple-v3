@@ -1,0 +1,197 @@
+{
+  "started_at": "2026-05-19T16:25:42.907529+00:00",
+  "finished_at": "2026-05-19T16:55:32.607946+00:00",
+  "mode": "focused",
+  "runs_per_turn": 3,
+  "focused_set": "correction_lost",
+  "total_conversations": 2,
+  "total_turns": 6,
+  "total_cost_usd": 0.139263,
+  "by_category": {
+    "peor": 4,
+    "regresion_critica": 2
+  },
+  "results": [
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "source_file": "sofia_v1_n8n_chat_histories",
+      "total_turns": 71,
+      "comparisons": [
+        {
+          "turn_index": 10,
+          "user_msg": "Primer grado",
+          "original": "Qué bueno, para *Primer grado* la colegiatura es de *$6,100 al mes*. Son 11 colegiaturas al año, de agosto a junio.  \nManejamos algunas cuotas iniciales como inscripción, seguro escolar, recursos educativos y otras que te explicaremos cuando vengas a conocernos 😊",
+          "new": "Ah, gracias por aclarar. Entonces no es maternal — estamos hablando de **Primaria, primer grado**.\n\n¿Es correcto?",
+          "category": "peor",
+          "razonamiento": "La NUEVA evade la pregunta implícita del papá (que ya respondió con 'Primer grado') y en lugar de dar información de valor como la colegiatura, hace una pregunta de confirmación innecesaria que retrasa el journey.",
+          "judge_cost_usd": 0.008727,
+          "new_cost_usd": 0.006794,
+          "new_latency_ms": 5079,
+          "new_validators_failed": [],
+          "run_categories": [
+            "peor",
+            "regresion_critica",
+            "peor"
+          ],
+          "run_reasonings": [
+            "La NUEVA evade la pregunta implícita del papá (que ya respondió con 'Primer grado') y en lugar de dar información de valor como la colegiatura, hace una pregunta de confirmación innecesaria que retras",
+            "La NUEVA evade completamente la pregunta implícita sobre costos para Primer grado, ignorando el contexto donde el papá claramente respondió al hilo de colegiaturas, y además repite una pregunta de con",
+            "La NUEVA evade la pregunta implícita sobre costos para primer grado, asume incorrectamente que es kinder cuando primer grado es primaria, y lanza una pregunta genérica en lugar de dar la información d"
+          ],
+          "category_distribution": {
+            "peor": 2,
+            "regresion_critica": 1
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 3
+        },
+        {
+          "turn_index": 16,
+          "user_msg": "Ok",
+          "original": "Qué bueno saberlo 😊  \nAquí trabajamos muy de la mano con las familias, porque el desarrollo no pasa solo en el salón. Si te resuena lo que platicamos, te puedo contar cómo se vive un día normal en Maple.",
+          "new": "Bien. \n\n¿Hay algo más que quieras saber sobre cómo trabajamos en Primaria, o prefieres que te cuente de otros aspectos de Maple?",
+          "category": "peor",
+          "razonamiento": "La NUEVA es fría y mecánica, ofrece una bifurcación genérica en lugar de avanzar el journey con calidez como hace la ORIGINAL, que invita naturalmente a conocer cómo se vive un día en Maple.",
+          "judge_cost_usd": 0.008202,
+          "new_cost_usd": 0.006431,
+          "new_latency_ms": 5326,
+          "new_validators_failed": [],
+          "run_categories": [
+            "peor",
+            "peor",
+            "peor"
+          ],
+          "run_reasonings": [
+            "La NUEVA es fría y mecánica, ofrece una bifurcación genérica en lugar de avanzar el journey con calidez como hace la ORIGINAL, que invita naturalmente a conocer cómo se vive un día en Maple.",
+            "La NUEVA respuesta es fría y genérica, lanza una pregunta cerrada que no avanza el journey, mientras que ORIGINAL mantiene calidez y abre naturalmente hacia una escena concreta del colegio.",
+            "La NUEVA respuesta lanza dos preguntas cerradas y empuja directamente al agendado sin generar valor ni calidez, mientras que ORIGINAL aprovecha el 'Ok' para profundizar la conexión y abrir naturalment"
+          ],
+          "category_distribution": {
+            "peor": 3
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 3
+        },
+        {
+          "turn_index": 70,
+          "user_msg": "Si",
+          "original": "Qué bueno 😊  \nAquí estoy cuando quieras retomar. Si después te sirve, también te puedo contar cómo es una cita de informes para que conozcas el colegio y resuelvas dudas con más detalle.",
+          "new": "**Tercero de Secundaria** — 14 a 15 años.\n\nTu hijo está en la recta final de la secundaria. Ya no es \"el nuevo\" — es parte de la comunidad.\n\nLo académico es riguroso. Los proyectos requieren investigación profunda, análisis crítico, presentación profesional. Tu hijo aprende a comunicar ideas complejas de forma clara.\n\nEl pensamiento es casi completamente autónomo. No necesita que le digan qué pens",
+          "category": "regresion_critica",
+          "razonamiento": "La respuesta NUEVA ignora completamente el mensaje del papá ('Si') y despliega un monólogo no solicitado sobre Tercero de Secundaria, sin ninguna conexión con el contexto conversacional, lo que constituye una evasión total del mensaje y una respuesta completamente fuera de lugar.",
+          "judge_cost_usd": 0.01092,
+          "new_cost_usd": 0.026397,
+          "new_latency_ms": 9218,
+          "new_validators_failed": [],
+          "run_categories": [
+            "regresion_critica",
+            "peor",
+            "regresion_critica"
+          ],
+          "run_reasonings": [
+            "La respuesta NUEVA ignora completamente el mensaje del papá ('Si') y despliega un monólogo no solicitado sobre Tercero de Secundaria, sin ninguna conexión con el contexto conversacional, lo que consti",
+            "La NUEVA respuesta ignora el contexto conversacional y suena cortante y confusa, mientras que la ORIGINAL mantiene calidez y abre naturalmente la puerta a seguir el journey de admisión.",
+            "La respuesta NUEVA ignora completamente el mensaje del papá ('Si') y en su lugar entrega un monólogo extenso sobre etapas del desarrollo adolescente que nadie pidió, evadiendo totalmente la interacció"
+          ],
+          "category_distribution": {
+            "regresion_critica": 2,
+            "peor": 1
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 3
+        }
+      ]
+    },
+    {
+      "session_id": "5218441302112@s.whatsapp.net",
+      "source_file": "sofia_v1_n8n_chat_histories",
+      "total_turns": 17,
+      "comparisons": [
+        {
+          "turn_index": 11,
+          "user_msg": "Si por favor",
+          "original": "En secundaria buscamos que el adolescente no solo estudie, sino que también aprenda a pensar, argumentar y desenvolverse con seguridad.  \nAquí hay guía emocional, pensamiento crítico y proyectos reales para que lo que aprenden tenga sentido y aplicación en su vida.  \n\nLo notas cuando puede sostener una opinión propia sin pelear y sin depender de que le digan todo.  \nSi quieres, te puedo contar más",
+          "new": "Tenemos varias opciones según lo que necesites:\n\n**Estancia de la mañana** — 7:00 a.m. hasta las 8:00 — sin alimentos — $550/mes\n\nEstancia media — 7:00 a.m. a 3:30 p.m. — incluye comida — $1,400/mes\n\nAfter school — 7:00 a.m. a 7:00 p.m. — incluye comida y una academia — $3,100/mes\n\nEstancia por academia — incluye comida los días de la academia; salida coincide con el fin de la academia — $630/mes\n",
+          "category": "regresion_critica",
+          "razonamiento": "La NUEVA respuesta comparte costos detallados sin que el papá los haya solicitado, violando una regla dura, y además es completamente irrelevante al contexto de la conversación sobre secundaria.",
+          "judge_cost_usd": 0.010248,
+          "new_cost_usd": 0.029362,
+          "new_latency_ms": 12670,
+          "new_validators_failed": [],
+          "run_categories": [
+            "regresion_critica",
+            "regresion_critica",
+            "regresion_critica"
+          ],
+          "run_reasonings": [
+            "La NUEVA respuesta comparte costos detallados sin que el papá los haya solicitado, violando una regla dura, y además es completamente irrelevante al contexto de la conversación sobre secundaria.",
+            "La NUEVA respuesta comparte costos detallados sin que el papá los haya pedido explícitamente, violando una regla dura, además de ignorar completamente el contexto de la conversación sobre secundaria y",
+            "La NUEVA respuesta ignora completamente el contexto de la conversación sobre secundaria y responde con información de horarios/modalidades que nadie pidió, evadiendo la pregunta implícita y rompiendo "
+          ],
+          "category_distribution": {
+            "regresion_critica": 3
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 3
+        },
+        {
+          "turn_index": 13,
+          "user_msg": "Si",
+          "original": "Me da gusto que te haga sentido lo que te conté.  \nLa cita de informes es nuestra primera cita. Te explicamos a detalle la metodología, resolvemos tus dudas, te compartimos los costos y hacemos un recorrido por las instalaciones para que lo vivas en persona. Dura entre 40 y 45 minutos.  \n\n¿Qué día te queda mejor, esta semana o la siguiente? 📅",
+          "new": "Perfecto. Cuéntame, ¿qué te gustaría saber?",
+          "category": "peor",
+          "razonamiento": "La NUEVA respuesta ignora completamente el contexto de agendar una cita de informes y retrocede en el journey, perdiendo el momentum generado y dejando al papá sin dirección clara.",
+          "judge_cost_usd": 0.00807,
+          "new_cost_usd": 0.008409,
+          "new_latency_ms": 5337,
+          "new_validators_failed": [],
+          "run_categories": [
+            "peor",
+            "peor",
+            "peor"
+          ],
+          "run_reasonings": [
+            "La NUEVA respuesta ignora completamente el contexto de agendar una cita de informes y retrocede en el journey, perdiendo el momentum generado y dejando al papá sin dirección clara.",
+            "La NUEVA ignora completamente el contexto de la conversación y el momentum generado, perdiendo la oportunidad de avanzar hacia el agendado que ORIGINAL logra con claridad y calidez.",
+            "La NUEVA omite información valiosa sobre qué incluye la cita (metodología, costos, recorrido, duración), que ayuda al papá a entender qué esperar y aumenta el valor percibido antes de agendar."
+          ],
+          "category_distribution": {
+            "peor": 3
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 3
+        },
+        {
+          "turn_index": 16,
+          "user_msg": "Si por favor",
+          "original": "Aquí te la paso: https://maps.google.com/?q=José+Figueroa+Siller+156,+Col.+Doctores,+Saltillo,+Coah. 😊",
+          "new": "Perfecto. ¿Qué hora prefieres el lunes? \n\nTenemos disponibilidad de 8:00 a.m. a 3:00 p.m.",
+          "category": "peor",
+          "razonamiento": "NUEVA ignora completamente el contexto donde el papá pidió la dirección y en lugar de compartirla pregunta por horarios, perdiendo la información que el papá solicitó.",
+          "judge_cost_usd": 0.008019,
+          "new_cost_usd": 0.007684,
+          "new_latency_ms": 7219,
+          "new_validators_failed": [],
+          "run_categories": [
+            "peor",
+            "peor",
+            "peor"
+          ],
+          "run_reasonings": [
+            "NUEVA ignora completamente el contexto donde el papá pidió la dirección y en lugar de compartirla pregunta por horarios, perdiendo la información que el papá solicitó.",
+            "La NUEVA ignora completamente la solicitud del papá (que pidió la dirección con 'sí por favor') y en cambio hace una pregunta sobre horarios, perdiendo el hilo de la conversación y dejando al papá sin",
+            "La NUEVA ignora completamente el contexto donde el papá pidió algo (probablemente la dirección) y en lugar de dársela hace una pregunta sobre horarios, perdiendo el hilo de la conversación y el valor "
+          ],
+          "category_distribution": {
+            "peor": 3
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 3
+        }
+      ]
+    }
+  ],
+  "judge_model": "claude-sonnet-4-6",
+  "pct_all_validators_pass": 100.0,
+  "judge_stddev_pct": 0.0
+}
