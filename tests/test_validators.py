@@ -1,4 +1,4 @@
-"""Tests de los 6 validators determinísticos."""
+"""Tests de los 7 validators determinísticos."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from app.core.validators import (
     FRASES_MUNICION,
     extraer_frases_municion_usadas,
     run_all_validators,
+    validar_no_bullets_en_momento_intimo,
     validar_no_envio_fantasma,
     validar_no_evasion,
     validar_no_inventa_datos,
@@ -261,14 +262,14 @@ def test_evasion_pasa_horario_con_hora() -> None:
 # ============================================================
 
 
-def test_run_all_returns_6_results() -> None:
+def test_run_all_returns_7_results() -> None:
     estado = EstadoCapturado()
     report = run_all_validators(
         respuesta="Hola, ¿cómo te puedo ayudar?",
         estado=estado,
         intent=Intent.SALUDO_INICIAL,
     )
-    assert len(report.results) == 6
+    assert len(report.results) == 7
     assert report.all_passed is True
 
 
@@ -401,7 +402,7 @@ def test_validation_report_maps_for_db() -> None:
     )
     passed = report.passed_map
     failed = report.failed_map
-    assert isinstance(passed, dict) and len(passed) == 6
+    assert isinstance(passed, dict) and len(passed) == 7
     assert "no_envio_fantasma" in failed
 
 
@@ -565,5 +566,62 @@ def test_inventa_pasa_cita_propuesta_no_afirmada() -> None:
         respuesta="¿Te gustaría agendar una visita esta semana o la siguiente?",
         estado=estado,
         mensajes_papa=[],
+    )
+    assert r.passed is True
+
+
+# ============================================================
+# validar_no_bullets_en_momento_intimo (Bloque 5.6 PASO 3 — Causa raíz #2)
+# ============================================================
+
+
+def test_bullets_intimo_pasa_si_no_es_momento_intimo() -> None:
+    """Cuando es_momento_intimo=False, el validator siempre pasa."""
+    r = validar_no_bullets_en_momento_intimo(
+        respuesta="- punto 1\n- punto 2\n- punto 3\n- punto 4",
+        es_momento_intimo=False,
+    )
+    assert r.passed is True
+
+
+def test_bullets_intimo_pasa_con_prosa() -> None:
+    """Si es momento íntimo y la respuesta es prosa, pasa."""
+    r = validar_no_bullets_en_momento_intimo(
+        respuesta="Entiendo perfectamente. Esta etapa es delicada y aquí lo cuidamos.",
+        es_momento_intimo=True,
+    )
+    assert r.passed is True
+
+
+def test_bullets_intimo_falla_con_2_bullets() -> None:
+    """En momento íntimo, basta con 2 bullets para fallar (más estricto que markdown general)."""
+    r = validar_no_bullets_en_momento_intimo(
+        respuesta="Aquí hacemos:\n- vínculo\n- exploración",
+        es_momento_intimo=True,
+    )
+    assert r.passed is False
+    assert "íntimo" in (r.reason or "").lower()
+
+
+def test_bullets_intimo_falla_con_2_numerados() -> None:
+    r = validar_no_bullets_en_momento_intimo(
+        respuesta="Te recomiendo:\n1. agendar\n2. visitar",
+        es_momento_intimo=True,
+    )
+    assert r.passed is False
+
+
+def test_bullets_intimo_falla_con_3_negritas() -> None:
+    r = validar_no_bullets_en_momento_intimo(
+        respuesta="**Vínculo** es clave. **Exploración** también. **Lenguaje** se desarrolla.",
+        es_momento_intimo=True,
+    )
+    assert r.passed is False
+
+
+def test_bullets_intimo_pasa_con_1_negrita() -> None:
+    r = validar_no_bullets_en_momento_intimo(
+        respuesta="Lo más importante en esta etapa es el **vínculo**.",
+        es_momento_intimo=True,
     )
     assert r.passed is True

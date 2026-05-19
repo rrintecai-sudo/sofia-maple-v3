@@ -579,6 +579,40 @@ def validar_no_inventa_datos(
     return ValidationResult(validator="no_inventa_datos", passed=True)
 
 
+def validar_no_bullets_en_momento_intimo(
+    respuesta: str, es_momento_intimo: bool
+) -> ValidationResult:
+    """Si el momento es íntimo y la respuesta usa bullets/listas/numeración, falla.
+
+    Más estricto que `no_markdown_excesivo`: aquí basta CON 2+ bullets o 2+ items
+    numerados (no requerimos densidad alta). Ataca la causa raíz #2: tono
+    transaccional con bullets en momentos íntimos.
+    """
+    if not es_momento_intimo:
+        return ValidationResult(validator="no_bullets_intimo", passed=True)
+
+    bullets = _MARKDOWN_BULLET_RE.findall(respuesta)
+    numbered = _MARKDOWN_NUMBERED_RE.findall(respuesta)
+    bolds = _MARKDOWN_BOLD_RE.findall(respuesta)
+
+    if len(bullets) >= 2 or len(numbered) >= 2 or len(bolds) >= 3:
+        n_items = max(len(bullets), len(numbered), len(bolds))
+        return ValidationResult(
+            validator="no_bullets_intimo",
+            passed=False,
+            reason=f"Momento íntimo con estructura visual: {n_items} bullets/numerados/negritas",
+            suggested_fix=(
+                "Este es un momento íntimo de la conversación (el papá está hablando "
+                "emocionalmente o pidiendo continuar tras un momento personal). "
+                "Reescribe TODO en prosa fluida, 2-4 oraciones máximo, sin bullets, "
+                "sin listas numeradas, sin negritas excesivas. Habla con calidez "
+                "humana, no con estructura comercial."
+            ),
+        )
+
+    return ValidationResult(validator="no_bullets_intimo", passed=True)
+
+
 def validar_no_evasion(respuesta: str, intent: Intent | None) -> ValidationResult:
     """Falla si la pregunta era cerrada (costos/horarios) y la respuesta evade.
 
@@ -641,14 +675,17 @@ def run_all_validators(
     tools_called: list[str] | None = None,
     frases_usadas: list[str] | None = None,
     mensajes_papa: list[str] | None = None,
+    es_momento_intimo: bool = False,
 ) -> ValidationReport:
     """Ejecuta todos los validators secuencialmente y agrega resultados.
 
     Es pura: no escribe DB, no llama APIs. Solo razona sobre el texto.
 
-    `mensajes_papa` (Bloque 5.6) es la lista de mensajes anteriores del papá
-    (sin las respuestas de Sofía), usada por `validar_no_inventa_datos` para
-    corroborar entidades.
+    `mensajes_papa` (Bloque 5.6 PASO 1) es la lista de mensajes anteriores del
+    papá (sin las respuestas de Sofía), usada por `validar_no_inventa_datos`.
+
+    `es_momento_intimo` (Bloque 5.6 PASO 3) viene del detector de intimidad —
+    cuando True, el validator `no_bullets_intimo` exige prosa.
     """
     report = ValidationReport()
     report.results.append(validar_no_repeticion(respuesta, frases_usadas or []))
@@ -657,6 +694,7 @@ def run_all_validators(
     report.results.append(validar_no_evasion(respuesta, intent))
     report.results.append(validar_no_markdown_excesivo(respuesta))
     report.results.append(validar_no_inventa_datos(respuesta, estado, mensajes_papa))
+    report.results.append(validar_no_bullets_en_momento_intimo(respuesta, es_momento_intimo))
     return report
 
 

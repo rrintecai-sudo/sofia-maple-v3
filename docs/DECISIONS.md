@@ -271,3 +271,37 @@ Sin una métrica más estable, iterar prompts es contraproducente — el ruido v
 **Tests:** 16 nuevos (10 de tool + 6 del helper en orchestrator). 270/270 total.
 
 ---
+
+## ADR-014 — Bloque 5.6 PASO 3: intimacy_detector + validator no_bullets_intimo + regla tono íntimo
+
+**Fecha:** 2026-05-19
+**Contexto:** Causa raíz #2 — Sofía responde con bullets/listas/markdown en momentos íntimos (descubrimiento emocional, "Sí" tras pregunta vulnerable). El juez Sonnet 4.6 lo describe como "pitch de ventas con estructura de lista" o "folleto comercial" — rompe la calidez que distingue a Sofía vs venta tradicional.
+
+**Decisión:** Defensa en 3 capas:
+
+1. **`app/core/intimacy_detector.py`** — heurística determinística (sin LLM por default) que clasifica el mensaje del papá en momento_intimo vs no_intimo. Reglas (en orden):
+   - Keywords emocionales o narrativa personal → íntimo, conf 0.9
+   - Patrón operativo (precios/horarios/citas) sin señales emocionales → no íntimo, conf 0.95
+   - Short followup ("sí", "ok", "qué más") tras mensaje emocional previo → íntimo, conf 0.7
+   - Short followup en fase descubrimiento sin contexto → íntimo, conf 0.55
+   - Mensaje sustancioso (>40 chars) en descubrimiento → íntimo, conf 0.7
+   - Default → no íntimo, conf 0.4
+
+   Wrapper `detectar_intimidad_async()` con opción de fallback a GPT-4o-mini cuando `confianza < threshold`. Fallback graceful: si OpenAI no responde, devuelve el resultado heurístico (NO bloquea el flujo principal — cumple regla operativa #4 de Oscar).
+
+   **Decisión técnica clave:** keywords son frases compuestas ("le cuesta", "me cuesta") en vez de palabras sueltas, porque "cuesta" sola matchearía "¿cuánto cuesta?" (operativo). Orden de reglas: emocional > operativo, porque palabras como "cuando" aparecen en frases emocionales ("cuando yo era niño") y también en operativas ("cuándo abren"); las emocionales son menos comunes y específicas.
+
+2. **Validator `validar_no_bullets_en_momento_intimo(respuesta, es_momento_intimo)`** — más estricto que `validar_no_markdown_excesivo`:
+   - Si `es_momento_intimo=False` → siempre pasa (no aplica)
+   - Si `es_momento_intimo=True` → falla con ≥2 bullets, ≥2 numerados, o ≥3 negritas
+   - Feedback al regenerar pide reescribir en prosa fluida, 2-4 oraciones máximo.
+
+3. **Regla "TONO EN MOMENTOS ÍNTIMOS"** en `app/core/prompts/journey/descubrimiento.md` (después de "Durante el descubrimiento"). Con ejemplos MAL/BIEN. Define cuándo aplica (descubrimiento + mensajes cortos de seguimiento) y cuándo no (operativo).
+
+**Wiring en orchestrator:**
+- Después de `extraccion + intent_task`, llamamos `detectar_intimidad(mensaje, estado)` sync. Es heurística pura (regex/keywords), no necesita `asyncio.gather`. Fallback graceful via try/except.
+- Resultado se pasa a `run_all_validators(es_momento_intimo=...)` y se inyecta como hint al `mensaje_para_llm` cuando es íntimo: `"[Hint interno: este es un MOMENTO ÍNTIMO. Responde en prosa fluida...]"`.
+
+**Tests:** 14 del detector + 6 del validator = 20 nuevos. 290/290 total.
+
+---

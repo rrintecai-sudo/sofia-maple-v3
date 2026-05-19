@@ -28,6 +28,7 @@ from typing import Any
 from app.adapters.anthropic_client import get_anthropic
 from app.config import get_settings
 from app.core.intent_classifier import Intent, classify_intent
+from app.core.intimacy_detector import IntimacyResult, detectar_intimidad
 from app.core.learning_mode import guardar_feedback
 from app.core.prompt_builder import build_system_blocks
 from app.core.repository import get_repository
@@ -181,6 +182,14 @@ async def procesar_turno(
     # 5. Decidir fase del journey
     estado.fase_journey = _decidir_fase(estado, intent_result.intent, es_nueva)
 
+    # 5pre. Detectar si es momento íntimo (heurística rápida, sin LLM)
+    # Se usa luego en run_all_validators y como hint al prompt.
+    intimacy: IntimacyResult = IntimacyResult(es_intimo=False, razon="default", confianza=0.0)
+    try:
+        intimacy = detectar_intimidad(mensaje, estado, historial_papa=None)
+    except Exception as exc:
+        log.warning("intimacy_detector failed (graceful fallback)", extra={"error": str(exc)})
+
     # 5bis. Pre-fetch tools cuando el intent lo amerita.
     # Por ahora: campus (Bloque 5.5) + niveles (Bloque 5.6 PASO 2).
     # Inyectamos resultado al prompt como contexto para que Sofía no invente.
@@ -221,9 +230,14 @@ async def procesar_turno(
         {"role": _normalize_role(m["role"]), "content": m["content"]} for m in historial
     ]
 
-    # 7ter. Si llamamos tools, inyectamos su resultado al mensaje del usuario
-    # como hint para que el LLM lo use en la respuesta.
+    # 7ter. Si llamamos tools o detectamos momento íntimo, inyectamos hint al
+    # mensaje del usuario para que la primera generación ya esté alineada.
     mensaje_para_llm = mensaje
+    if intimacy.es_intimo:
+        mensaje_para_llm += (
+            "\n\n[Hint interno: este es un MOMENTO ÍNTIMO. "
+            "Responde en prosa fluida, sin bullets ni listas, máximo 3-4 oraciones.]"
+        )
     if tools_data:
         tool_hint_lines = ["[Información traída de tools al momento:]"]
         for tool_name, data in tools_data.items():
@@ -288,6 +302,7 @@ async def procesar_turno(
             tools_called=[],  # Bloque 4 introducirá tools reales
             frases_usadas=estado.frases_usadas,
             mensajes_papa=[*mensajes_papa, mensaje],
+            es_momento_intimo=intimacy.es_intimo,
         )
 
         if final_report.all_passed:
