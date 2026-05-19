@@ -27,13 +27,7 @@ from typing import Any
 
 from app.adapters.anthropic_client import get_anthropic
 from app.config import get_settings
-from app.core.correction_handler import (
-    CorreccionDetectada,
-    aplicar_correccion,
-    detectar_correccion,
-)
 from app.core.intent_classifier import Intent, classify_intent
-from app.core.intimacy_detector import IntimacyResult, detectar_intimidad
 from app.core.learning_mode import guardar_feedback
 from app.core.prompt_builder import build_system_blocks
 from app.core.repository import get_repository
@@ -187,37 +181,6 @@ async def procesar_turno(
     # 5. Decidir fase del journey
     estado.fase_journey = _decidir_fase(estado, intent_result.intent, es_nueva)
 
-    # 5bis. Si el papá está corrigiendo algo, llamar al corrector y aplicar.
-    # Esto puede SOBREESCRIBIR campos del estado_capturado (a diferencia del
-    # extractor normal). Graceful: si LLM falla, no aplicamos corrección.
-    correccion: CorreccionDetectada | None = None
-    if intent_result.intent == Intent.CORRECCION_DEL_PAPA:
-        try:
-            correccion = await detectar_correccion(mensaje, estado.estado_capturado)
-            if correccion and not correccion.es_vacia:
-                estado.estado_capturado = aplicar_correccion(estado.estado_capturado, correccion)
-                log.info(
-                    "correccion aplicada",
-                    extra={
-                        "session_id": session_id,
-                        "campos_limpiados": correccion.campos_a_limpiar,
-                        "instruccion": (correccion.instruccion_comportamiento or "")[:80],
-                    },
-                )
-        except Exception as exc:
-            log.warning(
-                "correction_handler failed (graceful)",
-                extra={"error": str(exc), "session_id": session_id},
-            )
-
-    # 5pre. Detectar si es momento íntimo (heurística rápida, sin LLM)
-    # Se usa luego en run_all_validators y como hint al prompt.
-    intimacy: IntimacyResult = IntimacyResult(es_intimo=False, razon="default", confianza=0.0)
-    try:
-        intimacy = detectar_intimidad(mensaje, estado, historial_papa=None)
-    except Exception as exc:
-        log.warning("intimacy_detector failed (graceful fallback)", extra={"error": str(exc)})
-
     # 5bis. Pre-fetch tools cuando el intent lo amerita.
     # Por ahora: campus (Bloque 5.5) + niveles (Bloque 5.6 PASO 2).
     # Inyectamos resultado al prompt como contexto para que Sofía no invente.
@@ -258,37 +221,9 @@ async def procesar_turno(
         {"role": _normalize_role(m["role"]), "content": m["content"]} for m in historial
     ]
 
-    # 7ter. Si llamamos tools, detectamos momento íntimo o detectamos corrección,
-    # inyectamos hint al mensaje del usuario para que la primera generación
-    # esté alineada.
+    # 7ter. Si llamamos tools, inyectamos su resultado al mensaje del usuario
+    # como hint para que el LLM lo use en la respuesta.
     mensaje_para_llm = mensaje
-    if correccion and not correccion.es_vacia:
-        partes = []
-        if correccion.instruccion_comportamiento:
-            partes.append(f"instrucción procedimental: {correccion.instruccion_comportamiento}")
-        if correccion.campos_a_limpiar:
-            partes.append(f"campos invalidados: {', '.join(correccion.campos_a_limpiar)}")
-        cambios = []
-        if correccion.nivel_buscado:
-            cambios.append(f"nivel→{correccion.nivel_buscado}")
-        if correccion.edad_hijo is not None:
-            cambios.append(f"edad→{correccion.edad_hijo}")
-        if correccion.grado_hijo:
-            cambios.append(f"grado→{correccion.grado_hijo}")
-        if cambios:
-            partes.append(f"datos corregidos: {', '.join(cambios)}")
-        mensaje_para_llm += (
-            "\n\n[Hint interno: el papá te está CORRIGIENDO. "
-            "1) Reconoce humildemente el error (sin disculparte de más). "
-            "2) Confirma el dato correcto que él te indicó. "
-            "3) Continúa el journey desde el punto corregido."
-            f" Cambios detectados: {'; '.join(partes)}.]"
-        )
-    if intimacy.es_intimo:
-        mensaje_para_llm += (
-            "\n\n[Hint interno: este es un MOMENTO ÍNTIMO. "
-            "Responde en prosa fluida, sin bullets ni listas, máximo 3-4 oraciones.]"
-        )
     if tools_data:
         tool_hint_lines = ["[Información traída de tools al momento:]"]
         for tool_name, data in tools_data.items():
@@ -342,18 +277,12 @@ async def procesar_turno(
             final_report = None
             break
 
-        # Bloque 5.6: pasar mensajes previos del papá para validar invenciones
-        mensajes_papa = [
-            m["content"] for m in historial if (m.get("role") or "").lower() in ("user", "human")
-        ]
         final_report = run_all_validators(
             respuesta=response_text,
             estado=estado.estado_capturado,
             intent=intent_result.intent,
             tools_called=[],  # Bloque 4 introducirá tools reales
             frases_usadas=estado.frases_usadas,
-            mensajes_papa=[*mensajes_papa, mensaje],
-            es_momento_intimo=intimacy.es_intimo,
         )
 
         if final_report.all_passed:

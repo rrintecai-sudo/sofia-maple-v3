@@ -338,3 +338,105 @@ Sin una métrica más estable, iterar prompts es contraproducente — el ruido v
 **Decisión técnica clave — graceful fallback:** las 3 piezas (intent_classifier, correction_handler, orchestrator) están encadenadas por if/except. Si cualquiera falla, el flujo continúa con `correccion=None`. Cumple regla operativa de Oscar: "Fallback graceful si fallan. No bloquea el flujo principal."
 
 ---
+
+## ADR-016 — Bloque 5.6 ejecutado, NO PASA criterios. Resultado documentado en `tests/golden/results/bloque-5.6-final.md`
+
+**Fecha:** 2026-05-19
+**Contexto:** Tras ejecutar los 5 focused sets + full --runs 3 parcial (73/92 turnos), Bloque 5.6 NO cumplió los criterios del spec (1.5 / 5).
+
+**Resultados (resumen):**
+- invented_data: 20% equiv/mejor (criterio >50% — falla)
+- factual_accuracy: 50% (operativo — pasa parcial)
+- transactional_bullets: 25% (criterio >30% — falla)
+- correction_lost: 0% + 33% crítica (criterio >30% — falla, regresión)
+- learning_mode_failures: 0% (no atacado, info-only)
+- full parcial (73/92): 49.3% equiv/mejor vs 61.6% baseline en mismos turnos (−12.3pp), 0% crítica en ambos
+- Costo total: ~$2.52 USD
+
+**Aprendizajes documentados:**
+1. Los validators anti-invención hacen Sofía más cautelosa pero más vacía. El juez Sonnet 4.6 prefiere v1 generosa-aunque-imprecisa sobre v2 cuidadosa-pero-vacía.
+2. `intimacy_detector` heurístico tiene falsos negativos en short messages ("5 to", "Sí") que sí deberían ser íntimos.
+3. Intent `CORRECCION_DEL_PAPA` no captura "Si"/"Si por favor" porque técnicamente son confirmaciones, no correcciones. El bug real de `correction_lost` en el baseline es "respuesta corta con pérdida de contexto", no "papá corrige" — requiere otro intent/handler.
+4. `pct_all_validators_pass` es 100% en todos los runs, pero NO correlaciona con la métrica del juez. Los validators son demasiado permisivos para medir calidad conversacional.
+
+**Lo único que claramente mejoró:** 0 regresiones críticas en el full (vs 1.1% baseline). Pero introdujo críticas nuevas en focused isolation (correction_lost: t11, t70) que NO aparecen en el flujo continuo del full.
+
+---
+
+## ADR-017 — Bloque 5.6 cerrado parcialmente: revert prompts/validators, mantener infraestructura
+
+**Fecha:** 2026-05-19
+**Contexto:** Resultado del Bloque 5.6 (ADR-016): NO pasa criterios. Oscar decidió **Opción A** de las tres recomendadas: revertir prompts/validators del 5.6 manteniendo la infraestructura útil. Esto **NO es una pausa** — es limpieza para que Bloque 5.7 (cuando Oscar lo arranque) parta de una base clara, no sobre código que sabemos que empeoró las métricas.
+
+**Decisión — qué se revierte:**
+
+1. **`app/core/validators.py`** — eliminados:
+   - `validar_no_inventa_datos` y todos los regex `_AFIRMA_*` asociados (7 sub-checks de invención).
+   - `validar_no_bullets_en_momento_intimo`.
+   - `run_all_validators` vuelve a 5 validators (era 7).
+   - Firma de `run_all_validators` vuelve a la previa (sin `mensajes_papa`, sin `es_momento_intimo`).
+
+2. **`app/core/intent_classifier.py`** — eliminado:
+   - `Intent.CORRECCION_DEL_PAPA` del enum.
+   - Su descripción en el system prompt.
+
+3. **`app/core/orchestrator.py`** — eliminados:
+   - Imports de `correction_handler` e `intimacy_detector`.
+   - Handler de corrección (paso 5bis del PASO 4).
+   - Detección de intimidad (paso 5pre del PASO 3).
+   - Hint inyection de corrección + intimidad al `mensaje_para_llm`.
+   - `mensajes_papa` y `es_momento_intimo` de la llamada a `run_all_validators`.
+   - **Conservado:** import de `consultar_edades_de_nivel`, helper `_detectar_nivel_en_mensaje`, pre-fetch de niveles tool (paso 5ter), import y pre-fetch de campus (Bloque 5.5 Fix 4).
+
+4. **`app/core/prompts/rules.md`** — eliminadas:
+   - Regla "Cuando el papá te corrige".
+   - Regla "Integridad de información".
+
+5. **`app/core/prompts/journey/descubrimiento.md`** — eliminada:
+   - Sección "TONO EN MOMENTOS ÍNTIMOS".
+
+6. **Archivos completos eliminados:**
+   - `app/core/intimacy_detector.py`
+   - `app/core/correction_handler.py`
+   - `tests/test_intimacy_detector.py`
+   - `tests/test_correction_handler.py`
+
+7. **`tests/test_validators.py`** — eliminadas:
+   - Secciones de tests para `validar_no_inventa_datos` (15 tests).
+   - Secciones de tests para `validar_no_bullets_en_momento_intimo` (6 tests).
+   - `test_run_all_returns_7_results` → `test_run_all_returns_5_results`.
+   - Asserts de `len(passed) == 7` → `== 5`.
+
+8. **`app/config.py`** — revertido:
+   - `max_regenerations_per_turn: int = Field(default=1, ...)` → `default=2` (valor previo al PASO 5.0 del 5.6).
+
+**Decisión — qué se mantiene (infraestructura útil):**
+
+- ✅ `tests/golden/runner.py` con `--runs N` y `--focused <set>` (PASO 0).
+- ✅ `tests/golden/deterministic_metrics.py`.
+- ✅ `tests/golden/focused_sets/` (5 archivos curados).
+- ✅ `tests/golden/results/focused-*.json` (evidencia ejecutada).
+- ✅ `migrations/004_niveles_por_edad.sql` y la tabla aplicada en Supabase prod.
+- ✅ `app/tools/niveles.py` (tool determinística).
+- ✅ `app/core/orchestrator.py` wiring de niveles tool en orchestrator (paso 5ter).
+- ✅ `docs/AUDIT_FACTUAL_DATA.md`.
+- ✅ ADRs 011-016 intactos.
+
+**Verificación post-revert:**
+- Tests: 255/255 ✅ (vs 306 antes — 51 tests eliminados de los módulos revertidos)
+- `uv run python -m tests.golden.runner --help` ✅ soporta `--runs` y `--focused`
+- `app.tools.niveles` imports OK ✅
+- ruff check + format limpios ✅
+
+**Plan tentativo para Bloque 5.7 (cuando Oscar lo arranque):**
+
+Atacar las dos causas raíz reales no resueltas, con base en aprendizajes del 5.6:
+
+1. **"Respuesta corta con pérdida de contexto"** (real bug detrás del fail de correction_lost). El intent debería detectar afirmaciones cortas ("Si", "Ok") cuando el contexto previo establecía un compromiso. Handler: validar que la respuesta del LLM ataque el compromiso pendiente, no salte de tema.
+2. **`intimacy_detector` con threshold más sensible** (o con LLM fallback más agresivo para mensajes cortos en descubrimiento).
+3. **Considerar `severity=warning` en validators heurísticos nuevos** — registran fallos pero NO disparan regeneración. Mantiene métrica determinística sin costo extra.
+4. **Validar tabla `niveles_por_edad` con Cecilia** ANTES de tocar más prompts. Si los datos seed están mal, cualquier mejora de prompt va a pelear contra datos malos.
+
+**Justificación de revertir:** Mantener código que sabemos que empeora métricas crea deuda invisible. Cualquier iteración futura debe partir de un baseline limpio para poder atribuir mejoras o regresiones a cambios concretos.
+
+---

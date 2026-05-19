@@ -1,4 +1,4 @@
-"""Tests de los 7 validators determinísticos."""
+"""Tests de los 5 validators determinísticos."""
 
 from __future__ import annotations
 
@@ -8,10 +8,8 @@ from app.core.validators import (
     FRASES_MUNICION,
     extraer_frases_municion_usadas,
     run_all_validators,
-    validar_no_bullets_en_momento_intimo,
     validar_no_envio_fantasma,
     validar_no_evasion,
-    validar_no_inventa_datos,
     validar_no_markdown_excesivo,
     validar_no_pregunta_repetida,
     validar_no_repeticion,
@@ -262,14 +260,14 @@ def test_evasion_pasa_horario_con_hora() -> None:
 # ============================================================
 
 
-def test_run_all_returns_7_results() -> None:
+def test_run_all_returns_5_results() -> None:
     estado = EstadoCapturado()
     report = run_all_validators(
         respuesta="Hola, ¿cómo te puedo ayudar?",
         estado=estado,
         intent=Intent.SALUDO_INICIAL,
     )
-    assert len(report.results) == 7
+    assert len(report.results) == 5
     assert report.all_passed is True
 
 
@@ -402,235 +400,5 @@ def test_validation_report_maps_for_db() -> None:
     )
     passed = report.passed_map
     failed = report.failed_map
-    assert isinstance(passed, dict) and len(passed) == 7
+    assert isinstance(passed, dict) and len(passed) == 5
     assert "no_envio_fantasma" in failed
-
-
-# ============================================================
-# validar_no_inventa_datos (Bloque 5.6 — Causa raíz #1)
-# ============================================================
-
-
-def test_inventa_pasa_respuesta_neutra() -> None:
-    estado = EstadoCapturado()
-    r = validar_no_inventa_datos(
-        respuesta="¡Hola! Cuéntame, ¿qué nivel buscas?",
-        estado=estado,
-        mensajes_papa=["hola"],
-    )
-    assert r.passed is True
-
-
-def test_inventa_falla_afirma_vio_link() -> None:
-    estado = EstadoCapturado()
-    r = validar_no_inventa_datos(
-        respuesta="Vi el link de Instagram que me compartiste. Qué interesante.",
-        estado=estado,
-        mensajes_papa=["mira esto https://instagram.com/p/abc"],
-    )
-    assert r.passed is False
-    assert "contenido externo" in (r.reason or "").lower()
-
-
-def test_inventa_falla_afirma_vio_imagen() -> None:
-    estado = EstadoCapturado()
-    r = validar_no_inventa_datos(
-        respuesta="Acabo de ver tu imagen, te respondo lo que dice.",
-        estado=estado,
-        mensajes_papa=[],
-    )
-    assert r.passed is False
-
-
-def test_inventa_falla_usa_nombre_no_dado() -> None:
-    """Si Sofía dice 'Hola Mateo' y el nombre 'Mateo' no aparece ni en estado
-    ni en mensajes previos del papá, el validator falla."""
-    r = validar_no_inventa_datos(
-        respuesta="Hola Mateo, qué gusto. Cuéntame.",
-        estado=EstadoCapturado(),
-        mensajes_papa=["hola"],
-    )
-    assert r.passed is False
-    assert "nombre" in (r.reason or "").lower()
-
-
-def test_inventa_pasa_usa_nombre_dado() -> None:
-    estado = EstadoCapturado(nombre_papa="Juan")
-    r = validar_no_inventa_datos(
-        respuesta="Hola Juan, qué gusto.",
-        estado=estado,
-        mensajes_papa=["soy juan"],
-    )
-    assert r.passed is True
-
-
-def test_inventa_falla_afirma_nivel_no_dicho() -> None:
-    estado = EstadoCapturado()
-    r = validar_no_inventa_datos(
-        respuesta="Para tu hijo en Maternal es ideal nuestra etapa Early Years.",
-        estado=estado,
-        mensajes_papa=["hola, busco info de su escuela"],
-    )
-    assert r.passed is False
-    assert "nivel" in (r.reason or "").lower()
-
-
-def test_inventa_pasa_nivel_en_estado() -> None:
-    estado = EstadoCapturado(nivel_buscado_actual=NivelEducativo.MATERNAL)
-    r = validar_no_inventa_datos(
-        respuesta="Para tu hijo en Maternal, te platico…",
-        estado=estado,
-        mensajes_papa=["busco maternal"],
-    )
-    assert r.passed is True
-
-
-def test_inventa_pasa_nivel_en_mensajes_papa() -> None:
-    estado = EstadoCapturado()
-    r = validar_no_inventa_datos(
-        respuesta="Para tu hijo en Kinder, te platico…",
-        estado=estado,
-        mensajes_papa=["estoy interesado en kinder para mi peque"],
-    )
-    assert r.passed is True
-
-
-def test_inventa_falla_afirma_edad_no_dicha() -> None:
-    estado = EstadoCapturado()
-    r = validar_no_inventa_datos(
-        respuesta="Tu hijo de 5 años está en una etapa hermosa.",
-        estado=estado,
-        mensajes_papa=["hola"],
-    )
-    assert r.passed is False
-    assert "edad" in (r.reason or "").lower()
-
-
-def test_inventa_pasa_edad_en_estado() -> None:
-    estado = EstadoCapturado(hijos=[HijoInfo(edad=5)])
-    r = validar_no_inventa_datos(
-        respuesta="Tu hijo de 5 años está en una etapa hermosa.",
-        estado=estado,
-        mensajes_papa=["mi peque tiene 5 años"],
-    )
-    assert r.passed is True
-
-
-def test_inventa_falla_asume_genero() -> None:
-    estado = EstadoCapturado()
-    r = validar_no_inventa_datos(
-        respuesta="Qué bonito. Tu hija va a disfrutar mucho aquí.",
-        estado=estado,
-        mensajes_papa=["hola"],
-    )
-    assert r.passed is False
-    assert "género" in (r.reason or "").lower() or "genero" in (r.reason or "").lower()
-
-
-def test_inventa_pasa_genero_neutral_peque() -> None:
-    estado = EstadoCapturado(hijos=[HijoInfo()])
-    r = validar_no_inventa_datos(
-        respuesta="Qué bonito. Tu peque va a disfrutar mucho aquí.",
-        estado=estado,
-        mensajes_papa=["mi peque"],
-    )
-    assert r.passed is True
-
-
-def test_inventa_falla_campus_contradice_estado() -> None:
-    estado = EstadoCapturado(campus_cita="Campus 1")
-    r = validar_no_inventa_datos(
-        respuesta="Tu cita en Campus 2 está confirmada.",
-        estado=estado,
-        mensajes_papa=[],
-    )
-    assert r.passed is False
-    assert "campus" in (r.reason or "").lower()
-
-
-def test_inventa_falla_afirma_cita_sin_agendarla() -> None:
-    estado = EstadoCapturado(cita_agendada=False)
-    r = validar_no_inventa_datos(
-        respuesta="Tu cita es el viernes a las 10am. Te espero.",
-        estado=estado,
-        mensajes_papa=[],
-    )
-    assert r.passed is False
-    assert "cita" in (r.reason or "").lower()
-
-
-def test_inventa_pasa_cita_propuesta_no_afirmada() -> None:
-    """Proponer una cita ('¿te gustaría agendar?') NO afirma que ya existe."""
-    estado = EstadoCapturado(cita_agendada=False)
-    r = validar_no_inventa_datos(
-        respuesta="¿Te gustaría agendar una visita esta semana o la siguiente?",
-        estado=estado,
-        mensajes_papa=[],
-    )
-    assert r.passed is True
-
-
-# ============================================================
-# validar_no_bullets_en_momento_intimo (Bloque 5.6 PASO 3 — Causa raíz #2)
-# ============================================================
-
-
-def test_bullets_intimo_pasa_si_no_es_momento_intimo() -> None:
-    """Cuando es_momento_intimo=False, el validator siempre pasa."""
-    r = validar_no_bullets_en_momento_intimo(
-        respuesta="- punto 1\n- punto 2\n- punto 3\n- punto 4",
-        es_momento_intimo=False,
-    )
-    assert r.passed is True
-
-
-def test_bullets_intimo_pasa_con_prosa() -> None:
-    """Si es momento íntimo y la respuesta es prosa, pasa."""
-    r = validar_no_bullets_en_momento_intimo(
-        respuesta="Entiendo perfectamente. Esta etapa es delicada y aquí lo cuidamos.",
-        es_momento_intimo=True,
-    )
-    assert r.passed is True
-
-
-def test_bullets_intimo_pasa_con_2_bullets() -> None:
-    """En momento íntimo, 2 bullets aún se tolera (umbral relajado para evitar
-    falsos positivos en respuestas naturales con 1-2 ítems)."""
-    r = validar_no_bullets_en_momento_intimo(
-        respuesta="Aquí hacemos:\n- vínculo\n- exploración",
-        es_momento_intimo=True,
-    )
-    assert r.passed is True
-
-
-def test_bullets_intimo_falla_con_3_bullets() -> None:
-    r = validar_no_bullets_en_momento_intimo(
-        respuesta="Aquí hacemos:\n- vínculo\n- exploración\n- lenguaje",
-        es_momento_intimo=True,
-    )
-    assert r.passed is False
-    assert "íntimo" in (r.reason or "").lower()
-
-
-def test_bullets_intimo_falla_con_3_numerados() -> None:
-    r = validar_no_bullets_en_momento_intimo(
-        respuesta="Te recomiendo:\n1. agendar\n2. visitar\n3. preguntar",
-        es_momento_intimo=True,
-    )
-    assert r.passed is False
-
-
-def test_bullets_intimo_falla_con_4_negritas() -> None:
-    r = validar_no_bullets_en_momento_intimo(
-        respuesta="**Vínculo**, **exploración**, **lenguaje**, **autonomía**.",
-        es_momento_intimo=True,
-    )
-    assert r.passed is False
-
-
-def test_bullets_intimo_pasa_con_1_negrita() -> None:
-    r = validar_no_bullets_en_momento_intimo(
-        respuesta="Lo más importante en esta etapa es el **vínculo**.",
-        es_momento_intimo=True,
-    )
-    assert r.passed is True

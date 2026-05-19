@@ -97,65 +97,6 @@ _DEJAME_CONFIRMAR_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Bloque 5.6 — patrones para validar_no_inventa_datos
-
-# Afirmaciones de haber accedido a contenido externo (Sofía no tiene visión web)
-_AFIRMA_VIO_CONTENIDO_RE = re.compile(
-    r"\bvi\s+(?:el|tu|la|los?|las?)\s+(?:link|enlace|imagen|video|contenido|post|publicaci[oó]n|art[ií]culo|p[aá]gina)\b|"
-    r"\b(?:revis[eé]|le[íi]|mir[eé])\s+(?:el|tu|la|los?)\s+(?:link|enlace|contenido|post)\b|"
-    r"\b(?:le[íi]|vi)\s+lo\s+que\s+(?:dice|me\s+enviaste|compart[ií]ste|compart[ií]aste)\b|"
-    r"acabo\s+de\s+ver\s+(?:el|tu)",
-    re.IGNORECASE,
-)
-
-# Afirmar nombre del papá ("Hola Juan, ...", "Mira Juan, ...").
-# El grupo capturado es case-SENSITIVE (debe empezar con mayúscula) para no
-# matchear muletillas comunes ("qué", "cuánto", "claro", etc.) que vienen después
-# de saludos. Las saludo-keywords sí toleran case mixto.
-_AFIRMA_NOMBRE_PAPA_RE = re.compile(
-    r"(?:^|\.\s+|,\s+)(?:[Hh]ola|[Mm]ira|[Ff]íjate|[Oo]ye|[Cc]laro|[Ss][ií])[,]?\s+"
-    r"([A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,15})\b"
-)
-
-# Afirmar nivel/etapa del hijo (afirmativo, no interrogativo)
-# Ejemplos que matchean: "tu hijo de Kinder", "para Maternal", "tu peque está en primaria"
-# NO matchea: "¿qué nivel busca?", "¿para Kinder o Maternal?"
-_AFIRMA_NIVEL_HIJO_RE = re.compile(
-    r"\btu\s+(?:hijo|hija|peque[ñn]o|peque[ñn]a|peque|ni[ñn]o|ni[ñn]a)\s+"
-    r"(?:de|en|est[aá]\s+en|va\s+a|busca)\s+(maternal|kinder|preescolar|primaria|secundaria|"
-    r"\d+\s*°\s*(?:de\s+)?(?:primaria|secundaria|kinder)|"
-    r"infants|toddlers|cubs|baby|preschool)\b",
-    re.IGNORECASE,
-)
-
-# Afirmar edad ("tu hijo de N años") — solo afirmación, no pregunta
-_AFIRMA_EDAD_HIJO_RE = re.compile(
-    r"\btu\s+(?:hijo|hija|peque|ni[ñn]o|ni[ñn]a)\s+de\s+(\d{1,2})\s+(?:a[ñn]os?|meses)\b",
-    re.IGNORECASE,
-)
-
-# Afirmar género del hijo cuando solo se ha mencionado neutralmente
-_AFIRMA_GENERO_HIJO_RE = re.compile(
-    r"\btu\s+(hijo|hija)\b(?!\s*[oó]\s*(?:hija|hijo))",
-    re.IGNORECASE,
-)
-
-# Afirmar campus específico ("en Campus 2", "vamos a Campus 1")
-_AFIRMA_CAMPUS_RE = re.compile(
-    r"\b(?:en\s+|para\s+|al\s+|del?\s+|tu\s+(?:cita|visita)\s+(?:es\s+)?en\s+)"
-    r"(campus\s*[12])\b",
-    re.IGNORECASE,
-)
-
-# Afirmar cita ya agendada ("ya agendaste", "tu cita es el", "te espero el")
-_AFIRMA_CITA_AGENDADA_RE = re.compile(
-    r"\b(?:ya\s+agendaste|tu\s+cita\s+(?:es|ser[aá]|qued[oó]|est[aá]\s+confirmada)|"
-    r"tu\s+visita\s+(?:es|ser[aá]|qued[oó])|"
-    r"te\s+espero\s+el\s+\w+|nos\s+vemos\s+el\s+\w+)",
-    re.IGNORECASE,
-)
-
-
 # ============================================================
 # Resultado de validación
 # ============================================================
@@ -403,222 +344,6 @@ def validar_no_markdown_excesivo(respuesta: str) -> ValidationResult:
     return ValidationResult(validator="no_markdown_excesivo", passed=True)
 
 
-def validar_no_inventa_datos(
-    respuesta: str,
-    estado: EstadoCapturado,
-    mensajes_papa: list[str] | None = None,
-) -> ValidationResult:
-    """Falla si la respuesta afirma datos que NO están en estado_capturado ni en
-    los mensajes previos del papá. Ataca la causa raíz #1 del Bloque 5.6.
-
-    Detecta los siguientes patrones de invención:
-    1. Afirmar haber visto contenido externo (URL, imagen, post) — Sofía no tiene
-       acceso web; siempre falla.
-    2. Afirmar nombre del papá si no está en `estado.nombre_papa` ni en mensajes
-       previos del papá.
-    3. Afirmar nivel del hijo si no coincide con `estado.nivel_buscado_actual`
-       ni con ningún `estado.hijos[].nivel`.
-    4. Afirmar edad del hijo si no coincide con `estado.hijos[].edad`.
-    5. Afirmar género (hijo vs hija) cuando no aparece en estado ni en mensajes
-       previos del papá.
-    6. Afirmar Campus específico si no coincide con `estado.campus_cita`.
-    7. Afirmar cita agendada si `estado.cita_agendada` es False.
-
-    Es conservador: solo falla cuando hay evidencia clara de invención.
-    Preguntas hipotéticas ("¿para Maternal?") NO fallan.
-
-    `mensajes_papa`: lista de strings con los mensajes previos del papá (sin
-    respuestas de Sofía). Útil para corroborar datos que el extractor podría
-    no haber capturado aún.
-    """
-    mensajes_papa = mensajes_papa or []
-    texto_papa = " ".join(mensajes_papa).lower()
-
-    # 1. Afirmar haber visto contenido externo — sin tool de visión web, siempre falla
-    m = _AFIRMA_VIO_CONTENIDO_RE.search(respuesta)
-    if m:
-        return ValidationResult(
-            validator="no_inventa_datos",
-            passed=False,
-            reason=f"Afirma haber visto contenido externo: '{m.group(0)}'. Sofía no tiene acceso web.",
-            suggested_fix=(
-                "NUNCA afirmes haber visto links, imágenes, posts, videos ni contenido externo. "
-                "No tienes acceso web. Si el papá compartió un enlace, agradécelo y pregunta "
-                "qué le llamó la atención de eso, sin pretender haberlo visto."
-            ),
-        )
-
-    # 2. Afirmar nombre del papá
-    nombre_estado = (estado.nombre_papa or "").strip().lower()
-    nombres_que_no_son_papa = {"sof", "sofía", "sofia"}  # autoreferencia OK
-    for m in _AFIRMA_NOMBRE_PAPA_RE.finditer(respuesta):
-        candidato = m.group(1).lower()
-        if candidato in nombres_que_no_son_papa:
-            continue
-        if nombre_estado and candidato in nombre_estado:
-            continue
-        # Verificar si el nombre aparece en algún mensaje previo del papá
-        if candidato in texto_papa:
-            continue
-        # Posible invención
-        return ValidationResult(
-            validator="no_inventa_datos",
-            passed=False,
-            reason=f"Usa nombre '{m.group(1)}' que no está en estado ni en mensajes del papá",
-            suggested_fix=(
-                f"Borra el nombre '{m.group(1)}' — el papá no te lo ha dado. Si quieres "
-                "personalizar, simplemente saluda sin nombre."
-            ),
-        )
-
-    # 3. Afirmar nivel del hijo
-    niveles_conocidos: set[str] = set()
-    if estado.nivel_buscado_actual:
-        niveles_conocidos.add(estado.nivel_buscado_actual.value)
-    for h in estado.hijos:
-        if h.nivel:
-            niveles_conocidos.add(h.nivel.value)
-        if h.grado:
-            niveles_conocidos.add(h.grado.lower())
-
-    for m in _AFIRMA_NIVEL_HIJO_RE.finditer(respuesta):
-        nivel_afirmado = m.group(1).lower().replace(" ", "")
-        # Normalización para coincidencias parciales (maternal ≈ early years, etc.)
-        if any(
-            n.replace(" ", "") in nivel_afirmado or nivel_afirmado in n for n in niveles_conocidos
-        ):
-            continue
-        # Buscar en mensajes del papá (literal o variante)
-        if any(token in texto_papa for token in [nivel_afirmado, nivel_afirmado[:5]]):
-            continue
-        return ValidationResult(
-            validator="no_inventa_datos",
-            passed=False,
-            reason=f"Afirma nivel '{m.group(1)}' del hijo sin que el papá lo haya mencionado",
-            suggested_fix=(
-                f"NO afirmes que el hijo está en {m.group(1)} — no aparece en lo que el papá te ha dicho "
-                "ni en estado_capturado. Si necesitas saberlo, pregúntalo abiertamente."
-            ),
-        )
-
-    # 4. Afirmar edad del hijo
-    edades_conocidas: set[int] = {h.edad for h in estado.hijos if h.edad is not None}
-    for m in _AFIRMA_EDAD_HIJO_RE.finditer(respuesta):
-        try:
-            edad_afirmada = int(m.group(1))
-        except ValueError:
-            continue
-        if edad_afirmada in edades_conocidas:
-            continue
-        # Buscar literal en mensajes del papá
-        if re.search(rf"\b{edad_afirmada}\s+(?:a[ñn]os?|meses)", texto_papa):
-            continue
-        return ValidationResult(
-            validator="no_inventa_datos",
-            passed=False,
-            reason=f"Afirma edad {edad_afirmada} sin que el papá la haya mencionado",
-            suggested_fix=(
-                f"NO afirmes que el hijo tiene {edad_afirmada} años — no está en estado_capturado "
-                "ni en lo que el papá te ha dicho. Pregúntale la edad si la necesitas."
-            ),
-        )
-
-    # 5. Género del hijo (hijo/hija) — falla SOLO cuando:
-    #    - Hay contexto del hijo (estado.hijos no vacío, o papá mencionó "peque"/"hijo")
-    #    - Y la afirmación de género CONTRADICE el contexto
-    # Si estado y mensajes_papa están completamente vacíos (saludo inicial puro),
-    # tolerar — Sofía puede preguntar "¿qué edad tiene tu hijo/peque?" como
-    # apertura natural sin asumir nada.
-    m_gen = _AFIRMA_GENERO_HIJO_RE.search(respuesta)
-    if m_gen:
-        genero_afirmado = m_gen.group(1).lower()
-        papa_dio_referente = genero_afirmado in texto_papa or any(
-            w in texto_papa for w in ("hijos", "hijas", "peque", "niño", "niña", "nino", "nina")
-        )
-        estado_tiene_referente = bool(estado.hijos) or estado.nivel_buscado_actual is not None
-        # Tolerancia para saludo inicial: si estado está completamente vacío Y
-        # no hay mensajes previos del papá con contexto, no fallar.
-        contexto_completamente_vacio = not estado_tiene_referente and not texto_papa.strip()
-        if contexto_completamente_vacio:
-            pass  # tolerar
-        elif not papa_dio_referente and not estado_tiene_referente:
-            return ValidationResult(
-                validator="no_inventa_datos",
-                passed=False,
-                reason=f"Afirma género '{genero_afirmado}' sin que el papá lo haya indicado",
-                suggested_fix=(
-                    f"NO digas 'tu {genero_afirmado}' — no sabes el género. Usa 'tu peque' o "
-                    "pregunta abiertamente sin asumir."
-                ),
-            )
-
-    # 6. Campus específico
-    m_camp = _AFIRMA_CAMPUS_RE.search(respuesta)
-    if m_camp:
-        campus_afirmado = m_camp.group(1).lower().replace(" ", "")  # "campus1" o "campus2"
-        campus_estado = (estado.campus_cita or "").lower().replace(" ", "")
-        if campus_estado and campus_estado not in campus_afirmado:
-            return ValidationResult(
-                validator="no_inventa_datos",
-                passed=False,
-                reason=f"Afirma '{m_camp.group(1)}' pero estado tiene {estado.campus_cita}",
-                suggested_fix=(
-                    f"El campus correcto es {estado.campus_cita} (según estado_capturado). "
-                    f"Reescribe sin contradecirlo."
-                ),
-            )
-
-    # 7. Cita agendada falsa
-    m_cit = _AFIRMA_CITA_AGENDADA_RE.search(respuesta)
-    if m_cit and not estado.cita_agendada:
-        return ValidationResult(
-            validator="no_inventa_datos",
-            passed=False,
-            reason=f"Afirma cita agendada ('{m_cit.group(0)}') pero estado.cita_agendada=False",
-            suggested_fix=(
-                "NO afirmes que la cita está agendada — no lo está. Si quieres proponerla, "
-                "hazlo como invitación ('¿te gustaría agendar?'), no como hecho."
-            ),
-        )
-
-    return ValidationResult(validator="no_inventa_datos", passed=True)
-
-
-def validar_no_bullets_en_momento_intimo(
-    respuesta: str, es_momento_intimo: bool
-) -> ValidationResult:
-    """Si el momento es íntimo y la respuesta usa bullets/listas excesivamente, falla.
-
-    Más estricto que `no_markdown_excesivo` pero no tanto que disparé falsos
-    positivos en 1-2 bullets legítimos (ej. listar 2 modalidades). Umbral:
-    ≥3 bullets, ≥3 numerados, o ≥4 negritas en un momento íntimo.
-    Ataca la causa raíz #2: tono transaccional con bullets en momentos íntimos.
-    """
-    if not es_momento_intimo:
-        return ValidationResult(validator="no_bullets_intimo", passed=True)
-
-    bullets = _MARKDOWN_BULLET_RE.findall(respuesta)
-    numbered = _MARKDOWN_NUMBERED_RE.findall(respuesta)
-    bolds = _MARKDOWN_BOLD_RE.findall(respuesta)
-
-    if len(bullets) >= 3 or len(numbered) >= 3 or len(bolds) >= 4:
-        n_items = max(len(bullets), len(numbered), len(bolds))
-        return ValidationResult(
-            validator="no_bullets_intimo",
-            passed=False,
-            reason=f"Momento íntimo con estructura visual: {n_items} bullets/numerados/negritas",
-            suggested_fix=(
-                "Este es un momento íntimo de la conversación (el papá está hablando "
-                "emocionalmente o pidiendo continuar tras un momento personal). "
-                "Reescribe TODO en prosa fluida, 2-4 oraciones máximo, sin bullets, "
-                "sin listas numeradas, sin negritas excesivas. Habla con calidez "
-                "humana, no con estructura comercial."
-            ),
-        )
-
-    return ValidationResult(validator="no_bullets_intimo", passed=True)
-
-
 def validar_no_evasion(respuesta: str, intent: Intent | None) -> ValidationResult:
     """Falla si la pregunta era cerrada (costos/horarios) y la respuesta evade.
 
@@ -680,18 +405,10 @@ def run_all_validators(
     intent: Intent | None = None,
     tools_called: list[str] | None = None,
     frases_usadas: list[str] | None = None,
-    mensajes_papa: list[str] | None = None,
-    es_momento_intimo: bool = False,
 ) -> ValidationReport:
     """Ejecuta todos los validators secuencialmente y agrega resultados.
 
     Es pura: no escribe DB, no llama APIs. Solo razona sobre el texto.
-
-    `mensajes_papa` (Bloque 5.6 PASO 1) es la lista de mensajes anteriores del
-    papá (sin las respuestas de Sofía), usada por `validar_no_inventa_datos`.
-
-    `es_momento_intimo` (Bloque 5.6 PASO 3) viene del detector de intimidad —
-    cuando True, el validator `no_bullets_intimo` exige prosa.
     """
     report = ValidationReport()
     report.results.append(validar_no_repeticion(respuesta, frases_usadas or []))
@@ -699,8 +416,6 @@ def run_all_validators(
     report.results.append(validar_no_pregunta_repetida(respuesta, estado))
     report.results.append(validar_no_evasion(respuesta, intent))
     report.results.append(validar_no_markdown_excesivo(respuesta))
-    report.results.append(validar_no_inventa_datos(respuesta, estado, mensajes_papa))
-    report.results.append(validar_no_bullets_en_momento_intimo(respuesta, es_momento_intimo))
     return report
 
 
