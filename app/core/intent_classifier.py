@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
@@ -36,6 +37,7 @@ class Intent(StrEnum):
     OBJECION_TAREA = "objecion_tarea"
     OBJECION_OTRA = "objecion_otra"
     DESPEDIDA = "despedida"
+    RESPUESTA_CORTA_AL_TURNO_PREVIO = "respuesta_corta_al_turno_previo"
     CONFUSO_OTRO = "confuso_otro"
 
 
@@ -70,6 +72,7 @@ Categorías disponibles:
 - objecion_tarea: no dejan tarea, quiero que le dejen tarea
 - objecion_otra: otra duda/objeción
 - despedida: adiós, gracias, hasta luego
+- respuesta_corta_al_turno_previo: el papá responde con un mensaje muy corto (≤15 caracteres después de quitar espacios) que es una **continuación o confirmación** del turno anterior tuyo. Ejemplos: "sí", "no", "ok", "listo", "claro", "5to", "primaria", "kinder", "9 años", "que más", "cuéntame más", "y luego", "ajá". **NO uses esta categoría si es saludo inicial nuevo** (ej. "hola" sin contexto previo). El runtime solo aplica esta categoría si ya hay turno previo de Sofía en el historial.
 - confuso_otro: no se puede clasificar
 
 Devuelve EXCLUSIVAMENTE JSON con esta estructura:
@@ -115,6 +118,39 @@ async def classify_intent(
         return IntentResult(intent=Intent.CONFUSO_OTRO, confidence=0.0)
 
     return _parse_result(raw)
+
+
+# Bloque 5.7 ATAQUE 2 — detector heurístico de "respuesta corta al turno previo".
+# Usado como gate post-classifier: si el LLM marca otro intent pero la heurística
+# detecta este patrón Y hay turno previo de Sofía, sobreescribimos.
+_RESPUESTA_CORTA_KEYWORDS = re.compile(
+    r"^\s*(?:s[ií]\s*(?:por\s*favor)?|no(?:\s*gracias)?|ok|okay|okey|listo|claro|"
+    r"aja|aj[aá]|de\s*acuerdo|exacto|exactamente|"
+    r"que\s+m[aá]s\??|cu[eé]ntame(?:\s+m[aá]s)?|sigue|y\??|y\s+luego|"
+    r"\d{1,2}\s*(?:°|to|do|ro|er|vo|no|mo|cuarto|quinto|sexto)?(?:\s+(?:de\s+)?(?:primaria|secundaria|kinder|maternal))?|"
+    r"\d{1,2}\s*a[ñn]os?|\d{1,2}\s*meses?|"
+    r"primaria|secundaria|kinder|maternal|preescolar|"
+    r"infants|baby|cubs|toddlers|preschool)\s*[\.\?\!]?\s*$",
+    re.IGNORECASE,
+)
+
+
+def es_respuesta_corta_al_turno_previo(mensaje: str, hay_turno_previo_assistant: bool) -> bool:
+    """Heurística determinística (Bloque 5.7 ATAQUE 2).
+
+    Devuelve True si el mensaje cumple:
+      - ≤15 caracteres después de trim
+      - Encaja en patrones confirmatorios/numéricos/continuación
+      - HAY turno previo del assistant en el historial (guard A)
+
+    Si NO hay turno previo, el intent NO aplica (sería saludo inicial).
+    """
+    if not hay_turno_previo_assistant:
+        return False
+    msg = mensaje.strip()
+    if len(msg) == 0 or len(msg) > 15:
+        return False
+    return bool(_RESPUESTA_CORTA_KEYWORDS.match(msg))
 
 
 def _parse_result(raw: str) -> IntentResult:

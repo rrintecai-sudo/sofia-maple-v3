@@ -480,3 +480,45 @@ Atacar las dos causas raíz reales no resueltas, con base en aprendizajes del 5.
 **Justificación:** Esta arquitectura permite **medir sin interferir**. Los warnings son señal para iterar (si `no_inventa_datos` warns en >20% turnos, hay patrón sistemático que vale atacar con prompt en futuro bloque). Pero la respuesta del LLM NO se altera por warnings, así que Sofía no se vuelve cautelosa-pero-vacía.
 
 ---
+
+## ADR-019 — Bloque 5.7 ATAQUE 2: intent RESPUESTA_CORTA_AL_TURNO_PREVIO + handler de contexto
+
+**Fecha:** 2026-05-19
+**Contexto:** El análisis del fail de `correction_lost` en el Bloque 5.6 reveló que el bug real NO era "papá corrige" sino "papá manda mensaje corto + Sofía pierde contexto del último turno propio". Ejemplo: Sofía pregunta "¿En qué grado está tu hijo?", papá responde "5to", Sofía contesta con presentación extensa sobre Tercero de Secundaria.
+
+**Decisión:** Detectar el patrón y forzar a Sofía a tratar el mensaje como respuesta al turno previo.
+
+1. **Nuevo `Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO`** en `app/core/intent_classifier.py` con descripción en el system prompt del LLM. El LLM clasificará algunos casos; el resto los captura el guard heurístico.
+
+2. **Helper determinístico `es_respuesta_corta_al_turno_previo(mensaje, hay_turno_previo_assistant)`** — regex sobre keywords confirmatorias/numéricas/continuación con guard A:
+   - ≤15 chars después de trim
+   - Match con un patrón confirmatorio/numérico (sí, ok, listo, claro, 5to, 9 años, primaria, kinder, que más, cuéntame, ajá, etc.)
+   - **MUST** `hay_turno_previo_assistant=True` (sin turno previo no aplica)
+
+3. **Override en orchestrator (paso 7bis):**
+   - Tras leer historial, escanea hacia atrás el último mensaje del assistant.
+   - Si la heurística matchea (con guard de turno previo) Y el LLM marcó otro intent → **override**: `intent_result = IntentResult(RESPUESTA_CORTA_AL_TURNO_PREVIO, 1.0, "override heurístico")` con log.
+   - Esto cubre el caso donde el LLM se confunde (ej. clasifica "5to" como `confuso_otro`).
+
+4. **Hint inyectado al `mensaje_para_llm` (paso 7ter):**
+   ```
+   [CONTEXTO CRÍTICO: el papá acaba de responder con un mensaje muy corto
+   ({mensaje}). Es una continuación al turno PREVIO tuyo donde dijiste:
+   "{ultimo_assistant[:300]}".
+   Tu respuesta DEBE:
+   1) tratar el mensaje como respuesta a TU pregunta/afirmación.
+   2) NO recitar info no pedida.
+   3) Si cierra un loop, avanza el journey 1 paso pequeño.
+   4) Si es ambiguo, pregunta UNA cosa breve.]
+   ```
+
+5. **Nuevo validator `validar_no_recita_info_no_pedida(respuesta, intent)`** con `severity="warning"`. Activa solo cuando intent == RESPUESTA_CORTA_AL_TURNO_PREVIO. Falla (warning) si:
+   - Respuesta > 80 palabras
+   - Headers (#) en respuesta
+   - ≥2 listas numeradas (1. 2.)
+
+**Tests:** 20 tests para el helper heurístico (15 positivos + 5 negativos cubriendo el guard de turno previo, longitud, palabras random) + 5 tests del nuevo validator. Total 299/299 pasando.
+
+**Justificación:** Filosofía 5.7: detectar bug real con heurística + dar contexto explícito en el prompt + medir (no bloquear) con warning. La heurística determinística override garantiza que el patrón se capture incluso cuando el LLM clasifica mal. El validator de soporte mide si Sofía hace caso al hint o lo ignora.
+
+---

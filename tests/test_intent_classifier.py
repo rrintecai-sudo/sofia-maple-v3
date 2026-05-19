@@ -9,6 +9,7 @@ from app.core.intent_classifier import (
     Intent,
     _parse_result,
     classify_intent,
+    es_respuesta_corta_al_turno_previo,
 )
 
 
@@ -61,3 +62,111 @@ async def test_classify_returns_confuso_when_openai_not_configured(monkeypatch) 
     # Limpiar
     mod._singleton = None
     get_settings.cache_clear()
+
+
+# ============================================================
+# es_respuesta_corta_al_turno_previo (Bloque 5.7 ATAQUE 2)
+# ============================================================
+
+
+def test_respuesta_corta_sin_turno_previo_es_false() -> None:
+    """Guard A: sin turno previo del assistant, NO aplica."""
+    assert es_respuesta_corta_al_turno_previo("sí", hay_turno_previo_assistant=False) is False
+    assert es_respuesta_corta_al_turno_previo("5to", hay_turno_previo_assistant=False) is False
+
+
+def test_respuesta_corta_si_simple() -> None:
+    assert es_respuesta_corta_al_turno_previo("Sí", hay_turno_previo_assistant=True) is True
+
+
+def test_respuesta_corta_si_por_favor() -> None:
+    assert (
+        es_respuesta_corta_al_turno_previo("Si por favor", hay_turno_previo_assistant=True) is True
+    )
+
+
+def test_respuesta_corta_ok() -> None:
+    assert es_respuesta_corta_al_turno_previo("ok", hay_turno_previo_assistant=True) is True
+
+
+def test_respuesta_corta_listo() -> None:
+    assert es_respuesta_corta_al_turno_previo("Listo", hay_turno_previo_assistant=True) is True
+
+
+def test_respuesta_corta_claro() -> None:
+    assert es_respuesta_corta_al_turno_previo("Claro", hay_turno_previo_assistant=True) is True
+
+
+def test_respuesta_corta_5to() -> None:
+    assert es_respuesta_corta_al_turno_previo("5to", hay_turno_previo_assistant=True) is True
+
+
+def test_respuesta_corta_4to_primaria() -> None:
+    assert (
+        es_respuesta_corta_al_turno_previo("4to primaria", hay_turno_previo_assistant=True) is True
+    )
+
+
+def test_respuesta_corta_que_mas() -> None:
+    assert es_respuesta_corta_al_turno_previo("que más?", hay_turno_previo_assistant=True) is True
+
+
+def test_respuesta_corta_cuentame() -> None:
+    assert es_respuesta_corta_al_turno_previo("cuéntame", hay_turno_previo_assistant=True) is True
+
+
+def test_respuesta_corta_kinder() -> None:
+    assert es_respuesta_corta_al_turno_previo("kinder", hay_turno_previo_assistant=True) is True
+
+
+def test_respuesta_corta_primaria() -> None:
+    assert es_respuesta_corta_al_turno_previo("primaria", hay_turno_previo_assistant=True) is True
+
+
+def test_respuesta_corta_edad() -> None:
+    assert es_respuesta_corta_al_turno_previo("9 años", hay_turno_previo_assistant=True) is True
+
+
+def test_respuesta_corta_aja() -> None:
+    assert es_respuesta_corta_al_turno_previo("ajá", hay_turno_previo_assistant=True) is True
+
+
+def test_respuesta_corta_negative_pregunta_larga() -> None:
+    """Pregunta sustancial NO es respuesta corta."""
+    assert (
+        es_respuesta_corta_al_turno_previo(
+            "¿Cómo manejan el bullying?", hay_turno_previo_assistant=True
+        )
+        is False
+    )
+
+
+def test_respuesta_corta_negative_mensaje_extenso() -> None:
+    assert (
+        es_respuesta_corta_al_turno_previo(
+            "Estoy buscando algo distinto a lo tradicional", hay_turno_previo_assistant=True
+        )
+        is False
+    )
+
+
+def test_respuesta_corta_negative_palabra_random_corta() -> None:
+    """'cuanto' no es respuesta corta confirmatoria — pregunta operativa."""
+    assert es_respuesta_corta_al_turno_previo("cuanto", hay_turno_previo_assistant=True) is False
+
+
+def test_respuesta_corta_negative_palabra_aislada_no_categorizada() -> None:
+    assert es_respuesta_corta_al_turno_previo("xyz", hay_turno_previo_assistant=True) is False
+
+
+def test_respuesta_corta_negative_demasiado_largo() -> None:
+    """>15 chars descarta aunque sea confirmatorio."""
+    assert (
+        es_respuesta_corta_al_turno_previo("Sí claro por supuesto", hay_turno_previo_assistant=True)
+        is False
+    )
+
+
+def test_respuesta_corta_vacio() -> None:
+    assert es_respuesta_corta_al_turno_previo("", hay_turno_previo_assistant=True) is False
+    assert es_respuesta_corta_al_turno_previo("   ", hay_turno_previo_assistant=True) is False

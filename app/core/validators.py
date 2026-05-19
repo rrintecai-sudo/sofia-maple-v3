@@ -536,6 +536,57 @@ def validar_no_inventa_datos(
     return ValidationResult(validator="no_inventa_datos", passed=True, severity="warning")
 
 
+def validar_no_recita_info_no_pedida(respuesta: str, intent: Intent | None) -> ValidationResult:
+    """**Severity=warning** — Bloque 5.7 ATAQUE 2.
+
+    Cuando el intent fue `RESPUESTA_CORTA_AL_TURNO_PREVIO`, la respuesta de
+    Sofía NO debería ser una recitación larga de info no pedida. Falla
+    (warning) si:
+      - Respuesta > 80 palabras, O
+      - Contiene headers (#) o numeración (1. 2. 3.) — señal de recital.
+
+    Si el intent es otro, pasa sin chequear.
+    """
+    if intent != Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO:
+        return ValidationResult(
+            validator="no_recita_info_no_pedida", passed=True, severity="warning"
+        )
+
+    n_palabras = len(respuesta.split())
+    headers = _MARKDOWN_HEADER_RE.findall(respuesta)
+    numbered = _MARKDOWN_NUMBERED_RE.findall(respuesta)
+
+    if n_palabras > 80:
+        return ValidationResult(
+            validator="no_recita_info_no_pedida",
+            passed=False,
+            reason=f"Respuesta de {n_palabras} palabras tras mensaje corto del papá",
+            suggested_fix=(
+                "El papá dio una respuesta corta. NO recites información no pedida. "
+                "Responde con máximo 60 palabras y avanza el journey 1 paso."
+            ),
+            severity="warning",
+        )
+    if headers:
+        return ValidationResult(
+            validator="no_recita_info_no_pedida",
+            passed=False,
+            reason="Headers en respuesta a mensaje corto",
+            suggested_fix="Quita headers — el papá pidió conversación, no folleto.",
+            severity="warning",
+        )
+    if len(numbered) >= 2:
+        return ValidationResult(
+            validator="no_recita_info_no_pedida",
+            passed=False,
+            reason=f"Lista numerada de {len(numbered)} ítems tras mensaje corto",
+            suggested_fix="Quita la lista numerada — responde en prosa breve.",
+            severity="warning",
+        )
+
+    return ValidationResult(validator="no_recita_info_no_pedida", passed=True, severity="warning")
+
+
 def validar_no_bullets_en_descubrimiento(
     respuesta: str, fase_journey: FaseJourney
 ) -> ValidationResult:
@@ -656,10 +707,12 @@ def run_all_validators(
     report.results.append(validar_no_pregunta_repetida(respuesta, estado))
     report.results.append(validar_no_evasion(respuesta, intent))
     report.results.append(validar_no_markdown_excesivo(respuesta))
-    # Warnings heurísticos del 5.7 ATAQUE 1 — no bloquean
+    # Warnings heurísticos del 5.7 — no bloquean
     report.results.append(validar_no_inventa_datos(respuesta, estado, mensajes_papa))
     if fase_journey is not None:
         report.results.append(validar_no_bullets_en_descubrimiento(respuesta, fase_journey))
+    # ATAQUE 2: validator de soporte para RESPUESTA_CORTA_AL_TURNO_PREVIO
+    report.results.append(validar_no_recita_info_no_pedida(respuesta, intent))
     return report
 
 

@@ -17,6 +17,7 @@ from app.core.validators import (
     validar_no_inventa_datos,
     validar_no_markdown_excesivo,
     validar_no_pregunta_repetida,
+    validar_no_recita_info_no_pedida,
     validar_no_repeticion,
 )
 
@@ -265,19 +266,19 @@ def test_evasion_pasa_horario_con_hora() -> None:
 # ============================================================
 
 
-def test_run_all_returns_6_results_sin_fase() -> None:
-    """Sin fase_journey, run_all_validators corre 6 validators (5 error + 1 warning)."""
+def test_run_all_returns_7_results_sin_fase() -> None:
+    """Sin fase_journey, run_all_validators corre 7 validators (5 error + 2 warning)."""
     estado = EstadoCapturado()
     report = run_all_validators(
         respuesta="Hola, ¿cómo te puedo ayudar?",
         estado=estado,
         intent=Intent.SALUDO_INICIAL,
     )
-    assert len(report.results) == 6
+    assert len(report.results) == 7
     assert report.all_passed is True
 
 
-def test_run_all_returns_7_results_con_fase() -> None:
+def test_run_all_returns_8_results_con_fase() -> None:
     """Con fase_journey, agrega el validator de bullets-descubrimiento."""
     estado = EstadoCapturado()
     report = run_all_validators(
@@ -286,7 +287,7 @@ def test_run_all_returns_7_results_con_fase() -> None:
         intent=Intent.SALUDO_INICIAL,
         fase_journey=FaseJourney.DESCUBRIMIENTO,
     )
-    assert len(report.results) == 7
+    assert len(report.results) == 8
     assert report.all_passed is True
 
 
@@ -616,3 +617,49 @@ def test_feedback_para_regenerar_ignora_warnings() -> None:
         mensajes_papa=["url"],
     )
     assert report.feedback_para_regenerar() is None
+
+
+# ============================================================
+# validar_no_recita_info_no_pedida (Bloque 5.7 ATAQUE 2 — severity=warning)
+# ============================================================
+
+
+def test_recita_pasa_si_intent_no_aplica() -> None:
+    r = validar_no_recita_info_no_pedida(
+        "Recital largo " * 30,
+        intent=Intent.PREGUNTA_COSTOS,
+    )
+    assert r.passed is True
+
+
+def test_recita_pasa_respuesta_breve() -> None:
+    r = validar_no_recita_info_no_pedida(
+        "Perfecto, entonces hablamos de Kinder. ¿Qué te interesa saber primero?",
+        intent=Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO,
+    )
+    assert r.passed is True
+
+
+def test_recita_falla_respuesta_larga() -> None:
+    """Tras 'Sí' del papá, Sofía recita >80 palabras → warning."""
+    larga = "palabra " * 100  # 100 palabras
+    r = validar_no_recita_info_no_pedida(larga, intent=Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO)
+    assert r.passed is False
+    assert r.severity == "warning"
+
+
+def test_recita_falla_con_headers() -> None:
+    r = validar_no_recita_info_no_pedida(
+        "# Costos\nLa colegiatura es $6,100",
+        intent=Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO,
+    )
+    assert r.passed is False
+    assert "header" in (r.reason or "").lower()
+
+
+def test_recita_falla_con_numerada() -> None:
+    r = validar_no_recita_info_no_pedida(
+        "Te recomiendo:\n1. Agendar\n2. Visitar",
+        intent=Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO,
+    )
+    assert r.passed is False

@@ -27,7 +27,12 @@ from typing import Any
 
 from app.adapters.anthropic_client import get_anthropic
 from app.config import get_settings
-from app.core.intent_classifier import Intent, classify_intent
+from app.core.intent_classifier import (
+    Intent,
+    IntentResult,
+    classify_intent,
+    es_respuesta_corta_al_turno_previo,
+)
 from app.core.learning_mode import guardar_feedback
 from app.core.prompt_builder import build_system_blocks
 from app.core.repository import get_repository
@@ -222,9 +227,53 @@ async def procesar_turno(
         {"role": _normalize_role(m["role"]), "content": m["content"]} for m in historial
     ]
 
-    # 7ter. Si llamamos tools, inyectamos su resultado al mensaje del usuario
-    # como hint para que el LLM lo use en la respuesta.
+    # 7bis. Bloque 5.7 ATAQUE 2 — Detectar "respuesta corta al turno previo".
+    # Si el papá responde con un mensaje muy corto (≤15 chars) que es
+    # confirmación/continuación del turno previo de Sofía, inyectamos contexto
+    # explícito para que NO recite info no pedida.
+    ultimo_assistant_msg: str | None = None
+    for m in reversed(historial):
+        role = (m.get("role") or "").lower()
+        if role in ("assistant", "ai"):
+            ultimo_assistant_msg = m.get("content")
+            break
+
+    hay_turno_previo_assistant = ultimo_assistant_msg is not None
+    es_resp_corta = es_respuesta_corta_al_turno_previo(
+        mensaje, hay_turno_previo_assistant=hay_turno_previo_assistant
+    )
+    # Override del intent del LLM si la heurística determinística matchea:
+    # el LLM puede confundirse y marcar otro intent, pero la regla es clara.
+    if es_resp_corta and intent_result.intent != Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO:
+        log.info(
+            "intent override → RESPUESTA_CORTA_AL_TURNO_PREVIO",
+            extra={
+                "session_id": session_id,
+                "intent_llm": intent_result.intent.value,
+                "mensaje": mensaje[:30],
+            },
+        )
+        intent_result = IntentResult(
+            intent=Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO,
+            confidence=1.0,
+            razonamiento_breve="override heurístico",
+        )
+
+    # 7ter. Si llamamos tools o detectamos respuesta-corta, inyectamos hints.
     mensaje_para_llm = mensaje
+    if intent_result.intent == Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO and ultimo_assistant_msg:
+        ultimo_trunc = ultimo_assistant_msg.strip()[:300]
+        mensaje_para_llm += (
+            "\n\n[CONTEXTO CRÍTICO: el papá acaba de responder con un mensaje "
+            f"muy corto ({mensaje!r}). Es una continuación al turno PREVIO tuyo "
+            f'donde dijiste: "{ultimo_trunc}".\n'
+            "Tu respuesta DEBE: "
+            "1) tratar el mensaje del papá como respuesta a TU pregunta o afirmación anterior. "
+            "2) NO recitar información nueva no pedida. "
+            "3) Si la respuesta corta cierra un loop conversacional, avanza el journey 1 paso pequeño. "
+            "4) Si la respuesta es ambigua, pregunta UNA cosa breve.]"
+        )
+
     if tools_data:
         tool_hint_lines = ["[Información traída de tools al momento:]"]
         for tool_name, data in tools_data.items():
