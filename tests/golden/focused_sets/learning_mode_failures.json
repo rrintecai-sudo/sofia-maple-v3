@@ -1,0 +1,86 @@
+{
+  "name": "learning_mode_failures",
+  "description": "Turnos donde Sofía v2 no procesa correctamente instrucciones del equipo durante Modo Aprendizaje (chat de entrenamiento del sid 34662236). En lugar de generar un registro estructurado de lo aprendido, responde sobre temas tangenciales (markdown, formato), ignora la instrucción real, o pierde el propósito formativo.",
+  "selection_criteria": "Razonamiento del juez (>=1 de 3 runs) menciona Modo Aprendizaje, registro estructurado, propósito formativo, o tema diferente del intencionado. Categoría peor o crítica. Verificado manualmente.",
+  "source_runs": [
+    "full-20260518-222305.json",
+    "full-20260518-225554.json",
+    "full-20260518-232113.json"
+  ],
+  "total_items": 6,
+  "curation_notes": "Curación manual sobre razonamientos del juez de los 3 golden runs de Bloque 5.5. Cada turno está en EXACTAMENTE UN set (sets disjuntos) según el bug dominante. Validado por Oscar el 2026-05-19.",
+  "items": [
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 2,
+      "user_msg": "Debes presentarte como Sofía, del Equipo de Admisiones de  Maple Collège",
+      "expected_pattern": "Cuando el papá envía una instrucción al equipo en Modo Aprendizaje, Sofía debe: 1) identificar el tema exacto del aprendizaje (no inventar otro), 2) generar un registro estructurado con campos consistentes (qué se aprendió, en qué situación aplicarlo), 3) confirmar que entendió la regla y reflejarla al final.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 2,
+      "judge_reasoning_excerpts": [
+        "La NUEVA responde a un tema diferente (formato/markdown) en lugar del tema real del mensaje (presentación/identidad), lo que indica que no procesó correctamente la instrucción del papá.",
+        "La NUEVA responde a una instrucción sobre presentarse como Sofía registrando un aprendizaje sobre formato/markdown, ignorando completamente el tema real del mensaje del papá (identidad/presentación), lo que la hace irrelevante y confusa."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 4,
+      "user_msg": "No",
+      "expected_pattern": "Cuando el papá envía una instrucción al equipo en Modo Aprendizaje, Sofía debe: 1) identificar el tema exacto del aprendizaje (no inventar otro), 2) generar un registro estructurado con campos consistentes (qué se aprendió, en qué situación aplicarlo), 3) confirmar que entendió la regla y reflejarla al final.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA ignora el propósito del Modo Aprendizaje: no genera un registro estructurado ni reflexiona sobre qué aprender, perdiendo todo el valor formativo que sí tiene la ORIGINAL.",
+        "La NUEVA registra un aprendizaje diferente (exceso de negritas) que no corresponde al feedback implícito del mensaje 'No', mientras que la ORIGINAL identifica correctamente que el problema era responder con una sola palabra seca, lo que hace la NUEVA irrelevante e incorrecta respecto al contexto."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 18,
+      "user_msg": "Cuando te digan el nivel educativo que desean no respondas nunca los costos a menos que te lo soliciten",
+      "expected_pattern": "Cuando el papá envía una instrucción al equipo en Modo Aprendizaje, Sofía debe: 1) identificar el tema exacto del aprendizaje (no inventar otro), 2) generar un registro estructurado con campos consistentes (qué se aprendió, en qué situación aplicarlo), 3) confirmar que entendió la regla y reflejarla al final.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 2,
+      "judge_reasoning_excerpts": [
+        "La NUEVA ignora completamente la instrucción del papá sobre no revelar costos al mencionar el nivel educativo, y en cambio registra un aprendizaje sobre negritas que no tiene ninguna relación con el mensaje recibido.",
+        "La NUEVA ignora completamente la instrucción del papá sobre no revelar costos al mencionar el nivel educativo, y en cambio registra una lección sobre uso de negritas que no fue solicitada ni es relevante al mensaje recibido."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 22,
+      "user_msg": "Luego de que saludes y te presentes \\n\\nSiempre comienza con esta primera pregunta \\n¿qué grado estás buscando para tu hijo? Ó ¿Para qué nivel buscas información?",
+      "expected_pattern": "Cuando el papá envía una instrucción al equipo en Modo Aprendizaje, Sofía debe: 1) identificar el tema exacto del aprendizaje (no inventar otro), 2) generar un registro estructurado con campos consistentes (qué se aprendió, en qué situación aplicarlo), 3) confirmar que entendió la regla y reflejarla al final.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 3,
+      "judge_reasoning_excerpts": [
+        "La NUEVA responde a un escenario diferente (cuando el nivel ya fue mencionado), ignorando la instrucción original que pide aprender a hacer la primera pregunta de grado/nivel tras el saludo, lo que hace el registro de aprendizaje irrelevante para el contexto dado.",
+        "La NUEVA responde a una corrección sobre markdown excesivo cuando el mensaje del papá trata sobre la primera pregunta del flujo de admisiones, ignorando completamente la instrucción de aprender a preguntar por el grado o nivel buscado."
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 26,
+      "user_msg": "Imagen enviada con texto en un chat de WhatsApp que muestra una conversación entre una persona que se presenta como Sofía, del equipo de admisiones de Maple College, y un padre que busca información s",
+      "expected_pattern": "Cuando el papá envía una instrucción al equipo en Modo Aprendizaje, Sofía debe: 1) identificar el tema exacto del aprendizaje (no inventar otro), 2) generar un registro estructurado con campos consistentes (qué se aprendió, en qué situación aplicarlo), 3) confirmar que entendió la regla y reflejarla al final.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 2,
+      "judge_reasoning_excerpts": [
+        "La respuesta NUEVA ignora completamente el contenido de la imagen descrita (que incluye información sobre colegiaturas y costos) y responde como si fuera un inicio de conversación vacío, perdiendo el contexto relevante y resultando en una respuesta desconectada e inútil para el papá.",
+        "La respuesta NUEVA ignora completamente el contexto del mensaje (una imagen de chat donde ya se compartieron costos) y lanza una pregunta de inicio de conversación que resulta inapropiada e incongruente con el estado actual del diálogo, perdiendo el hilo y el valor que sí intenta preservar la ORIGIN"
+      ]
+    },
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "turn_index": 36,
+      "user_msg": "Cuando la persona no haga más preguntas y tú le digas \\n\\nAquí estoy cuando quieras retomar.\\n\\nRecuérdale que existe una cita de informes en la cual pueden conocer las instalaciones y aclarar dudas c",
+      "expected_pattern": "Cuando el papá envía una instrucción al equipo en Modo Aprendizaje, Sofía debe: 1) identificar el tema exacto del aprendizaje (no inventar otro), 2) generar un registro estructurado con campos consistentes (qué se aprendió, en qué situación aplicarlo), 3) confirmar que entendió la regla y reflejarla al final.",
+      "baseline_failed": true,
+      "baseline_bad_runs": 2,
+      "judge_reasoning_excerpts": [
+        "La NUEVA responde a un tema diferente (exceso de markdown) en lugar de registrar la instrucción real del papá: recordar la cita de informes al cerrar con 'Aquí estoy cuando quieras retomar', perdiendo el aprendizaje clave que ORIGINAL sí captura correctamente.",
+        "La NUEVA respuesta registra un aprendizaje sobre uso de markdown que no tiene relación con la instrucción del papá, ignorando completamente la indicación de recordar la cita de informes al cerrar con 'Aquí estoy cuando quieras retomar'."
+      ]
+    }
+  ]
+}
