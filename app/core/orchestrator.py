@@ -86,6 +86,7 @@ class TurnResult:
     skip_persistencia: bool = False  # para mensajes de sistema (modo aprendizaje)
     metadata: dict[str, Any] = field(default_factory=dict)
     validators_failed: list[str] = field(default_factory=list)
+    validators_warnings: list[str] = field(default_factory=list)
     regenerations: int = 0
 
 
@@ -277,13 +278,32 @@ async def procesar_turno(
             final_report = None
             break
 
+        # Bloque 5.7 ATAQUE 1: pasar mensajes_papa + fase_journey para los
+        # validators heurísticos (no_inventa_datos, no_bullets_descubrimiento)
+        mensajes_papa_lista = [
+            m["content"] for m in historial if (m.get("role") or "").lower() in ("user", "human")
+        ]
         final_report = run_all_validators(
             respuesta=response_text,
             estado=estado.estado_capturado,
             intent=intent_result.intent,
             tools_called=[],  # Bloque 4 introducirá tools reales
             frases_usadas=estado.frases_usadas,
+            mensajes_papa=[*mensajes_papa_lista, mensaje],
+            fase_journey=estado.fase_journey,
         )
+
+        # Loggear warnings (NO disparan regeneración; severity="warning")
+        warnings_map = final_report.warnings_map
+        if warnings_map:
+            log.warning(
+                "validator_warnings",
+                extra={
+                    "session_id": session_id,
+                    "intento": intento,
+                    "warnings": warnings_map,
+                },
+            )
 
         if final_report.all_passed:
             break
@@ -388,6 +408,7 @@ async def procesar_turno(
         },
     )
 
+    validators_warnings = list(final_report.warnings_map.keys()) if final_report else []
     return TurnResult(
         response=response_text,
         session_id=session_id,
@@ -401,6 +422,7 @@ async def procesar_turno(
         model_used=settings.anthropic_model_principal,
         turn_number=turn_number,
         validators_failed=list(validators_failed.keys()) if validators_failed else [],
+        validators_warnings=validators_warnings,
         regenerations=regenerations,
     )
 

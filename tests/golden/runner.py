@@ -73,6 +73,7 @@ class TurnComparison:
     new_cost_usd: Decimal = Decimal("0")
     new_latency_ms: int = 0
     new_validators_failed: list[str] = field(default_factory=list)
+    new_validators_warnings: list[str] = field(default_factory=list)
     # Multi-run metadata
     run_categories: list[Category] = field(default_factory=list)
     run_reasonings: list[str] = field(default_factory=list)
@@ -80,6 +81,8 @@ class TurnComparison:
     # Determinístico: ¿pasaron TODOS los validators en al menos 1 run?
     all_validators_pass: bool = False
     all_validators_pass_count: int = 0  # cuántos runs pasaron TODOS
+    # Bloque 5.7 ATAQUE 1: warnings (severity=warning, no bloquean regen)
+    any_run_had_warnings: bool = False
 
 
 @dataclass
@@ -116,6 +119,10 @@ class RunSummary:
     judge_model: str
     # Métricas determinísticas
     pct_all_validators_pass: float = 0.0
+    # Bloque 5.7 ATAQUE 1: % turnos donde algún run tuvo al menos 1 warning
+    pct_turns_with_warnings: float = 0.0
+    # Histograma de warnings por validator (cuántos turnos lo dispararon)
+    warnings_by_validator: dict[str, int] = field(default_factory=dict)
     # Varianza inter-run (solo si runs>1)
     judge_stddev_pct: float | None = None
 
@@ -334,6 +341,7 @@ async def run_conversation(
                 new_cost = turn_res.cost_usd
                 new_latency = turn_res.latency_ms
                 new_validators_failed = list(turn_res.validators_failed)
+                new_validators_warnings = list(turn_res.validators_warnings)
             except Exception as exc:
                 log.error(f"orchestrator failed at turn {idx} run {run_no}: {exc}")
                 continue
@@ -360,6 +368,7 @@ async def run_conversation(
                     "new_cost": new_cost,
                     "new_latency": new_latency,
                     "validators_failed": new_validators_failed,
+                    "validators_warnings": new_validators_warnings,
                 }
             )
 
@@ -386,6 +395,13 @@ async def run_conversation(
             for v in r["validators_failed"]:
                 if v not in all_failed:
                     all_failed.append(v)
+        # Bloque 5.7 ATAQUE 1: concatenar warnings únicos + flag de "algún run tuvo warning"
+        all_warnings: list[str] = []
+        for r in runs:
+            for v in r.get("validators_warnings") or []:
+                if v not in all_warnings:
+                    all_warnings.append(v)
+        any_warnings = bool(all_warnings)
 
         comp = TurnComparison(
             turn_index=idx,
@@ -398,11 +414,13 @@ async def run_conversation(
             new_cost_usd=total_new_cost,
             new_latency_ms=avg_latency,
             new_validators_failed=all_failed,
+            new_validators_warnings=all_warnings,
             run_categories=[r["category"] for r in runs],  # type: ignore[misc]
             run_reasonings=[r["razon"][:200] for r in runs],
             category_distribution=dict(Counter(cats)),
             all_validators_pass=all_validators_pass,
             all_validators_pass_count=all_pass_count,
+            any_run_had_warnings=any_warnings,
         )
         result.comparisons.append(comp)
         emoji = {"equivalente": "≈", "mejor": "↑", "peor": "↓", "regresion_critica": "✗"}[mode_cat]
@@ -411,9 +429,10 @@ async def run_conversation(
             if runs_per_turn == 1
             else " " + "/".join(f"{cats.count(c)}{c[:1]}" for c in set(cats))
         )
+        warn_str = f" ⚠{','.join(w[:8] for w in all_warnings)}" if all_warnings else ""
         print(
             f"  {emoji} t{idx:2d} {mode_cat:<20s} "
-            f"${total_judge_cost + total_new_cost:.4f}{dist_str}  {razon[:60]}"
+            f"${total_judge_cost + total_new_cost:.4f}{dist_str}{warn_str}  {razon[:60]}"
         )
 
     return result
@@ -455,6 +474,25 @@ def _all_validators_pass_pct(results: list[ConversationResult]) -> float:
             if c.all_validators_pass:
                 passed += 1
     return (100 * passed / total) if total else 0.0
+
+
+def _warnings_stats(results: list[ConversationResult]) -> tuple[float, dict[str, int]]:
+    """Bloque 5.7 ATAQUE 1: stats de warnings (severity='warning').
+
+    Devuelve (% turnos con warning, histograma {validator: n_turnos}).
+    """
+    total = 0
+    with_warning = 0
+    histogram: dict[str, int] = {}
+    for r in results:
+        for c in r.comparisons:
+            total += 1
+            if c.any_run_had_warnings:
+                with_warning += 1
+            for v in c.new_validators_warnings:
+                histogram[v] = histogram.get(v, 0) + 1
+    pct = (100 * with_warning / total) if total else 0.0
+    return pct, histogram
 
 
 # ============================================================
@@ -549,6 +587,7 @@ async def main(args: argparse.Namespace) -> int:
     by_cat: dict[str, int] = dict(Counter(c.category for c in all_cmps))
     total_cost = sum((c.judge_cost_usd + c.new_cost_usd for c in all_cmps), Decimal("0"))
 
+    warn_pct, warn_hist = _warnings_stats(results)
     summary = RunSummary(
         started_at=datetime.fromtimestamp(started, tz=UTC).isoformat(),
         finished_at=datetime.fromtimestamp(finished, tz=UTC).isoformat(),
@@ -562,6 +601,8 @@ async def main(args: argparse.Namespace) -> int:
         results=results,
         judge_model=judge_model,
         pct_all_validators_pass=_all_validators_pass_pct(results),
+        pct_turns_with_warnings=warn_pct,
+        warnings_by_validator=warn_hist,
         judge_stddev_pct=_judge_stddev_pct(results) if args.runs > 1 else None,
     )
 
@@ -584,6 +625,12 @@ async def main(args: argparse.Namespace) -> int:
     print(f"\n% equivalente o mejor: {summary.pct_equivalente_o_mejor:.1f}%  (objetivo: ≥85%)")
     print(f"% regresión crítica:   {summary.pct_regresion_critica:.1f}%  (objetivo: 0%)")
     print(f"% all-validators-pass:  {summary.pct_all_validators_pass:.1f}%  (determinístico)")
+    print(
+        f"% turnos con warnings:  {summary.pct_turns_with_warnings:.1f}%  (Bloque 5.7 — solo señal, no bloquea)"
+    )
+    if summary.warnings_by_validator:
+        for v, n in sorted(summary.warnings_by_validator.items(), key=lambda x: -x[1]):
+            print(f"    ⚠ {v}: {n} turnos")
     if summary.judge_stddev_pct is not None:
         print(f"Desv. est. juez:        ±{summary.judge_stddev_pct:.1f}pp (entre {args.runs} runs)")
     print(f"Costo total: ${total_cost:.4f}")

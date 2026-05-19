@@ -1,15 +1,20 @@
-"""Tests de los 5 validators determinísticos."""
+"""Tests de validators determinísticos.
+
+5 con severity=error (bloquean regen) + 2 con severity=warning (solo señalan,
+Bloque 5.7 ATAQUE 1)."""
 
 from __future__ import annotations
 
 from app.core.intent_classifier import Intent
-from app.core.state import EstadoCapturado, HijoInfo, NivelEducativo
+from app.core.state import EstadoCapturado, FaseJourney, HijoInfo, NivelEducativo
 from app.core.validators import (
     FRASES_MUNICION,
     extraer_frases_municion_usadas,
     run_all_validators,
+    validar_no_bullets_en_descubrimiento,
     validar_no_envio_fantasma,
     validar_no_evasion,
+    validar_no_inventa_datos,
     validar_no_markdown_excesivo,
     validar_no_pregunta_repetida,
     validar_no_repeticion,
@@ -260,14 +265,28 @@ def test_evasion_pasa_horario_con_hora() -> None:
 # ============================================================
 
 
-def test_run_all_returns_5_results() -> None:
+def test_run_all_returns_6_results_sin_fase() -> None:
+    """Sin fase_journey, run_all_validators corre 6 validators (5 error + 1 warning)."""
     estado = EstadoCapturado()
     report = run_all_validators(
         respuesta="Hola, ¿cómo te puedo ayudar?",
         estado=estado,
         intent=Intent.SALUDO_INICIAL,
     )
-    assert len(report.results) == 5
+    assert len(report.results) == 6
+    assert report.all_passed is True
+
+
+def test_run_all_returns_7_results_con_fase() -> None:
+    """Con fase_journey, agrega el validator de bullets-descubrimiento."""
+    estado = EstadoCapturado()
+    report = run_all_validators(
+        respuesta="Hola, ¿cómo te puedo ayudar?",
+        estado=estado,
+        intent=Intent.SALUDO_INICIAL,
+        fase_journey=FaseJourney.DESCUBRIMIENTO,
+    )
+    assert len(report.results) == 7
     assert report.all_passed is True
 
 
@@ -392,6 +411,8 @@ def test_validation_report_feedback_none_si_todo_pasa() -> None:
 
 
 def test_validation_report_maps_for_db() -> None:
+    """passed_map/failed_map solo cuentan severity='error' (los warnings no se
+    persisten en DB — Bloque 5.7 ADR-018)."""
     estado = EstadoCapturado()
     report = run_all_validators(
         respuesta="Ya te envié todo.",
@@ -400,5 +421,198 @@ def test_validation_report_maps_for_db() -> None:
     )
     passed = report.passed_map
     failed = report.failed_map
-    assert isinstance(passed, dict) and len(passed) == 5
+    assert isinstance(passed, dict) and len(passed) == 5  # solo errors
     assert "no_envio_fantasma" in failed
+
+
+# ============================================================
+# validar_no_inventa_datos (Bloque 5.7 ATAQUE 1 — severity=warning)
+# ============================================================
+
+
+def test_inventa_pasa_respuesta_neutra() -> None:
+    estado = EstadoCapturado()
+    r = validar_no_inventa_datos(
+        "¡Hola! Cuéntame, ¿qué nivel buscas?", estado, mensajes_papa=["hola"]
+    )
+    assert r.passed is True
+    assert r.severity == "warning"
+
+
+def test_inventa_falla_vio_link_es_warning() -> None:
+    """Falla pero severity=warning (no bloquea regen)."""
+    r = validar_no_inventa_datos(
+        "Vi el link de Instagram que me compartiste.",
+        EstadoCapturado(),
+        mensajes_papa=["https://instagram.com/abc"],
+    )
+    assert r.passed is False
+    assert r.severity == "warning"
+    assert "contenido externo" in (r.reason or "").lower()
+
+
+def test_inventa_falla_nombre_no_dado() -> None:
+    r = validar_no_inventa_datos(
+        "Hola Mateo, qué gusto.",
+        EstadoCapturado(),
+        mensajes_papa=["hola"],
+    )
+    assert r.passed is False
+    assert r.severity == "warning"
+
+
+def test_inventa_falla_nivel_no_dicho() -> None:
+    r = validar_no_inventa_datos(
+        "Para tu hijo en Maternal es ideal.",
+        EstadoCapturado(),
+        mensajes_papa=["hola"],
+    )
+    assert r.passed is False
+
+
+def test_inventa_pasa_nivel_en_estado() -> None:
+    estado = EstadoCapturado(nivel_buscado_actual=NivelEducativo.MATERNAL)
+    r = validar_no_inventa_datos(
+        "Para tu hijo en Maternal, te platico.",
+        estado,
+        mensajes_papa=["busco maternal"],
+    )
+    assert r.passed is True
+
+
+def test_inventa_falla_edad_no_dicha() -> None:
+    r = validar_no_inventa_datos(
+        "Tu hijo de 5 años está en una etapa hermosa.",
+        EstadoCapturado(),
+        mensajes_papa=["hola"],
+    )
+    assert r.passed is False
+
+
+def test_inventa_pasa_genero_en_saludo_vacio() -> None:
+    """Saludo inicial puro (estado y mensajes_papa vacíos) tolera 'tu hijo'."""
+    r = validar_no_inventa_datos(
+        "¿Qué edad tiene tu hijo?",
+        EstadoCapturado(),
+        mensajes_papa=[],
+    )
+    assert r.passed is True
+
+
+def test_inventa_falla_cita_falsa() -> None:
+    r = validar_no_inventa_datos(
+        "Tu cita es el viernes a las 10am.",
+        EstadoCapturado(cita_agendada=False),
+        mensajes_papa=[],
+    )
+    assert r.passed is False
+    assert "cita" in (r.reason or "").lower()
+
+
+def test_inventa_pasa_cita_propuesta() -> None:
+    r = validar_no_inventa_datos(
+        "¿Te gustaría agendar una visita esta semana?",
+        EstadoCapturado(cita_agendada=False),
+        mensajes_papa=[],
+    )
+    assert r.passed is True
+
+
+# ============================================================
+# validar_no_bullets_en_descubrimiento (Bloque 5.7 ATAQUE 1 — severity=warning)
+# ============================================================
+
+
+def test_bullets_descubrimiento_pasa_otra_fase() -> None:
+    r = validar_no_bullets_en_descubrimiento(
+        "- a\n- b\n- c\n- d\n- e",
+        fase_journey=FaseJourney.INFORMACION,
+    )
+    assert r.passed is True
+    assert r.severity == "warning"
+
+
+def test_bullets_descubrimiento_pasa_con_prosa() -> None:
+    r = validar_no_bullets_en_descubrimiento(
+        "Qué bonito que me cuentes eso. En Maple acompañamos con cuidado.",
+        fase_journey=FaseJourney.DESCUBRIMIENTO,
+    )
+    assert r.passed is True
+
+
+def test_bullets_descubrimiento_pasa_con_2_bullets() -> None:
+    """Threshold calibrado: ≥3 bullets falla; 2 pasa."""
+    r = validar_no_bullets_en_descubrimiento(
+        "Aquí hacemos:\n- vínculo\n- exploración",
+        fase_journey=FaseJourney.DESCUBRIMIENTO,
+    )
+    assert r.passed is True
+
+
+def test_bullets_descubrimiento_falla_con_3_bullets() -> None:
+    r = validar_no_bullets_en_descubrimiento(
+        "Aquí hacemos:\n- vínculo\n- exploración\n- lenguaje",
+        fase_journey=FaseJourney.DESCUBRIMIENTO,
+    )
+    assert r.passed is False
+    assert r.severity == "warning"
+
+
+def test_bullets_descubrimiento_falla_con_3_numerados() -> None:
+    r = validar_no_bullets_en_descubrimiento(
+        "Te recomiendo:\n1. agendar\n2. visitar\n3. preguntar",
+        fase_journey=FaseJourney.DESCUBRIMIENTO,
+    )
+    assert r.passed is False
+
+
+def test_bullets_descubrimiento_falla_con_4_negritas() -> None:
+    r = validar_no_bullets_en_descubrimiento(
+        "**Vínculo**, **exploración**, **lenguaje**, **autonomía**.",
+        fase_journey=FaseJourney.DESCUBRIMIENTO,
+    )
+    assert r.passed is False
+
+
+# ============================================================
+# Severity: warnings NO disparan regeneración
+# ============================================================
+
+
+def test_warnings_no_bloquean_all_passed() -> None:
+    """Si solo hay warnings y ningún error, all_passed=True (no regen)."""
+    estado = EstadoCapturado()
+    # Construir una respuesta que falle no_inventa_datos (warning) pero no errors
+    report = run_all_validators(
+        respuesta="Vi el link que me compartiste.",
+        estado=estado,
+        intent=Intent.SALUDO_INICIAL,
+        mensajes_papa=["https://x.com"],
+        fase_journey=FaseJourney.DESCUBRIMIENTO,
+    )
+    assert report.all_passed is True  # no errors → no regen
+    assert "no_inventa_datos" in report.warnings_map
+
+
+def test_warnings_map_no_incluye_errors() -> None:
+    estado = EstadoCapturado()
+    report = run_all_validators(
+        respuesta="Ya te envié todo.",  # falla no_envio_fantasma (error)
+        estado=estado,
+        tools_called=[],
+        fase_journey=FaseJourney.INFORMACION,
+    )
+    assert "no_envio_fantasma" in report.failed_map
+    assert "no_envio_fantasma" not in report.warnings_map
+
+
+def test_feedback_para_regenerar_ignora_warnings() -> None:
+    """Si solo hay warnings, feedback es None (no regen)."""
+    estado = EstadoCapturado()
+    report = run_all_validators(
+        respuesta="Vi tu link que compartiste.",
+        estado=estado,
+        intent=Intent.SALUDO_INICIAL,
+        mensajes_papa=["url"],
+    )
+    assert report.feedback_para_regenerar() is None

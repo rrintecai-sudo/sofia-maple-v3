@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from app.core.intent_classifier import Intent
-from app.core.state import EstadoCapturado
+from app.core.state import EstadoCapturado, FaseJourney
 
 # ============================================================
 # Frases munición — extraídas literal de vocabulario.md
@@ -97,6 +97,56 @@ _DEJAME_CONFIRMAR_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Bloque 5.7 ATAQUE 1 — patrones para validar_no_inventa_datos (severity=warning).
+# Mismos regex que el 5.6 calibrado: detectan afirmaciones de datos no presentes
+# en estado_capturado ni en mensajes_papa.
+_AFIRMA_VIO_CONTENIDO_RE = re.compile(
+    r"\bvi\s+(?:el|tu|la|los?|las?)\s+(?:link|enlace|imagen|video|contenido|post|publicaci[oó]n|art[ií]culo|p[aá]gina)\b|"
+    r"\b(?:revis[eé]|le[íi]|mir[eé])\s+(?:el|tu|la|los?)\s+(?:link|enlace|contenido|post)\b|"
+    r"\b(?:le[íi]|vi)\s+lo\s+que\s+(?:dice|me\s+enviaste|compart[ií]ste|compart[ií]aste)\b|"
+    r"acabo\s+de\s+ver\s+(?:el|tu)",
+    re.IGNORECASE,
+)
+
+# Afirmar nombre del papá ("Hola Juan, ...", "Mira Juan, ..."). Captura case-sensitive
+# para evitar matchear muletillas ("qué", "claro").
+_AFIRMA_NOMBRE_PAPA_RE = re.compile(
+    r"(?:^|\.\s+|,\s+)(?:[Hh]ola|[Mm]ira|[Ff]íjate|[Oo]ye|[Cc]laro|[Ss][ií])[,]?\s+"
+    r"([A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,15})\b"
+)
+
+_AFIRMA_NIVEL_HIJO_RE = re.compile(
+    r"\btu\s+(?:hijo|hija|peque[ñn]o|peque[ñn]a|peque|ni[ñn]o|ni[ñn]a)\s+"
+    r"(?:de|en|est[aá]\s+en|va\s+a|busca)\s+(maternal|kinder|preescolar|primaria|secundaria|"
+    r"\d+\s*°\s*(?:de\s+)?(?:primaria|secundaria|kinder)|"
+    r"infants|toddlers|cubs|baby|preschool)\b",
+    re.IGNORECASE,
+)
+
+_AFIRMA_EDAD_HIJO_RE = re.compile(
+    r"\btu\s+(?:hijo|hija|peque|ni[ñn]o|ni[ñn]a)\s+de\s+(\d{1,2})\s+(?:a[ñn]os?|meses)\b",
+    re.IGNORECASE,
+)
+
+_AFIRMA_GENERO_HIJO_RE = re.compile(
+    r"\btu\s+(hijo|hija)\b(?!\s*[oó]\s*(?:hija|hijo))",
+    re.IGNORECASE,
+)
+
+_AFIRMA_CAMPUS_RE = re.compile(
+    r"\b(?:en\s+|para\s+|al\s+|del?\s+|tu\s+(?:cita|visita)\s+(?:es\s+)?en\s+)"
+    r"(campus\s*[12])\b",
+    re.IGNORECASE,
+)
+
+_AFIRMA_CITA_AGENDADA_RE = re.compile(
+    r"\b(?:ya\s+agendaste|tu\s+cita\s+(?:es|ser[aá]|qued[oó]|est[aá]\s+confirmada)|"
+    r"tu\s+visita\s+(?:es|ser[aá]|qued[oó])|"
+    r"te\s+espero\s+el\s+\w+|nos\s+vemos\s+el\s+\w+)",
+    re.IGNORECASE,
+)
+
+
 # ============================================================
 # Resultado de validación
 # ============================================================
@@ -129,17 +179,33 @@ class ValidationReport:
 
     @property
     def passed_map(self) -> dict[str, bool]:
-        """Mapa para persistir en `sofia_turn_logs.validators_passed`."""
-        return {r.validator: r.passed for r in self.results}
+        """Mapa para persistir en `sofia_turn_logs.validators_passed`. Solo errors
+        (los warnings no se persisten en DB, ver ADR-018)."""
+        return {r.validator: r.passed for r in self.results if r.severity == "error"}
 
     @property
     def failed_map(self) -> dict[str, str]:
-        """Mapa para `sofia_turn_logs.validators_failed`."""
-        return {r.validator: r.reason or "failed" for r in self.results if not r.passed}
+        """Mapa para `sofia_turn_logs.validators_failed`. Solo errors."""
+        return {
+            r.validator: r.reason or "failed"
+            for r in self.results
+            if not r.passed and r.severity == "error"
+        }
+
+    @property
+    def warnings_map(self) -> dict[str, str]:
+        """Mapa de warnings (Bloque 5.7 ATAQUE 1). NO se persiste en DB —
+        solo se loggea + se expone en TurnResult.validators_warnings."""
+        return {
+            r.validator: r.reason or "warning"
+            for r in self.results
+            if not r.passed and r.severity == "warning"
+        }
 
     def feedback_para_regenerar(self) -> str | None:
-        """Construye el texto que se inyecta al prompt para que el modelo regenere."""
-        fails = self.failed
+        """Construye el texto que se inyecta al prompt para que el modelo regenere.
+        SOLO considera errors — los warnings no disparan regeneración."""
+        fails = [r for r in self.failed if r.severity == "error"]
         if not fails:
             return None
         lines = ["Tu respuesta anterior tuvo estos problemas que DEBES corregir:"]
@@ -344,6 +410,167 @@ def validar_no_markdown_excesivo(respuesta: str) -> ValidationResult:
     return ValidationResult(validator="no_markdown_excesivo", passed=True)
 
 
+def validar_no_inventa_datos(
+    respuesta: str,
+    estado: EstadoCapturado,
+    mensajes_papa: list[str] | None = None,
+) -> ValidationResult:
+    """**Severity=warning** — registra señal sin disparar regeneración.
+
+    Falla si la respuesta afirma datos que NO están en estado_capturado ni en
+    los mensajes previos del papá. Ataca causa raíz #1 (5.6 — re-introducido
+    en 5.7 ATAQUE 1 sin estricticidad).
+
+    7 sub-chequeos: vio contenido externo / nombre papá / nivel del hijo /
+    edad / género / campus / cita agendada. Conservador en saludo inicial
+    (estado y mensajes_papa completamente vacíos → no falla por género).
+    """
+    mensajes_papa = mensajes_papa or []
+    texto_papa = " ".join(mensajes_papa).lower()
+
+    def _fail(reason: str, suggested_fix: str) -> ValidationResult:
+        return ValidationResult(
+            validator="no_inventa_datos",
+            passed=False,
+            reason=reason,
+            suggested_fix=suggested_fix,
+            severity="warning",
+        )
+
+    # 1. Vio contenido externo (siempre falla — Sofía no tiene web)
+    m = _AFIRMA_VIO_CONTENIDO_RE.search(respuesta)
+    if m:
+        return _fail(
+            f"Afirma haber visto contenido externo: '{m.group(0)}'",
+            "Sofía no tiene acceso web. Si el papá compartió un enlace, agradécelo y pregunta qué le llamó la atención sin pretender haberlo visto.",
+        )
+
+    # 2. Nombre del papá no presente
+    nombre_estado = (estado.nombre_papa or "").strip().lower()
+    no_papa = {"sof", "sofía", "sofia"}
+    for m in _AFIRMA_NOMBRE_PAPA_RE.finditer(respuesta):
+        candidato = m.group(1).lower()
+        if candidato in no_papa:
+            continue
+        if nombre_estado and candidato in nombre_estado:
+            continue
+        if candidato in texto_papa:
+            continue
+        return _fail(
+            f"Usa nombre '{m.group(1)}' que no está en estado ni en mensajes del papá",
+            f"Borra el nombre '{m.group(1)}'. Si quieres personalizar, saluda sin nombre.",
+        )
+
+    # 3. Nivel del hijo afirmado sin respaldo
+    niveles_conocidos: set[str] = set()
+    if estado.nivel_buscado_actual:
+        niveles_conocidos.add(estado.nivel_buscado_actual.value)
+    for h in estado.hijos:
+        if h.nivel:
+            niveles_conocidos.add(h.nivel.value)
+        if h.grado:
+            niveles_conocidos.add(h.grado.lower())
+    for m in _AFIRMA_NIVEL_HIJO_RE.finditer(respuesta):
+        nivel_afirmado = m.group(1).lower().replace(" ", "")
+        if any(
+            n.replace(" ", "") in nivel_afirmado or nivel_afirmado in n for n in niveles_conocidos
+        ):
+            continue
+        if any(token in texto_papa for token in [nivel_afirmado, nivel_afirmado[:5]]):
+            continue
+        return _fail(
+            f"Afirma nivel '{m.group(1)}' sin respaldo",
+            f"NO afirmes que el hijo está en {m.group(1)} si no aparece en estado_capturado ni en lo dicho.",
+        )
+
+    # 4. Edad del hijo afirmada sin respaldo
+    edades_conocidas: set[int] = {h.edad for h in estado.hijos if h.edad is not None}
+    for m in _AFIRMA_EDAD_HIJO_RE.finditer(respuesta):
+        try:
+            edad_afirmada = int(m.group(1))
+        except ValueError:
+            continue
+        if edad_afirmada in edades_conocidas:
+            continue
+        if re.search(rf"\b{edad_afirmada}\s+(?:a[ñn]os?|meses)", texto_papa):
+            continue
+        return _fail(
+            f"Afirma edad {edad_afirmada} sin respaldo",
+            f"NO afirmes {edad_afirmada} años — pregunta si necesitas el dato.",
+        )
+
+    # 5. Género del hijo — tolerante en saludo vacío
+    m_gen = _AFIRMA_GENERO_HIJO_RE.search(respuesta)
+    if m_gen:
+        genero_afirmado = m_gen.group(1).lower()
+        papa_dio_referente = genero_afirmado in texto_papa or any(
+            w in texto_papa for w in ("hijos", "hijas", "peque", "niño", "niña", "nino", "nina")
+        )
+        estado_tiene_referente = bool(estado.hijos) or estado.nivel_buscado_actual is not None
+        contexto_vacio = not estado_tiene_referente and not texto_papa.strip()
+        if not contexto_vacio and not papa_dio_referente and not estado_tiene_referente:
+            return _fail(
+                f"Afirma género '{genero_afirmado}' sin que el papá lo haya indicado",
+                f"Usa 'tu peque' en lugar de 'tu {genero_afirmado}' si no sabes el género.",
+            )
+
+    # 6. Campus que contradice estado.campus_cita
+    m_camp = _AFIRMA_CAMPUS_RE.search(respuesta)
+    if m_camp:
+        campus_afirmado = m_camp.group(1).lower().replace(" ", "")
+        campus_estado = (estado.campus_cita or "").lower().replace(" ", "")
+        if campus_estado and campus_estado not in campus_afirmado:
+            return _fail(
+                f"Afirma '{m_camp.group(1)}' pero estado tiene {estado.campus_cita}",
+                f"El campus correcto es {estado.campus_cita}.",
+            )
+
+    # 7. Cita agendada falsa
+    m_cit = _AFIRMA_CITA_AGENDADA_RE.search(respuesta)
+    if m_cit and not estado.cita_agendada:
+        return _fail(
+            f"Afirma cita agendada ('{m_cit.group(0)}') pero estado.cita_agendada=False",
+            "Propón la cita como invitación, no como hecho.",
+        )
+
+    return ValidationResult(validator="no_inventa_datos", passed=True, severity="warning")
+
+
+def validar_no_bullets_en_descubrimiento(
+    respuesta: str, fase_journey: FaseJourney
+) -> ValidationResult:
+    """**Severity=warning** — señala bullets/listas excesivos en fase descubrimiento.
+
+    Bloque 5.7 ATAQUE 1: criterio simple basado en fase del journey (NO en
+    intimacy_detector complejo). En descubrimiento, los bullets/numerados/
+    negritas excesivos son señal de tono transaccional. Thresholds calibrados
+    del Bloque 5.6 PASO 5.0: ≥3 bullets, ≥3 numerados, o ≥4 negritas.
+    """
+    if fase_journey != FaseJourney.DESCUBRIMIENTO:
+        return ValidationResult(
+            validator="no_bullets_descubrimiento", passed=True, severity="warning"
+        )
+
+    bullets = _MARKDOWN_BULLET_RE.findall(respuesta)
+    numbered = _MARKDOWN_NUMBERED_RE.findall(respuesta)
+    bolds = _MARKDOWN_BOLD_RE.findall(respuesta)
+
+    if len(bullets) >= 3 or len(numbered) >= 3 or len(bolds) >= 4:
+        n = max(len(bullets), len(numbered), len(bolds))
+        return ValidationResult(
+            validator="no_bullets_descubrimiento",
+            passed=False,
+            reason=f"En descubrimiento con {n} bullets/numerados/negritas — tono transaccional",
+            suggested_fix=(
+                "En descubrimiento, prefiere prosa fluida. Bullets/listas solo cuando "
+                "respondes preguntas operativas concretas (horarios, costos, requisitos)."
+            ),
+            severity="warning",
+        )
+
+    return ValidationResult(validator="no_bullets_descubrimiento", passed=True, severity="warning")
+
+
 def validar_no_evasion(respuesta: str, intent: Intent | None) -> ValidationResult:
     """Falla si la pregunta era cerrada (costos/horarios) y la respuesta evade.
 
@@ -405,10 +632,23 @@ def run_all_validators(
     intent: Intent | None = None,
     tools_called: list[str] | None = None,
     frases_usadas: list[str] | None = None,
+    mensajes_papa: list[str] | None = None,
+    fase_journey: FaseJourney | None = None,
 ) -> ValidationReport:
     """Ejecuta todos los validators secuencialmente y agrega resultados.
 
     Es pura: no escribe DB, no llama APIs. Solo razona sobre el texto.
+
+    Bloque 5.7 ATAQUE 1: los validators heurísticos nuevos
+    (`no_inventa_datos`, `no_bullets_descubrimiento`) devuelven
+    `severity="warning"` — NO disparan regeneración, solo se loggean y se
+    exponen vía `report.warnings_map`.
+
+    `mensajes_papa`: lista de mensajes previos del papá, usada por
+    `no_inventa_datos` para corroborar entidades.
+
+    `fase_journey`: usada por `no_bullets_descubrimiento` para activar
+    solo en fase descubrimiento.
     """
     report = ValidationReport()
     report.results.append(validar_no_repeticion(respuesta, frases_usadas or []))
@@ -416,6 +656,10 @@ def run_all_validators(
     report.results.append(validar_no_pregunta_repetida(respuesta, estado))
     report.results.append(validar_no_evasion(respuesta, intent))
     report.results.append(validar_no_markdown_excesivo(respuesta))
+    # Warnings heurísticos del 5.7 ATAQUE 1 — no bloquean
+    report.results.append(validar_no_inventa_datos(respuesta, estado, mensajes_papa))
+    if fase_journey is not None:
+        report.results.append(validar_no_bullets_en_descubrimiento(respuesta, fase_journey))
     return report
 
 

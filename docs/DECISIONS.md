@@ -440,3 +440,43 @@ Atacar las dos causas raíz reales no resueltas, con base en aprendizajes del 5.
 **Justificación de revertir:** Mantener código que sabemos que empeora métricas crea deuda invisible. Cualquier iteración futura debe partir de un baseline limpio para poder atribuir mejoras o regresiones a cambios concretos.
 
 ---
+
+## ADR-018 — Bloque 5.7 ATAQUE 1: validators heurísticos con severity=warning
+
+**Fecha:** 2026-05-19
+**Contexto:** La lección clave del Bloque 5.6 fue que los validators heurísticos (anti-invención, anti-bullets en momentos íntimos) con `severity=error` forzaban regeneraciones que hacían a Sofía cautelosa-pero-vacía. El juez prefirió v1 generosa-aunque-imprecisa. La fix: **detectar sin bloquear** — los heurísticos registran señal, no forzan corrección.
+
+**Decisión:**
+
+1. **`ValidationResult.severity`** ya existe con default `"error"` (sobrevivió al revert del 5.6). Los nuevos validators del 5.7 usan `severity="warning"`.
+
+2. **`ValidationReport.all_passed`** filtra por `severity == "error"`: los warnings NO disparan `feedback_para_regenerar()` ni cuentan como falla del flujo.
+
+3. **`validar_no_inventa_datos`** (severity=warning) re-introducido con los 7 sub-chequeos del 5.6 + tolerancia para saludo inicial puro. Mismos regex `_AFIRMA_*`.
+
+4. **`validar_no_bullets_en_descubrimiento(respuesta, fase_journey)`** (severity=warning) — nueva firma simple: si `fase_journey == DESCUBRIMIENTO` Y respuesta tiene ≥3 bullets / ≥3 numerados / ≥4 negritas → warning. NO requiere `intimacy_detector`.
+
+5. **Thresholds calibrados del 5.6 PASO 5.0** (≥3/≥3/≥4) mantenidos — ya están validados como balance entre falsos positivos y verdaderos positivos.
+
+6. **`run_all_validators` firma extendida:**
+   - `mensajes_papa` (opcional) → para `no_inventa_datos`
+   - `fase_journey` (opcional) → para `no_bullets_descubrimiento`. Si no se pasa, ese validator se omite.
+
+7. **Persistencia (decisión C de la negociación):**
+   - `validators_passed_map` y `validators_failed_map`: SOLO errors → persisten en `sofia_turn_logs` (sin cambio de schema).
+   - `validators_warnings_map`: nueva property → SOLO se loggea con `log.warning(...)` y se expone via `TurnResult.validators_warnings: list[str]`. NO se persiste en DB.
+
+8. **Orchestrator:** captura warnings tras `run_all_validators`, los loggea con `log.warning("validator_warnings", extra={...})`, y los expone en `TurnResult.validators_warnings`.
+
+9. **Runner (`tests/golden/runner.py`):**
+   - `TurnComparison.new_validators_warnings: list[str]` y `any_run_had_warnings: bool`.
+   - Nueva función `_warnings_stats()` que calcula % turnos con warnings + histograma por validator.
+   - `RunSummary.pct_turns_with_warnings` y `RunSummary.warnings_by_validator`.
+   - Output del runner incluye línea "⚠ validator_name: N turnos" + métrica global "% turnos con warnings".
+   - Cada turno con warning lleva sufijo `⚠valname` en su línea de output.
+
+**Tests:** 20 nuevos validators tests + 3 tests que confirman que warnings no disparan regen. Total: 274/274 pasando.
+
+**Justificación:** Esta arquitectura permite **medir sin interferir**. Los warnings son señal para iterar (si `no_inventa_datos` warns en >20% turnos, hay patrón sistemático que vale atacar con prompt en futuro bloque). Pero la respuesta del LLM NO se altera por warnings, así que Sofía no se vuelve cautelosa-pero-vacía.
+
+---
