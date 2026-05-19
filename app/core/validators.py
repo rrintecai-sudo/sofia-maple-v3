@@ -524,11 +524,11 @@ def validar_no_inventa_datos(
         )
 
     # 5. Género del hijo (hijo/hija) — falla SOLO cuando:
-    #    - No hay info ni de hijos ni de nivel buscado en estado (no hay contexto)
-    #    - El papá NO mencionó "hijo"/"hija"/"niño"/"niña"/"peque" en mensajes
-    #    - El papá NO compartió nivel ("maternal", "kinder", etc.)
-    # Si hay nivel_buscado_actual o estado.hijos, tolerar "tu hijo/hija" — el
-    # contexto justifica que ya estamos discutiendo a alguien.
+    #    - Hay contexto del hijo (estado.hijos no vacío, o papá mencionó "peque"/"hijo")
+    #    - Y la afirmación de género CONTRADICE el contexto
+    # Si estado y mensajes_papa están completamente vacíos (saludo inicial puro),
+    # tolerar — Sofía puede preguntar "¿qué edad tiene tu hijo/peque?" como
+    # apertura natural sin asumir nada.
     m_gen = _AFIRMA_GENERO_HIJO_RE.search(respuesta)
     if m_gen:
         genero_afirmado = m_gen.group(1).lower()
@@ -536,7 +536,12 @@ def validar_no_inventa_datos(
             w in texto_papa for w in ("hijos", "hijas", "peque", "niño", "niña", "nino", "nina")
         )
         estado_tiene_referente = bool(estado.hijos) or estado.nivel_buscado_actual is not None
-        if not papa_dio_referente and not estado_tiene_referente:
+        # Tolerancia para saludo inicial: si estado está completamente vacío Y
+        # no hay mensajes previos del papá con contexto, no fallar.
+        contexto_completamente_vacio = not estado_tiene_referente and not texto_papa.strip()
+        if contexto_completamente_vacio:
+            pass  # tolerar
+        elif not papa_dio_referente and not estado_tiene_referente:
             return ValidationResult(
                 validator="no_inventa_datos",
                 passed=False,
@@ -582,11 +587,12 @@ def validar_no_inventa_datos(
 def validar_no_bullets_en_momento_intimo(
     respuesta: str, es_momento_intimo: bool
 ) -> ValidationResult:
-    """Si el momento es íntimo y la respuesta usa bullets/listas/numeración, falla.
+    """Si el momento es íntimo y la respuesta usa bullets/listas excesivamente, falla.
 
-    Más estricto que `no_markdown_excesivo`: aquí basta CON 2+ bullets o 2+ items
-    numerados (no requerimos densidad alta). Ataca la causa raíz #2: tono
-    transaccional con bullets en momentos íntimos.
+    Más estricto que `no_markdown_excesivo` pero no tanto que disparé falsos
+    positivos en 1-2 bullets legítimos (ej. listar 2 modalidades). Umbral:
+    ≥3 bullets, ≥3 numerados, o ≥4 negritas en un momento íntimo.
+    Ataca la causa raíz #2: tono transaccional con bullets en momentos íntimos.
     """
     if not es_momento_intimo:
         return ValidationResult(validator="no_bullets_intimo", passed=True)
@@ -595,7 +601,7 @@ def validar_no_bullets_en_momento_intimo(
     numbered = _MARKDOWN_NUMBERED_RE.findall(respuesta)
     bolds = _MARKDOWN_BOLD_RE.findall(respuesta)
 
-    if len(bullets) >= 2 or len(numbered) >= 2 or len(bolds) >= 3:
+    if len(bullets) >= 3 or len(numbered) >= 3 or len(bolds) >= 4:
         n_items = max(len(bullets), len(numbered), len(bolds))
         return ValidationResult(
             validator="no_bullets_intimo",

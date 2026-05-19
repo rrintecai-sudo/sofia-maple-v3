@@ -593,27 +593,36 @@ def test_bullets_intimo_pasa_con_prosa() -> None:
     assert r.passed is True
 
 
-def test_bullets_intimo_falla_con_2_bullets() -> None:
-    """En momento íntimo, basta con 2 bullets para fallar (más estricto que markdown general)."""
+def test_bullets_intimo_pasa_con_2_bullets() -> None:
+    """En momento íntimo, 2 bullets aún se tolera (umbral relajado para evitar
+    falsos positivos en respuestas naturales con 1-2 ítems)."""
     r = validar_no_bullets_en_momento_intimo(
         respuesta="Aquí hacemos:\n- vínculo\n- exploración",
+        es_momento_intimo=True,
+    )
+    assert r.passed is True
+
+
+def test_bullets_intimo_falla_con_3_bullets() -> None:
+    r = validar_no_bullets_en_momento_intimo(
+        respuesta="Aquí hacemos:\n- vínculo\n- exploración\n- lenguaje",
         es_momento_intimo=True,
     )
     assert r.passed is False
     assert "íntimo" in (r.reason or "").lower()
 
 
-def test_bullets_intimo_falla_con_2_numerados() -> None:
+def test_bullets_intimo_falla_con_3_numerados() -> None:
     r = validar_no_bullets_en_momento_intimo(
-        respuesta="Te recomiendo:\n1. agendar\n2. visitar",
+        respuesta="Te recomiendo:\n1. agendar\n2. visitar\n3. preguntar",
         es_momento_intimo=True,
     )
     assert r.passed is False
 
 
-def test_bullets_intimo_falla_con_3_negritas() -> None:
+def test_bullets_intimo_falla_con_4_negritas() -> None:
     r = validar_no_bullets_en_momento_intimo(
-        respuesta="**Vínculo** es clave. **Exploración** también. **Lenguaje** se desarrolla.",
+        respuesta="**Vínculo**, **exploración**, **lenguaje**, **autonomía**.",
         es_momento_intimo=True,
     )
     assert r.passed is False

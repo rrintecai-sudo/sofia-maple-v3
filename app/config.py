@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     # --- Feature flags ---
     enable_prompt_caching: bool = True
     enable_validators: bool = True
-    max_regenerations_per_turn: int = Field(default=2, ge=0, le=5)
+    max_regenerations_per_turn: int = Field(default=1, ge=0, le=5)
 
     @property
     def is_production(self) -> bool:
