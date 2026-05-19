@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -44,6 +45,7 @@ from app.core.validators import (
 )
 from app.observability.costs import calculate_cost
 from app.tools.campus import get_campus_para_nivel
+from app.tools.niveles import consultar_edades_de_nivel
 
 log = logging.getLogger(__name__)
 
@@ -180,8 +182,8 @@ async def procesar_turno(
     estado.fase_journey = _decidir_fase(estado, intent_result.intent, es_nueva)
 
     # 5bis. Pre-fetch tools cuando el intent lo amerita.
-    # Por ahora solo campus — más tools (precios, horarios) se enganchan en
-    # iteraciones siguientes. Inyectamos resultado al prompt como contexto.
+    # Por ahora: campus (Bloque 5.5) + niveles (Bloque 5.6 PASO 2).
+    # Inyectamos resultado al prompt como contexto para que Sofía no invente.
     tools_data: dict[str, Any] = {}
     if intent_result.intent == Intent.PREGUNTA_CAMPUS:
         nivel_para_campus = _nivel_para_campus(estado)
@@ -193,6 +195,22 @@ async def procesar_turno(
                     "tool campus prefetch",
                     extra={"nivel": nivel_para_campus, "campus": campus_res.nombre},
                 )
+
+    # 5ter. Pre-fetch niveles_por_edad cuando el papá pregunta por una etapa
+    # específica (infants, baby, cubs, toddlers, preschool/kinder) o pide rangos
+    # de edad. Ataca el bug "Sofía dice 'Infants 3-12 meses' en vez de 18m-2a".
+    nivel_keyword = _detectar_nivel_en_mensaje(mensaje)
+    if nivel_keyword:
+        nivel_res = await consultar_edades_de_nivel(nivel_keyword)
+        if nivel_res:
+            tools_data["nivel_edad"] = (
+                f"{nivel_res.nombre_display}: {nivel_res.rango_legible()}. "
+                f"{nivel_res.descripcion or ''}".strip()
+            )
+            log.info(
+                "tool niveles prefetch",
+                extra={"keyword": nivel_keyword, "nivel": nivel_res.nivel},
+            )
 
     # 6. Componer prompt
     system_blocks = build_system_blocks(estado)
@@ -395,6 +413,35 @@ async def procesar_turno(
 # ============================================================
 # Helpers
 # ============================================================
+
+
+_NIVEL_KEYWORDS = (
+    "infants",
+    "infant",
+    "baby",
+    "babies",
+    "cubs",
+    "cub",
+    "toddlers",
+    "toddler",
+    "preschool",
+    "maternal",
+    "kinder",
+)
+
+
+def _detectar_nivel_en_mensaje(mensaje: str) -> str | None:
+    """Devuelve la primera keyword de nivel detectada en el mensaje, o None.
+
+    Usado para decidir si hacemos pre-fetch a `consultar_edades_de_nivel`.
+    Solo dispara cuando el papá pregunta concretamente por un nivel/etapa.
+    """
+    msg = mensaje.lower()
+    for kw in _NIVEL_KEYWORDS:
+        # Detectar como palabra (no como substring de otra palabra)
+        if re.search(rf"\b{kw}\b", msg):
+            return kw
+    return None
 
 
 def _nivel_para_campus(estado: EstadoConversacion) -> str | None:

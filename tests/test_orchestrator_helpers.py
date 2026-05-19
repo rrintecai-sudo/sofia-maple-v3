@@ -6,7 +6,7 @@ el comportamiento (decisión de campus, etc.).
 
 from __future__ import annotations
 
-from app.core.orchestrator import _nivel_para_campus
+from app.core.orchestrator import _detectar_nivel_en_mensaje, _nivel_para_campus
 from app.core.state import (
     EstadoConversacion,
     HijoInfo,
@@ -60,3 +60,40 @@ def test_nivel_campus_usa_nivel_del_hijo_si_no_hay_actual() -> None:
     estado = EstadoConversacion.nueva("web:test")
     estado.estado_capturado.hijos = [HijoInfo(nivel=NivelEducativo.MATERNAL)]
     assert _nivel_para_campus(estado) == "maternal"
+
+
+# ============================================================
+# _detectar_nivel_en_mensaje (Bloque 5.6 PASO 2)
+# ============================================================
+
+
+def test_detectar_nivel_infants() -> None:
+    assert _detectar_nivel_en_mensaje("Háblame de infants") == "infants"
+
+
+def test_detectar_nivel_baby() -> None:
+    assert _detectar_nivel_en_mensaje("Y en baby?") == "baby"
+
+
+def test_detectar_nivel_cubs() -> None:
+    assert _detectar_nivel_en_mensaje("¿Háblame de cubs por favor?") == "cubs"
+
+
+def test_detectar_nivel_kinder() -> None:
+    assert _detectar_nivel_en_mensaje("Quiero info de kinder") == "kinder"
+
+
+def test_detectar_nivel_maternal() -> None:
+    assert _detectar_nivel_en_mensaje("Para maternal") == "maternal"
+
+
+def test_detectar_nivel_none_si_no_hay_keyword() -> None:
+    assert _detectar_nivel_en_mensaje("Hola, qué tal") is None
+
+
+def test_detectar_nivel_no_substring_de_palabra() -> None:
+    """No matchear 'baby' dentro de otra palabra."""
+    # Caso edge: "baby" no debe matchear dentro de "babylonia" (improbable)
+    assert _detectar_nivel_en_mensaje("babylonia") is None
+    # Pero sí matchea cuando es palabra
+    assert _detectar_nivel_en_mensaje("Mi baby tiene 1 año") == "baby"

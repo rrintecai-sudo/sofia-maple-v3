@@ -223,3 +223,51 @@ Sin una métrica más estable, iterar prompts es contraproducente — el ruido v
 **Justificación:** Defensa en profundidad: el prompt previene la mayoría de las invenciones; el validator captura las que pasan. La regla del prompt enseña al modelo el principio ("silencio honesto > afirmación cómoda pero falsa"); el validator hace el chequeo determinístico y, al regenerar, inyecta el motivo específico.
 
 ---
+
+## ADR-013 — Bloque 5.6 PASO 2: tabla `niveles_por_edad` + tool `niveles.py` + auditoría factual
+
+**Fecha:** 2026-05-19
+**Contexto:** Causa raíz #4 — Sofía a veces afirma datos factuales incorrectos. El caso más visible: "Infants 3-12 meses" cuando lo correcto es 18m-2a. Al auditar `app/core/prompts/**/*.md` confirmamos que el dato del prompt está bien; el modelo se equivoca al re-decirlo. El fix: tool determinística que devuelve el dato canónico desde una tabla.
+
+**Decisión:**
+
+1. **Auditoría completa** documentada en `docs/AUDIT_FACTUAL_DATA.md`:
+   - Niveles + edades (Cubs Baby 3-11m, Baby 12-18m, Infants 18-24m, Toddlers 24-36m, etc.)
+   - Direcciones de Campus 1/2
+   - Horarios escolares
+   - Costos por nivel
+   - Modalidades de estancia
+   - **Hallazgo crítico:** el prompt NO especifica capacidades de aula. Sofía las inventaba ("máximo 8 niños", "máximo 20 niños"). La regla "Integridad" del PASO 1 ya prohíbe esto; cuando Cecilia provea los datos reales, se agregan a la tabla.
+
+2. **Migration `004_niveles_por_edad.sql`** crea tabla con:
+   - `nivel`, `nombre_display`, `categoria` (maternal/kinder/primaria/secundaria)
+   - `edad_min_meses`, `edad_max_meses` (en meses para precisión cross-boundary)
+   - `grados[]`, `descripcion`, `campus`
+   - `vigente BOOL DEFAULT TRUE`
+   - **`confirmado_por_cliente BOOL DEFAULT FALSE`** — flag para que Cecilia valide
+   - `fuente TEXT` — origen del dato ('prompt_v2.8' inicialmente)
+
+   Seed con 8 niveles desde el prompt v2.8. La tool consulta `vigente=TRUE` indistintamente del flag (pending validación). **Aplicada en Supabase prod el 2026-05-19** vía Management API.
+
+3. **Tool `app/tools/niveles.py`** con 3 funciones:
+   - `consultar_nivel_por_edad(edad_meses)` — qué nivel cubre N meses
+   - `consultar_edades_de_nivel(nivel)` — qué edades cubre un nivel
+   - `listar_niveles_vigentes()` — todos los niveles ordenados
+
+   El dataclass `NivelInfo` tiene un helper `rango_legible()` que devuelve strings correctos cross-boundary ("18 meses a 2 años") — anti-bug del caso Infants.
+
+4. **Wiring en orchestrator:** nuevo helper `_detectar_nivel_en_mensaje(mensaje)` busca keywords (infants/baby/cubs/toddlers/preschool/maternal/kinder) y, si encuentra, hace pre-fetch via `consultar_edades_de_nivel`. El resultado se inyecta como hint al prompt junto con campus (ya existente).
+
+5. **NO se modifican los prompts existentes** — los datos del prompt son correctos según el audit. La defensa contra invenciones del modelo viene de:
+   - Regla "Integridad de información" del PASO 1 (rules.md)
+   - Validator `no_inventa_datos` del PASO 1
+   - Tool determinística `niveles.py` (este paso)
+
+**Deuda para Bloque 5.7 (post-validación con Cecilia):**
+- Validar tabla `niveles_por_edad` → marcar `confirmado_por_cliente=TRUE`
+- Capturar capacidades de aula (ratio niños:educadora) y agregar a tabla nueva `capacidades_aula`
+- Considerar mover precios/horarios del prompt al esquema de DB y dejar el prompt apuntando a las tools
+
+**Tests:** 16 nuevos (10 de tool + 6 del helper en orchestrator). 270/270 total.
+
+---

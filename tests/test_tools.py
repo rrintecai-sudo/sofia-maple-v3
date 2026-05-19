@@ -18,6 +18,12 @@ from app.tools.kb_search import (
     _parse_embedding,
     kb_search,
 )
+from app.tools.niveles import (
+    NivelInfo,
+    consultar_edades_de_nivel,
+    consultar_nivel_por_edad,
+    listar_niveles_vigentes,
+)
 from app.tools.precios import get_precio
 from app.tools.send_image import enviar_imagen_costos_kinder
 from app.tools.send_sticker import enviar_sticker_despedida
@@ -220,6 +226,172 @@ async def test_get_campus_para_nivel() -> None:
     assert r is not None
     assert r.nombre == "Campus 1"
     assert "Doctores" in r.resumen_corto()
+
+
+# ============================================================
+# niveles_por_edad (Bloque 5.6 PASO 2)
+# ============================================================
+
+
+def _nivel_row(
+    *,
+    nivel: str = "infants",
+    nombre_display: str = "Infants",
+    categoria: str = "maternal",
+    edad_min_meses: int = 18,
+    edad_max_meses: int = 24,
+    grados: list[str] | None = None,
+    descripcion: str = "Exploración, lenguaje, primeros vínculos sociales.",
+    campus: str = "Campus 1",
+    confirmado: bool = False,
+) -> dict:
+    return {
+        "nivel": nivel,
+        "nombre_display": nombre_display,
+        "categoria": categoria,
+        "edad_min_meses": edad_min_meses,
+        "edad_max_meses": edad_max_meses,
+        "grados": grados or [],
+        "descripcion": descripcion,
+        "campus": campus,
+        "confirmado_por_cliente": confirmado,
+    }
+
+
+def test_nivel_info_rango_legible_meses_solo() -> None:
+    n = NivelInfo(
+        nivel="cubs_baby",
+        nombre_display="Cubs Baby",
+        categoria="maternal",
+        edad_min_meses=3,
+        edad_max_meses=11,
+        grados=[],
+        descripcion=None,
+        campus="Campus 1",
+    )
+    assert n.rango_legible() == "3 a 11 meses"
+    assert "Cubs Baby" in n.resumen_corto()
+
+
+def test_nivel_info_rango_legible_cross_boundary() -> None:
+    """Infants: 18 meses a 2 años. Caso clave del bug."""
+    n = NivelInfo(
+        nivel="infants",
+        nombre_display="Infants",
+        categoria="maternal",
+        edad_min_meses=18,
+        edad_max_meses=24,
+        grados=[],
+        descripcion=None,
+        campus="Campus 1",
+    )
+    assert n.rango_legible() == "18 meses a 2 años"
+
+
+def test_nivel_info_rango_legible_anos() -> None:
+    n = NivelInfo(
+        nivel="primaria_baja",
+        nombre_display="Primaria baja",
+        categoria="primaria",
+        edad_min_meses=72,
+        edad_max_meses=108,
+        grados=["1°", "2°", "3°"],
+        descripcion=None,
+        campus="Campus 1",
+    )
+    assert n.rango_legible() == "6 a 9 años"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_consultar_nivel_por_edad_infants() -> None:
+    """20 meses → Infants (18-24m). Caso anti-bug."""
+    respx.get("https://x.supabase.co/rest/v1/niveles_por_edad").mock(
+        return_value=httpx.Response(200, json=[_nivel_row()])
+    )
+    r = await consultar_nivel_por_edad(20, settings=_supa_settings())
+    assert r is not None
+    assert r.nivel == "infants"
+    assert r.edad_min_meses == 18
+    assert r.edad_max_meses == 24
+    assert r.rango_legible() == "18 meses a 2 años"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_consultar_nivel_por_edad_no_match() -> None:
+    """200 meses (16+ años) → ningún nivel."""
+    respx.get("https://x.supabase.co/rest/v1/niveles_por_edad").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    r = await consultar_nivel_por_edad(200, settings=_supa_settings())
+    assert r is None
+
+
+@pytest.mark.asyncio
+async def test_consultar_nivel_por_edad_sin_supabase() -> None:
+    """Sin supabase_url, devuelve None graciosamente."""
+    from app.config import Settings
+
+    r = await consultar_nivel_por_edad(20, settings=Settings())
+    assert r is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_consultar_edades_de_nivel_directo() -> None:
+    respx.get("https://x.supabase.co/rest/v1/niveles_por_edad").mock(
+        return_value=httpx.Response(200, json=[_nivel_row()])
+    )
+    r = await consultar_edades_de_nivel("infants", settings=_supa_settings())
+    assert r is not None
+    assert r.nombre_display == "Infants"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_consultar_edades_de_nivel_fallback_ilike() -> None:
+    """Si match exacto falla, busca por nombre_display ilike."""
+    # Primera llamada (match exacto) devuelve vacío; segunda devuelve resultado.
+    call_count = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return httpx.Response(200, json=[])
+        return httpx.Response(200, json=[_nivel_row(nivel="infants", nombre_display="Infants")])
+
+    respx.get("https://x.supabase.co/rest/v1/niveles_por_edad").mock(side_effect=handler)
+    r = await consultar_edades_de_nivel("Infants Maternal", settings=_supa_settings())
+    assert r is not None
+    assert call_count["n"] == 2
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_listar_niveles_vigentes() -> None:
+    respx.get("https://x.supabase.co/rest/v1/niveles_por_edad").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                _nivel_row(
+                    nivel="cubs_baby",
+                    nombre_display="Cubs Baby",
+                    edad_min_meses=3,
+                    edad_max_meses=11,
+                ),
+                _nivel_row(
+                    nivel="baby", nombre_display="Baby", edad_min_meses=12, edad_max_meses=18
+                ),
+                _nivel_row(
+                    nivel="infants", nombre_display="Infants", edad_min_meses=18, edad_max_meses=24
+                ),
+            ],
+        )
+    )
+    niveles = await listar_niveles_vigentes(settings=_supa_settings())
+    assert len(niveles) == 3
+    assert [n.nivel for n in niveles] == ["cubs_baby", "baby", "infants"]
 
 
 # ============================================================
