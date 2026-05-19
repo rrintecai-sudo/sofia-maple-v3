@@ -305,3 +305,36 @@ Sin una métrica más estable, iterar prompts es contraproducente — el ruido v
 **Tests:** 14 del detector + 6 del validator = 20 nuevos. 290/290 total.
 
 ---
+
+## ADR-015 — Bloque 5.6 PASO 4: intent CORRECCION_DEL_PAPA + correction_handler
+
+**Fecha:** 2026-05-19
+**Contexto:** Causa raíz #3 — Sofía pierde el hilo cuando el papá corrige o aclara algo. En golden tests: el papá dice "no preguntes si está en otra escuela actualmente" y Sofía la siguiente vuelve a preguntar; el papá dice "no, es Kinder no Maternal" y Sofía sigue hablando de Maternal.
+
+**Decisión:**
+
+1. **Nuevo `Intent.CORRECCION_DEL_PAPA`** en `app/core/intent_classifier.py`. Detecta:
+   - Negaciones directas: *"no, eso no era"*, *"no me refería a eso"*
+   - Aclaraciones: *"te corrijo"*, *"déjame aclarar"*, *"estás confundido/a"*, *"mira, lo que pasa es que..."*
+   - Instrucciones procedimentales: *"no preguntes X"*, *"cuando te diga Y, haz Z"*
+
+2. **Nuevo módulo `app/core/correction_handler.py`**:
+   - `CorreccionDetectada` (dataclass) con campos: `nivel_buscado`, `nombre_hijo`, `edad_hijo`, `grado_hijo`, `escuela_actual`, `nombre_papa`, `instruccion_comportamiento`, `campos_a_limpiar: list[str]`.
+   - `async detectar_correccion(mensaje, estado)` — llama a GPT-4o-mini con un prompt específico para identificar QUÉ se está corrigiendo. Devuelve `None` si LLM falla (graceful) o `CorreccionDetectada` (puede ser vacía).
+   - `aplicar_correccion(estado, correccion)` — devuelve EstadoCapturado nuevo con los campos sobreescritos. A diferencia del extractor regular, **sí pisa** valores previos (el papá nos dice que estaban mal).
+
+3. **Wiring en orchestrator (paso 5bis):**
+   - Solo dispara cuando `intent == CORRECCION_DEL_PAPA`.
+   - Try/except envuelve la llamada — fallback graceful: si falla, el orchestrator continúa sin aplicar corrección.
+   - Si la corrección detectada NO es vacía, se aplica a `estado.estado_capturado`.
+   - Hint inyectado al `mensaje_para_llm` con resumen de la corrección + instrucción explícita: "Reconoce humildemente, confirma el dato correcto, continúa desde ahí".
+
+4. **Regla "Cuando el papá te corrige"** en `app/core/prompts/rules.md` (antes de la sección "Integridad de información"). Cuatro pasos: (1) disculpa breve sin exceso, (2) confirmar dato correcto, (3) continuar journey desde el dato actualizado, (4) NO repetir dato viejo. Cubre también correcciones procedimentales.
+
+**Costo extra:** una llamada GPT-4o-mini adicional cuando el papá corrige. Estimado: ~$0.001 por corrección. Despreciable.
+
+**Tests:** 15 nuevos en `tests/test_correction_handler.py` (4 dataclass, 7 aplicar_correccion, 4 detectar_correccion con monkeypatch). 305/305 total.
+
+**Decisión técnica clave — graceful fallback:** las 3 piezas (intent_classifier, correction_handler, orchestrator) están encadenadas por if/except. Si cualquiera falla, el flujo continúa con `correccion=None`. Cumple regla operativa de Oscar: "Fallback graceful si fallan. No bloquea el flujo principal."
+
+---

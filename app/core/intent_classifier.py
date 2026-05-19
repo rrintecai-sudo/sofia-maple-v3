@@ -36,6 +36,7 @@ class Intent(StrEnum):
     OBJECION_TAREA = "objecion_tarea"
     OBJECION_OTRA = "objecion_otra"
     DESPEDIDA = "despedida"
+    CORRECCION_DEL_PAPA = "correccion_del_papa"
     CONFUSO_OTRO = "confuso_otro"
 
 
@@ -70,6 +71,7 @@ Categorías disponibles:
 - objecion_tarea: no dejan tarea, quiero que le dejen tarea
 - objecion_otra: otra duda/objeción
 - despedida: adiós, gracias, hasta luego
+- correccion_del_papa: el papá te está corrigiendo o aclarando algo que dijiste antes. Ejemplos: "No, eso no era", "Te corrijo", "No fue lo que dije", "Espera", "Déjame aclarar", "Estás confundido/a", "Mira, lo que pasa es que...", "No me refería a eso", instrucciones tipo "no preguntes X", "cuando te diga Y haz Z"
 - confuso_otro: no se puede clasificar
 
 Devuelve EXCLUSIVAMENTE JSON con esta estructura:

@@ -27,6 +27,11 @@ from typing import Any
 
 from app.adapters.anthropic_client import get_anthropic
 from app.config import get_settings
+from app.core.correction_handler import (
+    CorreccionDetectada,
+    aplicar_correccion,
+    detectar_correccion,
+)
 from app.core.intent_classifier import Intent, classify_intent
 from app.core.intimacy_detector import IntimacyResult, detectar_intimidad
 from app.core.learning_mode import guardar_feedback
@@ -182,6 +187,29 @@ async def procesar_turno(
     # 5. Decidir fase del journey
     estado.fase_journey = _decidir_fase(estado, intent_result.intent, es_nueva)
 
+    # 5bis. Si el papá está corrigiendo algo, llamar al corrector y aplicar.
+    # Esto puede SOBREESCRIBIR campos del estado_capturado (a diferencia del
+    # extractor normal). Graceful: si LLM falla, no aplicamos corrección.
+    correccion: CorreccionDetectada | None = None
+    if intent_result.intent == Intent.CORRECCION_DEL_PAPA:
+        try:
+            correccion = await detectar_correccion(mensaje, estado.estado_capturado)
+            if correccion and not correccion.es_vacia:
+                estado.estado_capturado = aplicar_correccion(estado.estado_capturado, correccion)
+                log.info(
+                    "correccion aplicada",
+                    extra={
+                        "session_id": session_id,
+                        "campos_limpiados": correccion.campos_a_limpiar,
+                        "instruccion": (correccion.instruccion_comportamiento or "")[:80],
+                    },
+                )
+        except Exception as exc:
+            log.warning(
+                "correction_handler failed (graceful)",
+                extra={"error": str(exc), "session_id": session_id},
+            )
+
     # 5pre. Detectar si es momento íntimo (heurística rápida, sin LLM)
     # Se usa luego en run_all_validators y como hint al prompt.
     intimacy: IntimacyResult = IntimacyResult(es_intimo=False, razon="default", confianza=0.0)
@@ -230,9 +258,32 @@ async def procesar_turno(
         {"role": _normalize_role(m["role"]), "content": m["content"]} for m in historial
     ]
 
-    # 7ter. Si llamamos tools o detectamos momento íntimo, inyectamos hint al
-    # mensaje del usuario para que la primera generación ya esté alineada.
+    # 7ter. Si llamamos tools, detectamos momento íntimo o detectamos corrección,
+    # inyectamos hint al mensaje del usuario para que la primera generación
+    # esté alineada.
     mensaje_para_llm = mensaje
+    if correccion and not correccion.es_vacia:
+        partes = []
+        if correccion.instruccion_comportamiento:
+            partes.append(f"instrucción procedimental: {correccion.instruccion_comportamiento}")
+        if correccion.campos_a_limpiar:
+            partes.append(f"campos invalidados: {', '.join(correccion.campos_a_limpiar)}")
+        cambios = []
+        if correccion.nivel_buscado:
+            cambios.append(f"nivel→{correccion.nivel_buscado}")
+        if correccion.edad_hijo is not None:
+            cambios.append(f"edad→{correccion.edad_hijo}")
+        if correccion.grado_hijo:
+            cambios.append(f"grado→{correccion.grado_hijo}")
+        if cambios:
+            partes.append(f"datos corregidos: {', '.join(cambios)}")
+        mensaje_para_llm += (
+            "\n\n[Hint interno: el papá te está CORRIGIENDO. "
+            "1) Reconoce humildemente el error (sin disculparte de más). "
+            "2) Confirma el dato correcto que él te indicó. "
+            "3) Continúa el journey desde el punto corregido."
+            f" Cambios detectados: {'; '.join(partes)}.]"
+        )
     if intimacy.es_intimo:
         mensaje_para_llm += (
             "\n\n[Hint interno: este es un MOMENTO ÍNTIMO. "
