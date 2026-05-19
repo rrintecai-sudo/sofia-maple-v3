@@ -1,15 +1,18 @@
-"""Orchestrator MVP — procesa un turno de conversación.
+"""Orchestrator — procesa un turno de conversación.
 
-Flujo (Block 2, sin validators todavía):
+Flujo:
 1. Cargar/crear EstadoConversacion.
-2. Extraer estado del mensaje del usuario (state_extractor).
-3. Clasificar intención (intent_classifier).
+2. Comandos especiales (Modo Aprendizaje maple2026 / /salir).
+3. Extraer estado del mensaje (state_extractor) + clasificar intención
+   (intent_classifier) en paralelo.
 4. Mapear intención → posible cambio de fase del journey.
-5. Componer system prompt (prompt_builder).
-6. Llamar a Claude Haiku 4.5 con caching y memoria reciente.
-7. Persistir: mensajes (user + assistant), turn_log, estado actualizado.
+5. Componer system prompt (prompt_builder con caching).
+6. Llamar a Claude Haiku 4.5 con memoria reciente.
+7. **Validators determinísticos** — si fallan, regenerar (max N veces).
+8. Registrar frases munición usadas (anti-repetición futura).
+9. Persistir: mensajes (user + assistant), turn_log, estado actualizado.
 
-NO incluye validators (Bloque 3) ni tools custom (Bloque 4).
+NO incluye tools custom (Bloque 4).
 """
 
 from __future__ import annotations
@@ -33,6 +36,11 @@ from app.core.state import (
     Modo,
 )
 from app.core.state_extractor import aplicar_extraccion, extraer_de_mensaje
+from app.core.validators import (
+    ValidationReport,
+    extraer_frases_municion_usadas,
+    run_all_validators,
+)
 from app.observability.costs import calculate_cost
 
 log = logging.getLogger(__name__)
@@ -165,29 +173,87 @@ async def procesar_turno(
     # 8. Persistir mensaje del usuario (antes de la llamada LLM)
     await _persist_user_message(repo, estado, mensaje)
 
-    # 9. Llamar a Anthropic
+    # 9. Llamar a Anthropic con loop de validación + regeneración
     anthropic = get_anthropic()
-    llm_started = time.perf_counter()
-    try:
-        message = await anthropic.chat(
-            system_blocks=system_blocks,
-            messages=messages_llm,
-            model=settings.anthropic_model_principal,
-            max_tokens=600,
-            temperature=0.55,
-        )
-    except Exception as exc:
-        log.error("anthropic chat failed", extra={"error": str(exc), "session_id": session_id})
-        raise
-    llm_latency = int((time.perf_counter() - llm_started) * 1000)
+    max_regen = settings.max_regenerations_per_turn if settings.enable_validators else 0
+    response_text = ""
+    final_report: ValidationReport | None = None
+    regenerations = 0
+    # Métricas acumuladas (sumamos cada intento)
+    tokens_input = 0
+    tokens_output = 0
+    tokens_cache_read = 0
+    tokens_cache_write = 0
+    llm_latency = 0
+    extra_messages: list[dict[str, Any]] = []  # feedback de validators para reintentos
 
-    # 10. Extraer texto y métricas
-    response_text = _extract_text_response(message)
-    usage = getattr(message, "usage", None)
-    tokens_input = getattr(usage, "input_tokens", 0) or 0
-    tokens_output = getattr(usage, "output_tokens", 0) or 0
-    tokens_cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
-    tokens_cache_write = getattr(usage, "cache_creation_input_tokens", 0) or 0
+    llm_started = time.perf_counter()
+    for intento in range(max_regen + 1):
+        try:
+            message = await anthropic.chat(
+                system_blocks=system_blocks,
+                messages=messages_llm + extra_messages,
+                model=settings.anthropic_model_principal,
+                max_tokens=600,
+                temperature=0.55,
+            )
+        except Exception as exc:
+            log.error(
+                "anthropic chat failed",
+                extra={"error": str(exc), "session_id": session_id, "intento": intento},
+            )
+            raise
+
+        response_text = _extract_text_response(message)
+        usage = getattr(message, "usage", None)
+        tokens_input += getattr(usage, "input_tokens", 0) or 0
+        tokens_output += getattr(usage, "output_tokens", 0) or 0
+        tokens_cache_read += getattr(usage, "cache_read_input_tokens", 0) or 0
+        tokens_cache_write += getattr(usage, "cache_creation_input_tokens", 0) or 0
+
+        if not settings.enable_validators:
+            final_report = None
+            break
+
+        final_report = run_all_validators(
+            respuesta=response_text,
+            estado=estado.estado_capturado,
+            intent=intent_result.intent,
+            tools_called=[],  # Bloque 4 introducirá tools reales
+            frases_usadas=estado.frases_usadas,
+        )
+
+        if final_report.all_passed:
+            break
+
+        # Si todavía hay presupuesto, prepara reintento con feedback
+        if intento < max_regen:
+            feedback = final_report.feedback_para_regenerar()
+            log.info(
+                "validator_failed_regenerating",
+                extra={
+                    "session_id": session_id,
+                    "intento": intento + 1,
+                    "fallas": list(final_report.failed_map.keys()),
+                },
+            )
+            # Inyectar respuesta previa + feedback como secuencia user/assistant
+            extra_messages = [
+                {"role": "assistant", "content": response_text},
+                {"role": "user", "content": feedback or "Mejora tu respuesta anterior."},
+            ]
+            regenerations += 1
+        else:
+            # Sin más presupuesto — enviamos la última versión y loggeamos
+            log.warning(
+                "validator_warning_max_regen_reached",
+                extra={
+                    "session_id": session_id,
+                    "fallas": list(final_report.failed_map.keys()),
+                },
+            )
+
+    llm_latency = int((time.perf_counter() - llm_started) * 1000)
 
     cost = calculate_cost(
         model=settings.anthropic_model_principal,
@@ -196,6 +262,11 @@ async def procesar_turno(
         cache_write_tokens=tokens_cache_write,
         cache_read_tokens=tokens_cache_read,
     )
+
+    # 9bis. Registrar frases munición usadas en esta respuesta (para anti-repetición futura)
+    nuevas_frases = extraer_frases_municion_usadas(response_text)
+    for frase in nuevas_frases:
+        estado.marcar_frase_usada(frase)
 
     # 11. Persistir respuesta del assistant
     await _persist_assistant_message(
@@ -213,6 +284,8 @@ async def procesar_turno(
     # 12. Persistir turn_log
     turn_number = await repo.count_turns(session_id)
     prompt_compuesto = "\n\n---\n\n".join(b.get("text", "") for b in system_blocks)
+    validators_passed = final_report.passed_map if final_report else {}
+    validators_failed = final_report.failed_map if final_report else {}
     await repo.insert_turn_log(
         session_id=session_id,
         turn_number=turn_number,
@@ -221,6 +294,9 @@ async def procesar_turno(
         prompt_compuesto=prompt_compuesto[:50000],  # cap por si acaso
         llm_response=response_text,
         final_response=response_text,
+        validators_passed=validators_passed,
+        validators_failed=validators_failed,
+        regenerations=regenerations,
         tokens_input=tokens_input,
         tokens_output=tokens_output,
         tokens_cached=tokens_cache_read,
@@ -240,6 +316,8 @@ async def procesar_turno(
             "turn_number": turn_number,
             "intent": intent_result.intent.value,
             "fase": estado.fase_journey.value,
+            "regenerations": regenerations,
+            "validators_failed": list(validators_failed.keys()) if validators_failed else [],
             "tokens_input": tokens_input,
             "tokens_output": tokens_output,
             "tokens_cache_read": tokens_cache_read,
