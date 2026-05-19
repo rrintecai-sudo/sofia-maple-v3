@@ -1,0 +1,8 @@
+nombre,aplica_para,hora_inicio,hora_fin,incluye_comida,incluye_snack,incluye_academia,costo_mensual,costo_por_dia,inscripcion_extra,notas
+completa,"maternal",07:00,19:00,true,true,false,2500,,,Exclusiva para Maternal. Sin academias porque los niños son muy pequeños.
+manana,"kinder,primaria_baja,primaria_alta,secundaria",07:00,,false,false,false,550,,,De 7:00 a horario de entrada del nivel. Sin alimentos.
+media,"kinder,primaria_baja,primaria_alta,secundaria",07:00,15:30,true,false,false,1400,,,Incluye comida hasta las 3:30.
+after_school,"kinder,primaria_baja,primaria_alta,secundaria",07:00,19:00,true,true,true,3100,,,Incluye 1 academia. A partir de 1° de Kinder.
+academias,"kinder,primaria_baja,primaria_alta,secundaria",,,true,false,false,630,,,Comida los días de la academia. Salida coincide con fin de academia. A partir de 1° de Kinder.
+academia_individual,"kinder,primaria_baja,primaria_alta,secundaria",,,false,false,false,1000,,1000,Mensualidad por academia + inscripción única de $1000.
+express,"kinder,primaria_baja,primaria_alta,secundaria",07:00,19:00,true,false,false,,210,,Por día. Se solicita en recepción.

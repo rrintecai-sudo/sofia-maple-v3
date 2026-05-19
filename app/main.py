@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from app import __version__
 from app.adapters.postgres_client import get_postgres
 from app.adapters.redis_client import get_redis
+from app.api.admin import router as admin_router
 from app.api.health import router as health_router
 from app.api.webhook_telegram import router as webhook_telegram_router
 from app.api.webhook_web import router as webhook_web_router
@@ -76,6 +77,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(webhook_web_router)
     app.include_router(webhook_telegram_router)
+    app.include_router(admin_router)
 
     # Static files para el Web Chat
     if WEB_STATIC_DIR.exists():

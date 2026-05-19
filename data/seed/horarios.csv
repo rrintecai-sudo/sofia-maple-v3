@@ -1,0 +1,9 @@
+nivel,modalidad,hora_inicio,hora_fin,dias,notas
+premater,regular,09:00,13:00,L-V,
+maternal,regular,09:00,13:00,L-V,Aplica a Cubs Baby / Baby / Infants / Toddlers
+kinder_1,regular,09:00,13:00,L-V,
+kinder_2,regular,09:00,14:00,L-V,
+kinder_3,regular,08:30,14:00,L-V,
+primaria_baja,regular,08:00,14:30,L-V,1° a 3° de Primaria
+primaria_alta,regular,07:50,14:45,L-V,4° a 6° de Primaria
+secundaria,regular,08:00,14:30,L-V,7° a 9° de Secundaria

@@ -27,6 +27,7 @@ from typing import Any
 from app.adapters.anthropic_client import get_anthropic
 from app.config import get_settings
 from app.core.intent_classifier import Intent, classify_intent
+from app.core.learning_mode import guardar_feedback
 from app.core.prompt_builder import build_system_blocks
 from app.core.repository import get_repository
 from app.core.state import (
@@ -147,6 +148,22 @@ async def procesar_turno(
             turn_number=await repo.count_turns(session_id),
             skip_persistencia=True,
         )
+
+    # Si estamos en Modo Aprendizaje, guardar mensaje como feedback pendiente.
+    # El LLM aún se llama (con prompt modo_aprendizaje) para generar un acuse
+    # estructurado, pero el cambio NO se aplica al prompt — solo se registra.
+    if estado.modo == Modo.APRENDIZAJE:
+        feedback_id = await guardar_feedback(
+            session_id=session_id,
+            feedback_text=mensaje,
+            contexto_anterior=await _ultimos_dos_turnos_resumen(repo, session_id),
+        )
+        log.info(
+            "modo_aprendizaje feedback registrado",
+            extra={"session_id": session_id, "feedback_id": feedback_id},
+        )
+        # Sigue al flujo normal de LLM (con prompt modo_aprendizaje activo) para
+        # que Sofía emita el "📝 REGISTRO DE APRENDIZAJE" estructurado.
 
     # 3. Extraer estado y clasificar intención en paralelo (auxiliares baratos)
     extraccion_task = asyncio.create_task(extraer_de_mensaje(mensaje, estado.estado_capturado))
@@ -344,6 +361,18 @@ async def procesar_turno(
 # ============================================================
 # Helpers
 # ============================================================
+
+
+async def _ultimos_dos_turnos_resumen(repo: Any, session_id: str) -> str | None:
+    """Devuelve los 2 últimos mensajes (user+assistant) como contexto del feedback."""
+    try:
+        rows = await repo.list_recent_messages(session_id, limit=2)
+    except Exception:
+        return None
+    if not rows:
+        return None
+    parts = [f"[{r.get('role')}] {r.get('content', '')[:300]}" for r in rows]
+    return "\n".join(parts)
 
 
 async def _persist_user_message(repo: Any, estado: EstadoConversacion, mensaje: str) -> None:

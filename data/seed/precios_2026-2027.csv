@@ -1,0 +1,6 @@
+nivel,sub_nivel,inscripcion,colegiatura_mensual,seguro_escolar,seguro_orfandad,recursos_educativos,gastos_escolares,desayunos_snacks,talleres,cuota_graduacion,total_gastos_iniciales,num_colegiaturas,fecha_limite_pago,notas
+maternal,early_years,5000,4900,800,1100,4700,4300,6955,,1800,22805,11,2026-07-15,Cuota de graduación aplica solo para Toddlers
+kinder,preschool,10000,5250,800,1100,7300,4300,6955,,1800,30405,11,2026-07-15,Cuota de graduación aplica solo para 3° Kinder
+primaria_baja,1-3,10900,6100,800,1100,8800,4300,,,,25850,11,2026-07-15,
+primaria_alta,4-6,11300,6300,800,1100,9100,4300,,,1800,26550,11,2026-07-15,Cuota de graduación aplica solo para 6° Primaria
+secundaria,7-9,11900,6750,800,1100,9800,4400,,3000,1800,30950,11,2026-07-15,Cuota de graduación aplica solo para 9° Secundaria
