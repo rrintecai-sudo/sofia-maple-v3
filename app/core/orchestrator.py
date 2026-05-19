@@ -43,6 +43,7 @@ from app.core.validators import (
     run_all_validators,
 )
 from app.observability.costs import calculate_cost
+from app.tools.campus import get_campus_para_nivel
 
 log = logging.getLogger(__name__)
 
@@ -176,6 +177,21 @@ async def procesar_turno(
     # 5. Decidir fase del journey
     estado.fase_journey = _decidir_fase(estado, intent_result.intent, es_nueva)
 
+    # 5bis. Pre-fetch tools cuando el intent lo amerita.
+    # Por ahora solo campus — más tools (precios, horarios) se enganchan en
+    # iteraciones siguientes. Inyectamos resultado al prompt como contexto.
+    tools_data: dict[str, Any] = {}
+    if intent_result.intent == Intent.PREGUNTA_CAMPUS:
+        nivel_para_campus = _nivel_para_campus(estado)
+        if nivel_para_campus:
+            campus_res = await get_campus_para_nivel(nivel_para_campus)
+            if campus_res:
+                tools_data["campus"] = campus_res.resumen_corto()
+                log.info(
+                    "tool campus prefetch",
+                    extra={"nivel": nivel_para_campus, "campus": campus_res.nombre},
+                )
+
     # 6. Componer prompt
     system_blocks = build_system_blocks(estado)
 
@@ -184,8 +200,17 @@ async def procesar_turno(
     messages_llm = [
         {"role": _normalize_role(m["role"]), "content": m["content"]} for m in historial
     ]
-    # Agregar el mensaje actual
-    messages_llm.append({"role": "user", "content": mensaje})
+
+    # 7ter. Si llamamos tools, inyectamos su resultado al mensaje del usuario
+    # como hint para que el LLM lo use en la respuesta.
+    mensaje_para_llm = mensaje
+    if tools_data:
+        tool_hint_lines = ["[Información traída de tools al momento:]"]
+        for tool_name, data in tools_data.items():
+            tool_hint_lines.append(f"- {tool_name}: {data}")
+        mensaje_para_llm = f"{mensaje_para_llm}\n\n" + "\n".join(tool_hint_lines)
+
+    messages_llm.append({"role": "user", "content": mensaje_para_llm})
 
     # 8. Persistir mensaje del usuario (antes de la llamada LLM)
     await _persist_user_message(repo, estado, mensaje)
@@ -361,6 +386,37 @@ async def procesar_turno(
 # ============================================================
 # Helpers
 # ============================================================
+
+
+def _nivel_para_campus(estado: EstadoConversacion) -> str | None:
+    """Mapea el nivel buscado a la key usada en la tabla `campus.niveles`.
+
+    Campus 1 atiende `maternal`, `kinder`, `primaria_baja`.
+    Campus 2 atiende `primaria_alta`, `secundaria`.
+
+    Si el papá habla de "primaria" sin grado, asumimos primaria_baja (Campus 1).
+    Tabla seed-ada con `primaria_baja`, `primaria_alta`, etc.
+    """
+    capt = estado.estado_capturado
+    nivel = capt.nivel_buscado_actual
+    if nivel is None and capt.hijos:
+        nivel = capt.hijos[0].nivel
+    if nivel is None:
+        return None
+    nivel_val = nivel.value if hasattr(nivel, "value") else str(nivel)
+
+    # Mapear primaria genérica → primaria_baja como default seguro
+    if nivel_val == "primaria":
+        # Si tenemos edad, podemos distinguir: ≤9 → baja, ≥10 → alta
+        edad: int | None = None
+        for h in capt.hijos:
+            if h.edad is not None:
+                edad = h.edad
+                break
+        if edad is not None and edad >= 10:
+            return "primaria_alta"
+        return "primaria_baja"
+    return nivel_val
 
 
 async def _ultimos_dos_turnos_resumen(repo: Any, session_id: str) -> str | None:

@@ -10,6 +10,7 @@ from app.core.validators import (
     run_all_validators,
     validar_no_envio_fantasma,
     validar_no_evasion,
+    validar_no_markdown_excesivo,
     validar_no_pregunta_repetida,
     validar_no_repeticion,
 )
@@ -259,15 +260,87 @@ def test_evasion_pasa_horario_con_hora() -> None:
 # ============================================================
 
 
-def test_run_all_returns_4_results() -> None:
+def test_run_all_returns_5_results() -> None:
     estado = EstadoCapturado()
     report = run_all_validators(
         respuesta="Hola, ¿cómo te puedo ayudar?",
         estado=estado,
         intent=Intent.SALUDO_INICIAL,
     )
-    assert len(report.results) == 4
+    assert len(report.results) == 5
     assert report.all_passed is True
+
+
+# ============================================================
+# validar_no_markdown_excesivo (Bloque 5.5)
+# ============================================================
+
+
+def test_markdown_pasa_respuesta_natural() -> None:
+    r = validar_no_markdown_excesivo(
+        "¡Hola! Qué gusto saludarte. Cuéntame, ¿en qué etapa está tu hijo?"
+    )
+    assert r.passed is True
+
+
+def test_markdown_falla_con_headers() -> None:
+    r = validar_no_markdown_excesivo("# Costos\nLa colegiatura es de $6,100")
+    assert r.passed is False
+    assert "header" in (r.reason or "").lower()
+
+
+def test_markdown_falla_con_muchas_negritas() -> None:
+    txt = "**Primaria** es **especial**, con **PBL** y **CBL** y **disciplina positiva**"
+    r = validar_no_markdown_excesivo(txt)
+    assert r.passed is False
+    assert "negrita" in (r.reason or "").lower()
+
+
+def test_markdown_pasa_con_pocas_negritas() -> None:
+    r = validar_no_markdown_excesivo(
+        "La colegiatura es de **$6,100 al mes** y son **11 colegiaturas**."
+    )
+    assert r.passed is True  # 2 negritas, OK
+
+
+def test_markdown_falla_con_lista_densa() -> None:
+    txt = "Los niveles son:\n- Maternal\n- Kinder\n- Primaria baja\n- Primaria alta\n- Secundaria\n"
+    r = validar_no_markdown_excesivo(txt)
+    assert r.passed is False
+    assert "lista" in (r.reason or "").lower()
+
+
+def test_markdown_pasa_con_lista_corta() -> None:
+    txt = "Tenemos:\n- Maternal\n- Kinder\n- Primaria\n"
+    r = validar_no_markdown_excesivo(txt)
+    assert r.passed is True  # 3 bullets, OK
+
+
+def test_markdown_falla_con_lista_numerada_larga() -> None:
+    txt = (
+        "Pasos:\n"
+        "1. Pagar inscripción\n"
+        "2. Llenar ficha\n"
+        "3. Entregar documentos\n"
+        "4. Entrevista\n"
+        "5. Kid visit\n"
+    )
+    r = validar_no_markdown_excesivo(txt)
+    assert r.passed is False
+    assert "numerada" in (r.reason or "").lower()
+
+
+def test_markdown_pasa_con_lista_numerada_corta() -> None:
+    txt = "Dos opciones:\n1. Maternal\n2. Kinder"
+    r = validar_no_markdown_excesivo(txt)
+    assert r.passed is True
+
+
+def test_markdown_emoji_bullets_no_son_lista() -> None:
+    """✅, 📌, 🔹 NO son `-` o `*` — son emoji bullets que SÍ son OK en chat."""
+    txt = "✅ Maternal\n✅ Kinder\n✅ Primaria\n✅ Secundaria\n✅ Algo más"
+    r = validar_no_markdown_excesivo(txt)
+    assert r.passed is True
 
 
 def test_run_all_detecta_multiples_fallas() -> None:
@@ -327,5 +400,5 @@ def test_validation_report_maps_for_db() -> None:
     )
     passed = report.passed_map
     failed = report.failed_map
-    assert isinstance(passed, dict) and len(passed) == 4
+    assert isinstance(passed, dict) and len(passed) == 5
     assert "no_envio_fantasma" in failed

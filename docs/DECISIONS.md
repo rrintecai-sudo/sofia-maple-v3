@@ -85,3 +85,63 @@ Formato: `ADR-XXX — Título`, fecha, contexto, decisión, justificación, alte
 **Justificación:** CI ya corre ruff y mypy. El hook local es comodidad opcional.
 
 ---
+
+## ADR-009 — Bloque 5.5 cerrado: solo validator + campus tool. Prompts intactos. Varianza del juez documentada.
+
+**Fecha:** 2026-05-19
+**Contexto:** Bloque 5.5 pasó por 3 runs del golden test antes de cerrarse:
+- **Baseline** (pre-Bloque-5.5): 57.6% equiv/mejor, 1.1% crítica
+- **v1** (4 fixes simultáneos): 53.3% equiv/mejor (−4.3pp), 3.3% crítica (+2.2pp)
+- **v2** (revertido Fix 3 + Fix 2 ajustado): 44.6% equiv/mejor (−13pp), 5.4% crítica (+4.3pp)
+
+A pesar de que v2 reviertió el cambio más dañino (Fix 3), las métricas empeoraron. El análisis turno-por-turno reveló la causa:
+
+**Hallazgo crítico — varianza del juez Sonnet 4.6:**
+- Entre baseline y v2, **32 de 92 turnos (35%) cambiaron de categoría** (mejor↔peor↔equivalente↔crítica) aun cuando muchos turnos NO tenían cambio de código que pudiera afectarlos.
+- Las 5 mejoras de Fase 4 que en v1 dieron "mejor" (turnos 46, 51, 62, 65, 69 del session 34662236125), en v2 dieron "peor" — sin haber cambiado el código que las genera.
+- Esto implica una varianza del juez del orden de **±10-15pp en el % global con n=92**.
+
+**Conclusión:** Con esa varianza, el threshold ≥85% del Bloque 5 no es alcanzable midiendo deltas pequeños con un solo run de golden test. La métrica actual sirve para detectar regresiones grandes (Fix 3 inventando datos era detectable), pero no para validar mejoras incrementales.
+
+**Diagnóstico por fix (final):**
+- **Fix 3 (contexto en mensajes ≤10 chars)** — Causa de daño REAL. Hint con `nivel=`, `edad=`, `ya_pidió_costos` se interpretaba como hechos confirmados ante saludos iniciales. 3 regresiones + 1 crítica nuevas atribuibles directamente al código (no varianza). **REVERTIDO**.
+- **Fix 2 (push a cita + escenas observables en Fase 4)** — Señal mixta. Generó 7 mejoras en v1 (escenas más concretas) pero pivoteo agresivo en "Gracias"/correcciones. El ajuste quirúrgico de v2 (gate explícito) **diluyó la señal** sin sumar señal contraria detectable sobre el ruido. **REVERTIDO también** — el costo de mantener cambios cuyos beneficios no podemos medir es deuda invisible.
+- **Fix 1 (validator anti-markdown)** — No tocó prompts. No falló en 0/92 turnos a lo largo de v1+v2 (184 turnos totales). Defensivo, sin costo. **MANTENIDO**.
+- **Fix 4 (campus tool pre-fetch)** — No movió métricas pero agrega capacidad real (mapeo nivel→campus, llamada determinística a `get_campus_para_nivel`). **MANTENIDO**.
+
+**Decisión final:**
+1. Prompts (`journey/descubrimiento.md`, `journey/informacion.md`) vuelven al estado pre-Bloque-5.5 vía `git checkout HEAD --`.
+2. `validators.py` mantiene `validar_no_markdown_excesivo` + 9 tests.
+3. `orchestrator.py` mantiene `_nivel_para_campus` + pre-fetch en intent `PREGUNTA_CAMPUS` + 6 tests.
+4. No re-correr golden — sería gastar dinero en señal ruidosa.
+
+**Implicación para Bloque 5.6:** Replantear estrategia de evaluación antes de seguir iterando. Opciones a considerar:
+- **Multi-run averaging** (correr golden 3-5 veces, promediar) para reducir varianza del juez a ~±3-5pp. Costo: $1.65-$2.75 por iteración.
+- **Multi-judge ensemble** (Sonnet 4.6 + Opus 4.7 + Haiku 4.5 votando). Costo mayor pero menor varianza.
+- **Métricas determinísticas** complementarias: % de violaciones de validators, % de hallucination flags (afirmaciones sobre eventos inexistentes), longitud media, ratio de respuestas con bullets >2, etc. Estas son deterministas y baratas.
+- **Reducir scope del golden** a casos críticos seleccionados manualmente con criterios explícitos, no juicio subjetivo del LLM.
+
+Sin una métrica más estable, iterar prompts es contraproducente — el ruido va a enmascarar señal real.
+
+---
+
+## ADR-010 — Causas raíz reales detectadas por el juez Sonnet 4.6 (input para Bloque 5.6)
+
+**Fecha:** 2026-05-18
+**Contexto:** El análisis del golden test post-Fix 5.5 reveló que el 43% de "peor" en baseline NO se debe a los 4 patrones que atacamos inicialmente, sino a 4 causas raíz más profundas que requieren intervención distinta. Estas se documentan aquí como INPUT para Bloque 5.6 (a definir con Cecilia).
+
+**Las 4 causas raíz a atacar en Bloque 5.6:**
+
+1. **Tono transaccional / pitch de ventas con bullets** — En momentos íntimos o de cierre, Sofía suena a "estructura de lista comercial" en lugar de tono humano cálido. Ejemplos del juez: t68 ("pide aclaración con lista de opciones que fragmenta la conversación"), t71 ("suena más a pitch de ventas con estructura de lista"). **Hipótesis de fix:** ajustar prompt de identidad/voz para penalizar bullet-style en respuestas <80 palabras; añadir validator "tono-transaccional" que penalice ≥2 bullets en respuestas cortas.
+
+2. **Inventar datos no presentes** — Sofía afirma información que no está en la conversación: "vi tu link" cuando solo se compartió URL, "ya agendaste cita" cuando no existe, "Campus 2" cuando el contexto indica Campus 1, asume género o etapa del hijo. Ejemplos: t17 ("inventa una cita agendada que no existe"), t18 ("vi el link"), t15 ("Campus 2 sin contexto"), t26 (ignora contenido de imagen y responde como inicio). **Hipótesis de fix:** instrucción explícita "NO afirmes nada que no aparezca textualmente en la conversación; si no estás segura, pregunta" + validator "anti-invención" con detección heurística de afirmaciones sobre eventos pasados.
+
+3. **Perder el hilo cuando el papá corrige o cambia tema** — Cuando el papá da una corrección ("No preguntes X"), Sofía registra mal el aprendizaje, ignora la corrección, o pivota a otro tema. Ejemplos: t2, t5, t18, t36 (Modo Aprendizaje confunde el tema), t12 ("no preguntes si está en escuela" → Sofía sigue preguntando), t16 ("ignora completamente el contexto donde el papá dijo X"). **Hipótesis de fix:** prompt explícito "cuando el papá te corrige, refleja la corrección literal en tu respuesta antes de avanzar"; en Modo Aprendizaje, exigir que el tema registrado contenga al menos una palabra clave del mensaje del papá.
+
+4. **Información factual incorrecta** — Hay datos erróneos en el prompt o la KB. Ejemplo crítico confirmado: t48 dice "Infants 3 a 12 meses" cuando la realidad es 18 meses a 2 años. Probablemente hay más. **Hipótesis de fix:** auditoría página-por-página del prompt y de los seeds de tablas (precios, niveles, edades, campus) cotejado contra el documento oficial de Maple. No es trabajo de prompt engineering — es validación factual.
+
+**Decisión:** No atacar estas 4 causas en Bloque 5.5. Documentarlas aquí, esperar reunión con Cecilia (2026-05-19) para validar datos factuales antes de Bloque 5.6.
+
+**Justificación:** Atacar 4 causas raíz en paralelo sin validación de datos puede repetir el patrón de 5.5 (empeorar todo). Mejor: secuenciar — primero auditoría factual con Cecilia, luego prompt fixes guiados por cada categoría.
+
+---

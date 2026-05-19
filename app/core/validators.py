@@ -85,6 +85,12 @@ _NUMERO_RE = re.compile(
     r"\$?\s*\d[\d,.\s]*\d|\d+\s*(?:pesos|mxn|colegiatura|inscripción|al\s+mes|mensuales)",
     re.IGNORECASE,
 )
+
+# Patrones de markdown excesivo para WhatsApp/Telegram
+_MARKDOWN_HEADER_RE = re.compile(r"^\s{0,3}#{1,6}\s", re.MULTILINE)
+_MARKDOWN_BOLD_RE = re.compile(r"\*\*[^*\n]+?\*\*")
+_MARKDOWN_BULLET_RE = re.compile(r"^\s*[-•*]\s+\S", re.MULTILINE)
+_MARKDOWN_NUMBERED_RE = re.compile(r"^\s*\d+[.\)]\s+\S", re.MULTILINE)
 _DEJAME_CONFIRMAR_RE = re.compile(
     r"d[eé]jame\s+confirmar|consult(?:o|a)\s+(?:con\s+)?el\s+equipo|"
     r"te\s+respondo\s+a\s+la\s+brevedad|no\s+tengo\s+ese\s+dato",
@@ -276,6 +282,69 @@ def validar_no_pregunta_repetida(
     return ValidationResult(validator="no_pregunta_repetida", passed=True)
 
 
+def validar_no_markdown_excesivo(respuesta: str) -> ValidationResult:
+    """Falla si la respuesta usa markdown que se ve mal en WhatsApp/Telegram.
+
+    Reglas:
+    - Headers (#, ##, ###) → siempre prohibidos en chat.
+    - Más de 3 negritas `**...**` en una respuesta → estructura tipo documento.
+    - Más de 4 bullets `- ` o `* ` consecutivos → lista densa, no conversacional.
+    - Más de 3 ítems numerados `1. 2. 3.` → cuestionario, no conversación.
+
+    Pasa si la respuesta es conversacional, máximo con 1-2 negritas o bullets
+    cortos.
+    """
+    headers = _MARKDOWN_HEADER_RE.findall(respuesta)
+    if headers:
+        return ValidationResult(
+            validator="no_markdown_excesivo",
+            passed=False,
+            reason=f"Usa headers (#) que en chat se ven raros: {len(headers)} encontrados",
+            suggested_fix=(
+                "Eliminá todos los headers tipo `#`, `##`, `###`. "
+                "El chat es prosa natural, NO documento estructurado."
+            ),
+        )
+
+    bolds = _MARKDOWN_BOLD_RE.findall(respuesta)
+    if len(bolds) > 3:
+        return ValidationResult(
+            validator="no_markdown_excesivo",
+            passed=False,
+            reason=f"Demasiadas negritas: {len(bolds)} (máximo 3)",
+            suggested_fix=(
+                f"Tienes {len(bolds)} `**negritas**`. Reduce a máximo 2-3. "
+                "El énfasis excesivo se ve a venta agresiva."
+            ),
+        )
+
+    bullets = _MARKDOWN_BULLET_RE.findall(respuesta)
+    if len(bullets) > 4:
+        return ValidationResult(
+            validator="no_markdown_excesivo",
+            passed=False,
+            reason=f"Lista densa con {len(bullets)} bullets (máximo 4)",
+            suggested_fix=(
+                f"Tienes {len(bullets)} bullets con `-` o `*`. Reescribe como prosa: "
+                "1-2 oraciones conectadas. Bullets largos cansan al lector y se ven a manual."
+            ),
+        )
+
+    numbered = _MARKDOWN_NUMBERED_RE.findall(respuesta)
+    if len(numbered) > 3:
+        return ValidationResult(
+            validator="no_markdown_excesivo",
+            passed=False,
+            reason=f"Lista numerada con {len(numbered)} ítems (máximo 3)",
+            suggested_fix=(
+                "Las listas numeradas largas suenan a cuestionario. "
+                "Usa prosa natural o reduce a 2-3 ítems."
+            ),
+        )
+
+    return ValidationResult(validator="no_markdown_excesivo", passed=True)
+
+
 def validar_no_evasion(respuesta: str, intent: Intent | None) -> ValidationResult:
     """Falla si la pregunta era cerrada (costos/horarios) y la respuesta evade.
 
@@ -338,7 +407,7 @@ def run_all_validators(
     tools_called: list[str] | None = None,
     frases_usadas: list[str] | None = None,
 ) -> ValidationReport:
-    """Ejecuta los 4 validators secuencialmente y agrega resultados.
+    """Ejecuta todos los validators secuencialmente y agrega resultados.
 
     Es pura: no escribe DB, no llama APIs. Solo razona sobre el texto.
     """
@@ -347,6 +416,7 @@ def run_all_validators(
     report.results.append(validar_no_envio_fantasma(respuesta, tools_called))
     report.results.append(validar_no_pregunta_repetida(respuesta, estado))
     report.results.append(validar_no_evasion(respuesta, intent))
+    report.results.append(validar_no_markdown_excesivo(respuesta))
     return report
 
 
