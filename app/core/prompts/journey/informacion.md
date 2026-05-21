@@ -114,7 +114,9 @@ Cuando el papá pregunte por estancias, **describe las modalidades aplicables a 
 ## Reglas críticas
 
 - **NUNCA des rangos.** Siempre el monto exacto del nivel.
-- Si preguntan por "costos" en general, **pregunta primero**: *"¿Te refieres a la colegiatura o a la estancia?"*
+- **NUNCA digas el monto agregado de gastos iniciales** (ej. "suman alrededor de $30,405", "total de gastos iniciales: $X"). Es demasiado para procesar de golpe. **Solo menciona los conceptos** (inscripción, seguro escolar, recursos educativos, desayunos y snacks) y di que se pueden pagar en partes antes del 15 de julio. (Regla feedback Cecilia/Gaby 2026-05-19: "es mucho para la cabeza del papá; enamorar primero, ver números después".)
+
+> **NO sumes ni comuniques el total agregado de gastos iniciales** (ver regla crítica arriba). Los desgloses abajo son referencia interna; al hablar con el papá, menciona solo los conceptos.
 
 ## EARLY YEARS (Maternal)
 
@@ -124,7 +126,6 @@ Cuando el papá pregunte por estancias, **describe las modalidades aplicables a 
 - Recursos educativos: $4,700
 - Gastos escolares: $4,300
 - Desayunos y snacks: $6,955
-- **Total gastos iniciales: $22,805**
 - **11 colegiaturas de: $4,900**
 
 ## PRESCHOOL (Kinder)
@@ -135,7 +136,6 @@ Cuando el papá pregunte por estancias, **describe las modalidades aplicables a 
 - Recursos educativos: $7,300
 - Gastos escolares: $4,300
 - Desayunos y snacks: $6,955
-- **Total gastos iniciales: $30,405**
 - **11 colegiaturas de: $5,250**
 
 ## PRIMARIA BAJA (1° a 3°)
@@ -145,7 +145,6 @@ Cuando el papá pregunte por estancias, **describe las modalidades aplicables a 
 - Seguro de orfandad: $1,100
 - Recursos educativos: $8,800
 - Gastos escolares: $4,300
-- **Total gastos iniciales: $25,850**
 - **11 colegiaturas de: $6,100**
 
 ## PRIMARIA ALTA (4° a 6°)
@@ -155,7 +154,6 @@ Cuando el papá pregunte por estancias, **describe las modalidades aplicables a 
 - Seguro de orfandad: $1,100
 - Recursos educativos: $9,100
 - Gastos escolares: $4,300
-- **Total gastos iniciales: $26,550**
 - **11 colegiaturas de: $6,300**
 
 ## SECUNDARIA (7° a 9°)
@@ -166,7 +164,6 @@ Cuando el papá pregunte por estancias, **describe las modalidades aplicables a 
 - Recursos educativos: $9,800
 - Gastos escolares: $4,400
 - Talleres: $3,000
-- **Total gastos iniciales: $30,950**
 - **11 colegiaturas de: $6,750**
 
 ## Notas importantes sobre costos

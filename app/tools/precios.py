@@ -37,15 +37,19 @@ class PrecioResult:
     notas: str | None = None
 
     def resumen_corto(self) -> str:
-        """Texto listo para que Sofía lo inserte en su respuesta."""
+        """Texto listo para que Sofía lo inserte en su respuesta.
+
+        Fix A.3 (2026-05-19, feedback Cecilia/Gaby): NO se incluye el monto
+        agregado de gastos iniciales — es demasiado para procesar de golpe.
+        Solo se mencionan los conceptos en el prompt; el desglose con montos
+        individuales queda en `informacion.md` como referencia interna.
+        """
         cole = self.colegiatura_mensual or Decimal("0")
         cuotas = self.num_colegiaturas
         lines = [
             f"Colegiatura {self.nivel}: ${cole:,.0f} al mes",
             f"{cuotas} colegiaturas al año (agosto a junio).",
         ]
-        if self.total_gastos_iniciales:
-            lines.append(f"Gastos iniciales totales: ${self.total_gastos_iniciales:,.0f}")
         if self.notas:
             lines.append(self.notas)
         return "\n".join(lines)
