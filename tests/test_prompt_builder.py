@@ -208,11 +208,7 @@ def test_informacion_prompt_no_tiene_pregunta_automatica_costos_estancia() -> No
     info_md = load_prompt_file("journey/informacion.md").lower()
     # La frase robótica solo puede aparecer como ejemplo de qué NO hacer
     if "pregunta primero" in info_md:
-        # Si existe, debe estar después o cerca de "no uses"
-        idx_prohibicion = info_md.find("no uses la pregunta")
-        idx_frase = info_md.find("pregunta primero")
-        # Si hay una frase "pregunta primero" suelta antes de la prohibición,
-        # eso es un bug — la regla nueva la borró/reemplazó
-        assert idx_prohibicion != -1, (
+        # Si existe, debe haber una prohibición explícita cerca
+        assert "no uses la pregunta" in info_md, (
             "El prompt menciona 'pregunta primero' pero no la prohíbe explícitamente"
         )

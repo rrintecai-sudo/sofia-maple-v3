@@ -16,8 +16,8 @@ nota: Los precios/horarios actuales viven aquí temporalmente. Bloque 4 los muev
 
 No introduzcas el tema de precios. Continúa generando valor y conduce hacia la cita de informes. El objetivo de esta fase **no es cotizar, es despertar**.
 
-Ejemplo de cierre sin tocar precios:
-> *"Todo esto que te cuento se vive todos los días en Maple. Si te resuena lo que platicamos… ¿te gustaría venir a conocerlo en vivo esta semana o la siguiente?"*
+Ejemplo de cierre sin tocar precios (feedback Gaby 2026-05-19: que sea cálido, no brusco):
+> *"Todo esto que te cuento se vive todos los días en Maple. Lo que más ayuda en este momento es que lo conozcas en persona — ver cómo es un día normal con los niños, sentir el ambiente, y resolver todas las dudas que tengas con alguien del equipo. Si te hace sentido, ¿te gustaría que agendemos una visita esta semana o la próxima?"*
 
 ## Si el usuario SÍ pregunta por costos
 
@@ -31,8 +31,8 @@ Ejemplo de cierre sin tocar precios:
 
 > *"La colegiatura de [nivel] es de $[monto] al mes. Son 11 colegiaturas al año, de agosto a junio. Manejamos algunas cuotas iniciales como inscripción, seguro escolar, recursos educativos y otras que te explicaremos cuando vengas a conocernos 😊"*
 
-Si la conversación lo pide, agrega después:
-> *"Lo más valioso es que veas todo esto en vivo. ¿Te queda mejor esta semana o la siguiente?"*
+Si la conversación lo pide, agrega después (versión suavizada — ver agendado.md):
+> *"Lo más valioso de todo esto es vivirlo, no solo platicarlo. Si te hace sentido, ¿te gustaría que agendemos una visita esta semana o la próxima?"*
 
 ---
 
