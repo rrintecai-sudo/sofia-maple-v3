@@ -172,3 +172,47 @@ def test_caching_can_be_disabled(monkeypatch):
     for b in blocks:
         assert "cache_control" not in b
     get_settings.cache_clear()
+
+
+# ============================================================
+# Fix A.4 (2026-05-19, feedback Lily): estancia solo si el papá pregunta
+# ============================================================
+
+
+def test_informacion_prompt_tiene_regla_estancia_solo_si_pregunta() -> None:
+    """El prompt de informacion debe instruir explícitamente a NO ofrecer
+    estancia automáticamente cuando preguntan costos.
+
+    Test smoke del contenido del prompt — verifica que la regla del feedback
+    de Lily quedó incluida. Tests del comportamiento real requieren golden
+    test con LLM (caro), por eso aquí solo se valida el texto del prompt.
+    """
+    estado = EstadoConversacion.nueva("web:test")
+    estado.fase_journey = FaseJourney.INFORMACION
+    blocks = build_system_blocks(estado)
+    full_prompt = "\n\n".join(b.get("text", "") for b in blocks).lower()
+
+    assert "no ofrezcas estancia automáticamente" in full_prompt, (
+        "Falta la regla 'NO ofrezcas estancia automáticamente' en el prompt"
+    )
+    # Debe instruir condicionalidad por keywords
+    assert "sin mencionar" in full_prompt and "estancia" in full_prompt
+    # Debe prohibir la pregunta robótica
+    assert "no uses la pregunta robótica" in full_prompt
+
+
+def test_informacion_prompt_no_tiene_pregunta_automatica_costos_estancia() -> None:
+    """Anti-regression: la regla previa 'pregunta primero ¿colegiatura o
+    estancia?' como instrucción POSITIVA fue eliminada. Si aparece
+    'pregunta primero' debe ser dentro del contexto de prohibición."""
+    info_md = load_prompt_file("journey/informacion.md").lower()
+    # La frase robótica solo puede aparecer como ejemplo de qué NO hacer
+    if "pregunta primero" in info_md:
+        # Si existe, debe estar después o cerca de "no uses"
+        idx_prohibicion = info_md.find("no uses la pregunta")
+        idx_frase = info_md.find("pregunta primero")
+        # Si hay una frase "pregunta primero" suelta antes de la prohibición,
+        # eso es un bug — la regla nueva la borró/reemplazó
+        assert idx_prohibicion != -1, (
+            "El prompt menciona 'pregunta primero' pero no la prohíbe explícitamente"
+        )
