@@ -99,3 +99,72 @@ def test_aplicar_extraccion_diagnostico_no_sobrescribe() -> None:
     extr = ExtraccionTurno(nivel_buscado="primaria", diagnostico_hijo="otro")
     nuevo = aplicar_extraccion(actual, extr)
     assert nuevo.hijos[0].diagnostico == "autismo"
+
+
+# ============================================================
+# Fix B.1 (2026-05-19, reunión Maple): cantidad_hijos vs edad_hijo
+#
+# Bug: el extractor LLM confundía "tengo 4 hijos" con "tiene 4 años".
+# Tests usan _parse_extraction con JSON simulado — testean el schema
+# y que `cantidad_hijos` sea campo separado de `edad_hijo`.
+#
+# La calidad del prompt LLM (few-shot) se valida en golden tests
+# con conversación real cuando se redeploye.
+# ============================================================
+
+
+def test_extraccion_acepta_cantidad_hijos_separado() -> None:
+    """Schema permite cantidad_hijos sin tocar edad_hijo (bug B.1)."""
+    raw = '{"cantidad_hijos": 4, "edad_hijo": null}'
+    result = _parse_extraction(raw)
+    assert result.cantidad_hijos == 4
+    assert result.edad_hijo is None
+
+
+def test_extraccion_acepta_edad_hijo_sin_cantidad() -> None:
+    """'Mi hijo tiene 4 años' → edad_hijo=4, cantidad_hijos=null."""
+    raw = '{"cantidad_hijos": null, "edad_hijo": 4}'
+    result = _parse_extraction(raw)
+    assert result.cantidad_hijos is None
+    assert result.edad_hijo == 4
+
+
+def test_extraccion_ambiguo_ambos_null() -> None:
+    """Mensaje ambiguo '4' sin contexto → ambos null (Sofía pregunta)."""
+    raw = '{"cantidad_hijos": null, "edad_hijo": null}'
+    result = _parse_extraction(raw)
+    assert result.cantidad_hijos is None
+    assert result.edad_hijo is None
+
+
+def test_extraccion_cantidad_hijos_validacion_rango() -> None:
+    """cantidad_hijos debe estar en 0-10. Valor fuera de rango → fallback."""
+    raw = '{"cantidad_hijos": 50}'
+    result = _parse_extraction(raw)
+    # Pydantic rechaza → fallback a ExtraccionTurno() vacío
+    assert result.cantidad_hijos is None
+
+
+def test_aplicar_no_pone_cantidad_hijos_como_edad() -> None:
+    """`cantidad_hijos` NO se copia a edad del hijo — fix del bug raíz.
+
+    Si LLM extrae solo cantidad_hijos=4 (papá dijo 'tengo 4 hijos'),
+    el estado NO debe terminar con edad=4 en ningún hijo, y NO debe
+    crearse un HijoInfo solo por la cantidad.
+    """
+    actual = EstadoCapturado()
+    extr = ExtraccionTurno(cantidad_hijos=4)
+    nuevo = aplicar_extraccion(actual, extr)
+    # NO se crea hijo solo por cantidad (no hay otro dato de hijo)
+    assert len(nuevo.hijos) == 0
+    # Y obviamente ninguno tiene edad=4
+    assert all(h.edad != 4 for h in nuevo.hijos)
+
+
+def test_aplicar_edad_hijo_correcto_si_es_edad() -> None:
+    """Si el LLM mete edad_hijo=4 (papá dijo 'tiene 4 años'), sí se aplica."""
+    actual = EstadoCapturado()
+    extr = ExtraccionTurno(edad_hijo=4)
+    nuevo = aplicar_extraccion(actual, extr)
+    assert len(nuevo.hijos) == 1
+    assert nuevo.hijos[0].edad == 4

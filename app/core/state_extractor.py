@@ -30,6 +30,10 @@ class ExtraccionTurno(BaseModel):
     nivel_buscado: str | None = None  # 'maternal'|'kinder'|'primaria'|'secundaria'|None
     nombre_hijo: str | None = None
     edad_hijo: int | None = Field(default=None, ge=0, le=20)
+    # Fix B.1 (2026-05-19): campo separado para evitar que "tengo 4 hijos"
+    # se interprete como "edad_hijo=4". Si el papá dice una cantidad de hijos,
+    # va aquí; edad_hijo queda null hasta que se mencione "X años / añitos".
+    cantidad_hijos: int | None = Field(default=None, ge=0, le=10)
     grado_hijo: str | None = None
     escuela_actual: str | None = None
     diagnostico_hijo: str | None = None
@@ -51,7 +55,8 @@ Tu tarea: detectar datos NUEVOS que aparezcan en el mensaje. Si un dato ya está
 
 Reglas:
 - "nivel_buscado": SOLO uno de: maternal, kinder, primaria, secundaria. Mapea variantes naturales: "2do de primaria"→primaria, "primero kinder"→kinder, "preescolar"→kinder, "secu"→secundaria, "mater"→maternal.
-- "edad_hijo": número entero entre 0 y 20.
+- "edad_hijo": número entero entre 0 y 20 — SOLO cuando el papá habla explícitamente de **EDAD** (verbo "tener", palabras "años", "añitos", "meses", "cumplió"). Ver reglas de desambiguación abajo.
+- "cantidad_hijos": número entero entre 0 y 10 — SOLO cuando el papá menciona **CUÁNTOS HIJOS** tiene (no la edad). Ver reglas de desambiguación abajo.
 - "grado_hijo": tal como lo dijo el papá ("2do primaria", "1ro kinder", etc.).
 - "diagnostico_hijo": SOLO si el papá menciona explícitamente un diagnóstico (autismo, TDAH, etc.). Si no, null.
 - "miedos_nuevos": ej. "bullying", "que no aprenda", "falta de disciplina". Lista corta de etiquetas.
@@ -60,6 +65,55 @@ Reglas:
 - "pidio_costos": true SOLO si pregunta directamente por precio/costo/colegiatura.
 - "vive_fuera_saltillo": true si menciona que no vive en Saltillo o va a mudarse.
 - "quiere_agendar": true si pide cita, visita, conocer el colegio explícitamente.
+
+## Desambiguación CRÍTICA: cantidad de hijos vs edad del hijo
+
+Bug detectado en reunión Maple 2026-05-19: el papá decía "tengo cuatro hijos" y Sofía interpretaba que el hijo tenía 4 años. Reglas estrictas:
+
+**Va a `cantidad_hijos` (NO a `edad_hijo`):**
+- "tengo N hijos" / "somos N hijos" / "son N (hijos/niños)" / "tengo N niños/niñas"
+- "tengo dos niños y una niña" → cantidad_hijos=3
+- Cualquier frase donde el número se refiere al CONTEO de hijos, no a años.
+
+**Va a `edad_hijo` (NO a `cantidad_hijos`):**
+- "mi hijo tiene N años / añitos / meses"
+- "él tiene N años" / "ella tiene N"
+- "ya cumplió N" / "N años cumplidos"
+- "es de N años" / "tiene N"
+- Cualquier frase donde el número se refiere a la EDAD.
+
+**Ambiguo (deja ambos en null — Sofía preguntará):**
+- "N" solo, sin verbo ni contexto ("4", "cuatro").
+- "X niños" sin verbo de posesión ("muchos niños", "varios").
+
+## Ejemplos few-shot
+
+Mensaje: "tengo cuatro hijos"
+Output: {"cantidad_hijos": 4, "edad_hijo": null, ...}
+
+Mensaje: "somos 3 hijos en la familia"
+Output: {"cantidad_hijos": 3, "edad_hijo": null, ...}
+
+Mensaje: "tengo 2 niños y 1 niña"
+Output: {"cantidad_hijos": 3, "edad_hijo": null, ...}
+
+Mensaje: "mi hijo tiene 4 años"
+Output: {"cantidad_hijos": null, "edad_hijo": 4, ...}
+
+Mensaje: "él tiene 4 añitos"
+Output: {"cantidad_hijos": null, "edad_hijo": 4, ...}
+
+Mensaje: "ya cumplió 5"
+Output: {"cantidad_hijos": null, "edad_hijo": 5, ...}
+
+Mensaje: "es de 4 años"
+Output: {"cantidad_hijos": null, "edad_hijo": 4, ...}
+
+Mensaje: "4"
+Output: {"cantidad_hijos": null, "edad_hijo": null, ...}
+
+Mensaje: "cuatro"
+Output: {"cantidad_hijos": null, "edad_hijo": null, ...}
 
 Devuelve EXCLUSIVAMENTE JSON con la estructura de ExtraccionTurno.
 """
