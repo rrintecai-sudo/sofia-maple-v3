@@ -53,7 +53,9 @@ def client_con_admin_key(monkeypatch):
     get_settings.cache_clear()
 
 
-def _mock_get_appointment_endpoint(appointment_id: int, status: str = "pendiente"):
+def _mock_get_appointment_endpoint(
+    appointment_id: int, status: str = "pendiente", campus_id: int | None = 1
+):
     """Mock del endpoint GET /rest/v1/appointments?id=eq.{id}"""
     return respx.get("https://x.supabase.co/rest/v1/appointments").mock(
         return_value=httpx.Response(
@@ -66,9 +68,45 @@ def _mock_get_appointment_endpoint(appointment_id: int, status: str = "pendiente
                     "duracion_min": 60,
                     "status": status,
                     "notas": None,
+                    "campus_id": campus_id,
                 }
             ],
         )
+    )
+
+
+def _mock_get_campus_endpoint(campus_id: int = 1):
+    """Mock GET /rest/v1/campus?id=eq.<id>"""
+    if campus_id == 1:
+        row = {
+            "id": 1,
+            "nombre": "Campus 1",
+            "direccion": "José Figueroa Siller 156",
+            "colonia": "Doctores",
+            "ciudad": "Saltillo",
+            "estado": "Coahuila",
+            "pais": "México",
+            "niveles": ["maternal", "kinder_1", "kinder_2", "kinder_3"],
+            "notas": None,
+            "vigente": True,
+            "google_maps_url": "https://www.google.com/maps/search/?api=1&query=Jos%C3%A9+Figueroa+Siller+156",
+        }
+    else:
+        row = {
+            "id": 2,
+            "nombre": "Campus 2",
+            "direccion": "Blvd. V. Carranza 5064",
+            "colonia": "Doctores",
+            "ciudad": "Saltillo",
+            "estado": "Coahuila",
+            "pais": "México",
+            "niveles": ["primaria_6", "secundaria_1", "secundaria_2", "secundaria_3"],
+            "notas": None,
+            "vigente": True,
+            "google_maps_url": "https://www.google.com/maps/search/?api=1&query=Blvd.+V.+Carranza+5064",
+        }
+    return respx.get("https://x.supabase.co/rest/v1/campus").mock(
+        return_value=httpx.Response(200, json=[row])
     )
 
 
@@ -135,8 +173,9 @@ def test_reject_requiere_admin_key_si_configurada(client_con_admin_key: TestClie
 
 @respx.mock
 def test_approve_appointment_ok(client: TestClient) -> None:
-    _mock_get_appointment_endpoint(55, "pendiente")
+    _mock_get_appointment_endpoint(55, "pendiente", campus_id=1)
     _mock_get_lead_session()
+    _mock_get_campus_endpoint(1)
     respx.patch("https://x.supabase.co/rest/v1/appointments").mock(
         return_value=httpx.Response(204, text="")
     )
@@ -180,8 +219,9 @@ def test_approve_cita_ya_confirmada_devuelve_409(client: TestClient) -> None:
 
 @respx.mock
 def test_approve_con_approved_by_lo_pasa_a_metadata(client: TestClient) -> None:
-    _mock_get_appointment_endpoint(55, "pendiente")
+    _mock_get_appointment_endpoint(55, "pendiente", campus_id=1)
     _mock_get_lead_session()
+    _mock_get_campus_endpoint(1)
     respx.patch("https://x.supabase.co/rest/v1/appointments").mock(
         return_value=httpx.Response(204, text="")
     )
@@ -307,9 +347,11 @@ def test_reject_cita_ya_cancelada_devuelve_409(client: TestClient) -> None:
 @respx.mock
 def test_approve_dispatcher_recibe_session_id_y_texto(client: TestClient) -> None:
     """Verifica que el dispatcher recibe el session_id correcto + el mensaje
-    de confirmación que contiene la fecha humanizada."""
-    _mock_get_appointment_endpoint(55, "pendiente")
+    de confirmación que contiene fecha humanizada, dirección del campus y
+    link de Google Maps (Bloque C.2 PASO 4)."""
+    _mock_get_appointment_endpoint(55, "pendiente", campus_id=1)
     _mock_get_lead_session()
+    _mock_get_campus_endpoint(1)
     respx.patch("https://x.supabase.co/rest/v1/appointments").mock(
         return_value=httpx.Response(204, text="")
     )
@@ -333,5 +375,11 @@ def test_approve_dispatcher_recibe_session_id_y_texto(client: TestClient) -> Non
     assert len(sends) == 1
     sid, texto = sends[0]
     assert sid == "telegram:111"
-    assert "Confirmamos" in texto
-    assert "Maple" in texto
+    # Mensaje incluye nombre del papá (de _mock_get_lead_session → "Ana")
+    assert "Ana" in texto
+    assert "confirmamos" in texto.lower()
+    # Bloque C.2: dirección + link Maps incluidos
+    assert "Campus 1" in texto
+    assert "José Figueroa Siller 156" in texto
+    assert "Col. Doctores" in texto
+    assert "https://www.google.com/maps" in texto

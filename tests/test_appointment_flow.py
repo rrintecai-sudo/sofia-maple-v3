@@ -71,6 +71,52 @@ def _mock_extractor(
     monkeypatch.setattr("app.core.appointment_flow.extract_datetime", fake)
 
 
+def _mock_campus_endpoint(campus_id: int):
+    """Mock GET /rest/v1/campus?id=eq.<id> con la fila completa que usa el handler."""
+    if campus_id == 1:
+        row = {
+            "id": 1,
+            "nombre": "Campus 1",
+            "direccion": "José Figueroa Siller 156",
+            "colonia": "Doctores",
+            "ciudad": "Saltillo",
+            "estado": "Coahuila",
+            "pais": "México",
+            "niveles": [
+                "maternal", "kinder_1", "kinder_2", "kinder_3",
+                "primaria_1", "primaria_2", "primaria_3", "primaria_4", "primaria_5",
+            ],
+            "notas": None,
+            "vigente": True,
+            "google_maps_url": (
+                "https://www.google.com/maps/search/?api=1"
+                "&query=Jos%C3%A9+Figueroa+Siller+156%2C+Col.+Doctores%2C+Saltillo"
+            ),
+        }
+    else:
+        row = {
+            "id": 2,
+            "nombre": "Campus 2",
+            "direccion": "Blvd. V. Carranza 5064",
+            "colonia": "Doctores",
+            "ciudad": "Saltillo",
+            "estado": "Coahuila",
+            "pais": "México",
+            "niveles": [
+                "primaria_6", "secundaria_1", "secundaria_2", "secundaria_3",
+            ],
+            "notas": None,
+            "vigente": True,
+            "google_maps_url": (
+                "https://www.google.com/maps/search/?api=1"
+                "&query=Blvd.+V.+Carranza+5064%2C+Col.+Doctores%2C+Saltillo"
+            ),
+        }
+    return respx.get("https://x.supabase.co/rest/v1/campus").mock(
+        return_value=httpx.Response(200, json=[row])
+    )
+
+
 # ============================================================
 # Caso 1 — extractor no encuentra fecha → hint pide aclaración
 # ============================================================
@@ -301,6 +347,9 @@ async def test_handler_flujo_feliz_e2e(monkeypatch, caplog) -> None:
     respx.post("https://x.supabase.co/rest/v1/activity_events").mock(
         return_value=httpx.Response(201, json=[{"id": 1}])
     )
+    # C.2 PASO 5: el handler resuelve campus (Kinder → Campus 1) y consulta
+    # la fila completa para incluir dirección + Maps en el hint.
+    _mock_campus_endpoint(1)
 
     estado = _estado_base(nombre_papa="Ana", nivel=NivelEducativo.KINDER)
     now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)
@@ -318,6 +367,11 @@ async def test_handler_flujo_feliz_e2e(monkeypatch, caplog) -> None:
     assert "stage_advanced" in result.acciones
     assert "email_sent_to_lily" in result.acciones
     assert "PENDIENTE de aprobación" in result.hint_para_prompt
+    # C.2: campus resuelto + dirección + Maps incluidos en el hint
+    assert result.campus_id == 1
+    assert "Campus 1" in result.hint_para_prompt
+    assert "José Figueroa Siller 156" in result.hint_para_prompt
+    assert "https://www.google.com/maps" in result.hint_para_prompt
     # NO debe afirmar que ya está confirmada
     assert "confirmada" not in result.hint_para_prompt.lower() or (
         "NO digas" in result.hint_para_prompt
@@ -381,6 +435,7 @@ async def test_handler_sin_lily_email_skip_destinatario(monkeypatch) -> None:
     respx.post("https://x.supabase.co/rest/v1/activity_events").mock(
         return_value=httpx.Response(201, json=[{"id": 1}])
     )
+    _mock_campus_endpoint(1)
 
     estado = _estado_base(nombre_papa="Ana", nivel=NivelEducativo.KINDER)
     now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)
@@ -409,3 +464,233 @@ async def test_handler_fecha_pasada(monkeypatch) -> None:
     result = await handle_appointment_intent("ayer", estado, settings=_settings(), now=now)
     assert "availability:fecha_pasada" in result.acciones
     assert "ya pasó" in result.hint_para_prompt
+
+
+# ============================================================
+# Bloque C.2 — Campus resuelto automáticamente desde el nivel del hijo
+# (NUNCA preguntado al papá) + mensaje incluye dirección + link Maps
+# ============================================================
+
+
+def _setup_happy_flow_mocks(*, lead_nivel: str, lead_child_age: int | None = None) -> None:
+    """Mocks comunes para los tests de campus: availability libre, appointments
+    vacíos, lead que avanza stage, campus fetch."""
+    respx.get("https://x.supabase.co/rest/v1/lily_availability").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "day_of_week": d,
+                    "start_time": "09:00:00",
+                    "end_time": "17:00:00",
+                    "slot_duration_minutes": 60,
+                    "active": True,
+                }
+                for d in (1, 2, 3, 4, 5)
+            ],
+        )
+    )
+    respx.get("https://x.supabase.co/rest/v1/appointments").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    respx.get("https://x.supabase.co/rest/v1/leads").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "id": 42,
+                    "parent_name": "Ana",
+                    "parent_phone": None,
+                    "parent_email": None,
+                    "child_name": "Luis",
+                    "child_age": lead_child_age,
+                    "nivel": lead_nivel,
+                    "channel": "telegram",
+                    "classification": None,
+                    "stage": "filtro_completado",
+                    "source": "sofia_ai",
+                    "conversation_session_id": "telegram:111",
+                    "notes": None,
+                }
+            ],
+        )
+    )
+    respx.patch("https://x.supabase.co/rest/v1/leads").mock(
+        return_value=httpx.Response(204, text="")
+    )
+    respx.post("https://x.supabase.co/rest/v1/appointments").mock(
+        return_value=httpx.Response(201, json=[{"id": 99}])
+    )
+    respx.post("https://x.supabase.co/rest/v1/activity_events").mock(
+        return_value=httpx.Response(201, json=[{"id": 1}])
+    )
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_campus_kinder_es_campus_1(monkeypatch) -> None:
+    """Papá pide cita para Kinder → cita queda con campus_id=1."""
+    _mock_extractor(monkeypatch, fecha="2026-05-26", hora="10:00")
+    _setup_happy_flow_mocks(lead_nivel="kinder", lead_child_age=5)
+    _mock_campus_endpoint(1)
+
+    estado = _estado_base(nombre_papa="Ana", nivel=NivelEducativo.KINDER)
+    now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)
+    result = await handle_appointment_intent(
+        "martes 10am", estado, settings=_settings(), now=now
+    )
+    assert result.campus_id == 1
+    assert "Campus 1" in result.hint_para_prompt
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_campus_secundaria_es_campus_2(monkeypatch) -> None:
+    """Papá pide cita para Secundaria → cita queda con campus_id=2."""
+    _mock_extractor(monkeypatch, fecha="2026-05-26", hora="10:00")
+    _setup_happy_flow_mocks(lead_nivel="secundaria", lead_child_age=13)
+    _mock_campus_endpoint(2)
+
+    estado = EstadoConversacion(
+        session_id="telegram:111",
+        canal=Canal.TELEGRAM,
+        identificador="111",
+        estado_capturado=EstadoCapturado(
+            nombre_papa="Ana",
+            nivel_buscado_actual=NivelEducativo.SECUNDARIA,
+            hijos=[HijoInfo(edad=13, nivel=NivelEducativo.SECUNDARIA)],
+        ),
+    )
+    now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)
+    result = await handle_appointment_intent(
+        "martes 10am", estado, settings=_settings(), now=now
+    )
+    assert result.campus_id == 2
+    assert "Campus 2" in result.hint_para_prompt
+    assert "Blvd. V. Carranza 5064" in result.hint_para_prompt
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_campus_primaria_quinto_es_campus_1(monkeypatch) -> None:
+    """Primaria 5° → Campus 1 (edad 10)."""
+    _mock_extractor(monkeypatch, fecha="2026-05-26", hora="10:00")
+    _setup_happy_flow_mocks(lead_nivel="primaria", lead_child_age=10)
+    _mock_campus_endpoint(1)
+
+    estado = EstadoConversacion(
+        session_id="telegram:111",
+        canal=Canal.TELEGRAM,
+        identificador="111",
+        estado_capturado=EstadoCapturado(
+            nombre_papa="Ana",
+            nivel_buscado_actual=NivelEducativo.PRIMARIA,
+            hijos=[HijoInfo(edad=10, nivel=NivelEducativo.PRIMARIA, grado="5to primaria")],
+        ),
+    )
+    now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)
+    result = await handle_appointment_intent(
+        "martes 10am", estado, settings=_settings(), now=now
+    )
+    assert result.campus_id == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_campus_primaria_sexto_es_campus_2(monkeypatch) -> None:
+    """Primaria 6° → Campus 2 (caso crítico: cambia de campus). El grado se
+    captura desde grado_texto del hijo."""
+    _mock_extractor(monkeypatch, fecha="2026-05-26", hora="10:00")
+    _setup_happy_flow_mocks(lead_nivel="primaria", lead_child_age=11)
+    _mock_campus_endpoint(2)
+
+    estado = EstadoConversacion(
+        session_id="telegram:111",
+        canal=Canal.TELEGRAM,
+        identificador="111",
+        estado_capturado=EstadoCapturado(
+            nombre_papa="Ana",
+            nivel_buscado_actual=NivelEducativo.PRIMARIA,
+            hijos=[HijoInfo(edad=11, nivel=NivelEducativo.PRIMARIA, grado="6to primaria")],
+        ),
+    )
+    now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)
+    result = await handle_appointment_intent(
+        "martes 10am", estado, settings=_settings(), now=now
+    )
+    assert result.campus_id == 2
+    assert "Campus 2" in result.hint_para_prompt
+    # Bloque C.2: dirección y Maps incluidos en el hint
+    assert "Blvd. V. Carranza 5064" in result.hint_para_prompt
+    assert "https://www.google.com/maps" in result.hint_para_prompt
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_campus_primaria_sin_grado_pide_grado(monkeypatch) -> None:
+    """Primaria sin edad ni grado → handler retorna 'missing_grado', NO crea
+    la cita ni resuelve campus."""
+    _mock_extractor(monkeypatch, fecha="2026-05-26", hora="10:00")
+    # Mocks de availability + lead (necesarios porque el handler corre todo
+    # hasta llegar al resolve campus)
+    respx.get("https://x.supabase.co/rest/v1/lily_availability").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "day_of_week": d,
+                    "start_time": "09:00:00",
+                    "end_time": "17:00:00",
+                    "slot_duration_minutes": 60,
+                    "active": True,
+                }
+                for d in (1, 2, 3, 4, 5)
+            ],
+        )
+    )
+    respx.get("https://x.supabase.co/rest/v1/appointments").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    respx.get("https://x.supabase.co/rest/v1/leads").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "id": 42,
+                    "parent_name": "Ana",
+                    "parent_phone": None,
+                    "parent_email": None,
+                    "child_name": None,
+                    "child_age": None,
+                    "nivel": "primaria",
+                    "channel": "telegram",
+                    "classification": None,
+                    "stage": "filtro_completado",
+                    "source": "sofia_ai",
+                    "conversation_session_id": "telegram:111",
+                    "notes": None,
+                }
+            ],
+        )
+    )
+    respx.patch("https://x.supabase.co/rest/v1/leads").mock(
+        return_value=httpx.Response(204, text="")
+    )
+
+    estado = EstadoConversacion(
+        session_id="telegram:111",
+        canal=Canal.TELEGRAM,
+        identificador="111",
+        estado_capturado=EstadoCapturado(
+            nombre_papa="Ana",
+            nivel_buscado_actual=NivelEducativo.PRIMARIA,
+            hijos=[HijoInfo(nivel=NivelEducativo.PRIMARIA)],  # sin edad ni grado
+        ),
+    )
+    now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)
+    result = await handle_appointment_intent(
+        "martes 10am", estado, settings=_settings(), now=now
+    )
+    assert "missing_grado" in result.acciones
+    assert result.appointment_id is None
+    assert "grado" in result.hint_para_prompt.lower()

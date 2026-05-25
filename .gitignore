@@ -25,6 +25,7 @@ ENV/
 *.secret
 credentials.local.md
 credentials*.md
+docs/INFRA_CREDENTIALS.md
 
 # uv
 .uv-cache/

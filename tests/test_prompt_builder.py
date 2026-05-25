@@ -130,6 +130,42 @@ def test_agendado_prompt_prohibe_te_confirmo_sin_aprobacion() -> None:
     assert "pendiente" in full_low
 
 
+# ============================================================
+# Bloque C.2 — prompt prohíbe preguntar campus + manda mencionar el campus
+# asignado por el sistema. Regla Lily 2026-05-24.
+# ============================================================
+
+
+def test_agendado_prompt_prohibe_preguntar_campus() -> None:
+    """El prompt debe prohibir preguntar al papá qué campus prefiere."""
+    estado = EstadoConversacion.nueva("web:c2-1")
+    estado.fase_journey = FaseJourney.AGENDADO
+    blocks = build_system_blocks(estado)
+    full = "\n".join(b["text"] for b in blocks)
+    full_low = full.lower()
+    # Frases prohibidas mencionadas en el prompt
+    assert "campus" in full_low
+    # El sistema asigna, NO pregunta
+    assert "nunca preguntes" in full_low or "se asigna" in full_low or "se resuelve" in full_low
+
+
+def test_agendado_prompt_documenta_regla_lily() -> None:
+    """El prompt enumera explícitamente la regla Campus 1 / Campus 2 por nivel."""
+    estado = EstadoConversacion.nueva("web:c2-2")
+    estado.fase_journey = FaseJourney.AGENDADO
+    blocks = build_system_blocks(estado)
+    full = "\n".join(b["text"] for b in blocks)
+    # Campus 1 cubre Maternal/Kinder/Primaria 1-5
+    assert "Campus 1" in full
+    assert "Maternal" in full
+    assert "Kinder" in full
+    assert "Primaria 1°" in full or "Primaria 1-5" in full or "Primaria 1°-5°" in full
+    # Campus 2 cubre Primaria 6° + Secundaria
+    assert "Campus 2" in full
+    assert "Primaria 6°" in full or "6° Primaria" in full or "Primaria 6" in full
+    assert "Secundaria" in full
+
+
 def test_build_blocks_modo_aprendizaje() -> None:
     """Modo aprendizaje → carga el archivo extra."""
     estado = EstadoConversacion.nueva("web:test4")

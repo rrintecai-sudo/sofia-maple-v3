@@ -38,6 +38,7 @@ from app.integrations.leads import (
     get_lead_by_session,
     update_lead,
 )
+from app.tools.campus import CampusResult, get_campus_by_id
 
 log = logging.getLogger(__name__)
 
@@ -183,13 +184,35 @@ async def approve_appointment(
         metadata=actor_id_metadata,
     )
 
-    # Mensaje al papá
+    # Resolver campus (de la cita si lo tiene; si no, del lead.nivel)
+    campus: CampusResult | None = None
+    if appt.campus_id is not None:
+        campus = await get_campus_by_id(appt.campus_id)
+
+    # Mensaje al papá — incluye nombre, dirección y link Maps del campus
     message_sent: dict[str, Any] = {"sent": False, "channel": None}
     if session_id:
-        texto = (
-            f"¡Listo! Confirmamos tu visita para {fecha_humana}. "
-            f"Te esperamos en Maple Collège. Si necesitas reagendar, avísame por aquí."
+        nombre_papa = None
+        if session_id:
+            lead_msg = await get_lead_by_session(session_id)
+            if lead_msg:
+                nombre_papa = lead_msg.parent_name
+        saludo = f"¡Listo, {nombre_papa}!" if nombre_papa else "¡Listo!"
+        lineas = [
+            f"{saludo} Te confirmamos tu visita para {fecha_humana}",
+        ]
+        if campus:
+            lineas[-1] += f" en nuestro **{campus.nombre}**."
+            lineas.append(f"📍 {campus.direccion_legible()}")
+            if campus.google_maps_url:
+                lineas.append(f"🗺️ {campus.google_maps_url}")
+        else:
+            lineas[-1] += "."
+        lineas.append("")
+        lineas.append(
+            "Lily te recibirá personalmente. Si necesitas reagendar, escríbeme y lo coordinamos."
         )
+        texto = "\n".join(lineas)
         message_sent = await send_message_to_session(session_id, texto)
 
     return {

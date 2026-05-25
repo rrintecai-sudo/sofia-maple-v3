@@ -27,6 +27,7 @@ from app.core.appointment_extractor import (
     AppointmentDateTime,
     extract_datetime,
 )
+from app.core.campus_resolver import resolve_campus_from_estado
 from app.core.state import EstadoConversacion
 from app.integrations.appointments import create_appointment
 from app.integrations.events import emit_event
@@ -38,6 +39,7 @@ from app.integrations.leads import (
 )
 from app.notifications.email import render_cita_pendiente_email, send_email
 from app.tools.availability_checker import AvailabilityResult, is_slot_available
+from app.tools.campus import CampusResult, get_campus_by_id
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +54,8 @@ class AppointmentHandlerResult:
     acciones: list[str] = field(default_factory=list)
     lead_id: int | None = None
     appointment_id: int | None = None
+    campus_id: int | None = None
+    campus: CampusResult | None = None
     appointment_datetime: AppointmentDateTime | None = None
     availability: AvailabilityResult | None = None
 
@@ -255,12 +259,31 @@ async def handle_appointment_intent(
             availability=avail,
         )
 
-    # 4. Crear la cita en pendiente
+    # 3bis. Resolver campus desde el nivel del hijo (NUNCA preguntar al papá)
+    campus_id = resolve_campus_from_estado(estado)
+    if campus_id is None:
+        # Caso ambiguo (típico: primaria sin grado). Pide grado antes de cerrar.
+        return AppointmentHandlerResult(
+            hint_para_prompt=(
+                f"[FLUJO AGENDADO — la fecha ({fecha_humana}) está disponible, "
+                "pero NO podemos asignar campus porque falta el grado del hijo "
+                "(Primaria 1°-5° va a Campus 1, Primaria 6° va a Campus 2). "
+                "Pregunta el grado exacto en UNA oración breve. NO inventes campus.]"
+            ),
+            acciones=["missing_grado"],
+            lead_id=lead_id,
+            appointment_datetime=appt_dt,
+            availability=avail,
+        )
+    campus = await get_campus_by_id(campus_id, settings=settings)
+
+    # 4. Crear la cita en pendiente (con campus_id resuelto)
     appointment_id = await create_appointment(
         lead_id=lead_id,
         fecha_hora=fecha_dt,
         duracion_min=60,
         notas=f"Solicitada por Sofía vía {estado.canal.value}. Mensaje del papá: {mensaje[:200]}",
+        campus_id=campus_id,
         settings=settings,
     )
     if appointment_id is None:
@@ -281,12 +304,16 @@ async def handle_appointment_intent(
         "sofia_appointment_scheduled",
         lead_id=lead_id,
         session_id=estado.session_id,
-        description=f"Sofía solicitó cita para {fecha_humana} (pendiente de aprobación)",
+        description=(
+            f"Sofía solicitó cita para {fecha_humana} en "
+            f"{campus.nombre if campus else f'campus_id={campus_id}'} (pendiente de aprobación)"
+        ),
         metadata={
             "appointment_id": appointment_id,
             "fecha_hora": fecha_dt.isoformat(),
             "canal": estado.canal.value,
             "status": "pendiente",
+            "campus_id": campus_id,
         },
         settings=settings,
     )
@@ -331,19 +358,37 @@ async def handle_appointment_intent(
         acciones.append("email_skipped_no_recipient")
 
     # 7. Hint final para que Sofía responda al papá
+    # El campus se ASIGNA aquí; el LLM debe MENCIONARLO pero NUNCA preguntar
+    # cuál campus prefiere.
+    campus_nombre = campus.nombre if campus else f"Campus {campus_id}"
+    direccion_legible = (
+        campus.direccion_legible() if campus else "dirección del campus"
+    )
+    maps_link = (campus.google_maps_url if campus else "") or ""
+    maps_line = f"🗺️ {maps_link}" if maps_link else ""
+
     hint = (
         f"[FLUJO AGENDADO — la cita quedó REGISTRADA como PENDIENTE de aprobación "
-        f"para {fecha_humana}. Tu respuesta DEBE: "
-        f"1) Confirmar que registraste su solicitud (NO digas que está 'confirmada'). "
-        f"2) Decir que en breve le avisamos por este mismo canal ({estado.canal.value}). "
-        f"3) Ser cálida y breve, 2-3 oraciones. "
-        f"NO inventes que ya está aprobada. La aprueba Lily desde la plataforma.]"
+        f"para {fecha_humana} en **{campus_nombre}** (asignado automáticamente por el "
+        f"nivel del hijo — NO preguntes ni ofrezcas elegir otro campus). "
+        f"Tu respuesta DEBE: "
+        f"1) Confirmar que registraste su solicitud (NO digas 'confirmada' ni 'confirmamos'). "
+        f"2) Mencionar el campus por nombre Y incluir la dirección y link de Maps EXACTOS "
+        f"que te paso debajo. "
+        f"3) Decir que en breve le avisamos por este mismo canal ({estado.canal.value}). "
+        f"4) Ser cálida y breve, 3-4 oraciones máximo.\n"
+        f"\n"
+        f"Datos del campus para incluir EXACTOS en tu respuesta (copia, NO reformules):\n"
+        f"📍 {direccion_legible}\n"
+        f"{maps_line}]"
     )
     return AppointmentHandlerResult(
         hint_para_prompt=hint,
         acciones=acciones,
         lead_id=lead_id,
         appointment_id=appointment_id,
+        campus_id=campus_id,
+        campus=campus,
         appointment_datetime=appt_dt,
         availability=avail,
     )

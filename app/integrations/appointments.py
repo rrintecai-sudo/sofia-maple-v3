@@ -33,6 +33,7 @@ class Appointment:
     duracion_min: int
     status: str
     notas: str | None
+    campus_id: int | None = None
 
 
 def _row_to_appointment(r: dict[str, Any]) -> Appointment:
@@ -49,6 +50,7 @@ def _row_to_appointment(r: dict[str, Any]) -> Appointment:
         duracion_min=int(r.get("duracion_min") or 60),
         status=r["status"],
         notas=r.get("notas"),
+        campus_id=int(r["campus_id"]) if r.get("campus_id") is not None else None,
     )
 
 
@@ -68,6 +70,7 @@ async def create_appointment(
     fecha_hora: datetime,
     duracion_min: int = 60,
     notas: str | None = None,
+    campus_id: int | None = None,
     settings: Settings | None = None,
 ) -> int | None:
     """Inserta cita con status='pendiente'. Devuelve el id o None si falla."""
@@ -83,6 +86,8 @@ async def create_appointment(
     }
     if notas:
         payload["notas"] = notas
+    if campus_id is not None:
+        payload["campus_id"] = campus_id
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
