@@ -184,3 +184,44 @@ def test_posts_con_misma_cookie_usan_mismo_session_id(client: TestClient) -> Non
 
     assert len(sids_capturados) == 2
     assert sids_capturados[0] == sids_capturados[1] == f"web:{sid}"
+
+
+# ============================================================
+# Fix B.3 (2026-05-22, feedback Lily): render correcto de markdown
+# en mensajes del assistant. Antes: solo *texto* WhatsApp; Sofía generaba
+# **texto** estándar que quedaba visible con asteriscos.
+# ============================================================
+
+
+def test_chat_js_soporta_markdown_bold_doble_asterisco() -> None:
+    """El JS servido en /static/chat.js debe convertir **texto** a <strong>."""
+    from pathlib import Path
+
+    chat_js = (
+        Path(__file__).resolve().parent.parent.parent / "web" / "static" / "chat.js"
+    ).read_text(encoding="utf-8")
+    # La regex de bold doble-asterisco debe estar presente
+    assert "\\*\\*([^*\\n]+?)\\*\\*" in chat_js, (
+        "El JS no contiene la regex de **bold** estándar Markdown"
+    )
+    # Y el reemplazo a <strong>
+    assert "<strong>$1</strong>" in chat_js
+    # La función formatBubble debe existir
+    assert "function formatBubble" in chat_js
+
+
+def test_chat_js_orden_bold_antes_italic() -> None:
+    """Crítico: **bold** debe procesarse ANTES de *italic*. Si italic va
+    primero, rompe la captura de bold."""
+    from pathlib import Path
+
+    chat_js = (
+        Path(__file__).resolve().parent.parent.parent / "web" / "static" / "chat.js"
+    ).read_text(encoding="utf-8")
+    idx_bold = chat_js.find("\\*\\*([^*\\n]+?)\\*\\*")
+    idx_italic_star = chat_js.find("(?<![*\\w])\\*(")
+    assert idx_bold != -1, "Falta regex de bold"
+    if idx_italic_star != -1:
+        assert idx_bold < idx_italic_star, (
+            "**bold** debe ir antes que *italic* en formatBubble"
+        )

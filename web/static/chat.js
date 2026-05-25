@@ -17,10 +17,20 @@ function escapeHTML(str) {
 }
 
 function formatBubble(text) {
-  // Soporta *negritas* tipo WhatsApp + saltos de línea
+  // Markdown ligero para mensajes del assistant. Bug fix B.3 (reunión Maple
+  // 19-may): Sofía genera **texto** estándar pero el frontend solo manejaba
+  // *texto* WhatsApp — quedaban asteriscos visibles. Ahora ambos funcionan.
+  //
+  // Orden importa: **bold** ANTES que *italic* para que la regex de italic
+  // (un solo asterisco) no rompa el match de bold.
   const escaped = escapeHTML(text);
   return escaped
-    .replace(/\*([^*\n]+)\*/g, "<strong>$1</strong>")
+    // **negrita** Markdown estándar (lo que Sofía genera)
+    .replace(/\*\*([^*\n]+?)\*\*/g, "<strong>$1</strong>")
+    // *italic* / _italic_ (lookbehind/lookahead para no chocar con palabras)
+    .replace(/(?<![*\w])\*([^*\n]+?)\*(?!\w)/g, "<em>$1</em>")
+    .replace(/(?<!\w)_([^_\n]+?)_(?!\w)/g, "<em>$1</em>")
+    // Saltos de línea
     .replace(/\n/g, "<br/>");
 }
 
