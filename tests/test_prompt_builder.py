@@ -286,3 +286,39 @@ def test_descubrimiento_alianza_obligatoria_antes_de_visita() -> None:
     assert "antes" in desc_md and "invitar" in desc_md
     # Y debe afirmar que no es opcional
     assert "no es opcional" in desc_md or "no opcional" in desc_md
+
+
+# ============================================================
+# Fix B.7 (2026-05-19, PDF Journey): precio con contexto, no plano
+# ============================================================
+
+
+def test_informacion_prompt_tiene_frase_contexto_precio() -> None:
+    """El prompt de costos debe instruir incluir una frase contextual
+    que dé sentido al precio — no respuesta transaccional."""
+    import re
+
+    info_raw = load_prompt_file("journey/informacion.md").lower()
+    info_md = re.sub(r"\*+", "", info_raw)
+
+    # Debe mencionar "frase de contexto" o "más allá del número"
+    assert "más allá del número" in info_md or "frase de contexto" in info_md, (
+        "Falta frase contextual sobre el precio (más allá del número)"
+    )
+    # Debe mencionar "sostener lo que aprende" (frase canónica del PDF)
+    assert "sostener lo que aprende" in info_md
+
+
+def test_informacion_prompt_pregunta_continuacion_no_cierre_brusco() -> None:
+    """El prompt debe instruir cerrar con pregunta de continuación, no
+    push directo a cita inmediatamente después del precio."""
+    import re
+
+    info_raw = load_prompt_file("journey/informacion.md").lower()
+    info_md = re.sub(r"\*+", "", info_raw)
+
+    assert "pregunta de continuación" in info_md
+    # Debe prohibir el push directo a cita post-precio
+    assert "nunca cierres con un push directo a cita" in info_md or (
+        "no cierres con un push" in info_md
+    )
