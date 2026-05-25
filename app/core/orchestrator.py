@@ -27,6 +27,10 @@ from typing import Any
 
 from app.adapters.anthropic_client import get_anthropic
 from app.config import get_settings
+from app.core.appointment_flow import (
+    AppointmentHandlerResult,
+    handle_appointment_intent,
+)
 from app.core.intent_classifier import (
     Intent,
     IntentResult,
@@ -224,6 +228,21 @@ async def procesar_turno(
                     extra={"nivel": nivel_para_campus, "campus": campus_res.nombre},
                 )
 
+    # 5quater. Handler de QUIERE_AGENDAR (Bloque C.1). Si el papá quiere
+    # agendar, intentamos extraer fecha/hora, verificar disponibilidad y
+    # (si todo cuadra) crear la cita en pendiente + notificar Lily. El
+    # resultado se inyecta como hint al user message del LLM para que Sofía
+    # responda con su tono.
+    appointment_handler: AppointmentHandlerResult | None = None
+    if intent_result.intent == Intent.QUIERE_AGENDAR:
+        try:
+            appointment_handler = await handle_appointment_intent(mensaje, estado)
+        except Exception as exc:  # resiliente: nunca rompemos el turno
+            log.warning(
+                "appointment_handler error",
+                extra={"session_id": session_id, "error": str(exc)},
+            )
+
     # 5ter. Pre-fetch niveles_por_edad cuando el papá pregunta por una etapa
     # específica (infants, baby, cubs, toddlers, preschool/kinder) o pide rangos
     # de edad. Ataca el bug "Sofía dice 'Infants 3-12 meses' en vez de 18m-2a".
@@ -294,6 +313,21 @@ async def procesar_turno(
         for tool_name, data in tools_data.items():
             tool_hint_lines.append(f"- {tool_name}: {data}")
         mensaje_para_llm = f"{mensaje_para_llm}\n\n" + "\n".join(tool_hint_lines)
+
+    # Hint del handler de agendado (Bloque C.1)
+    if appointment_handler is not None and appointment_handler.hint_para_prompt:
+        mensaje_para_llm = (
+            f"{mensaje_para_llm}\n\n{appointment_handler.hint_para_prompt}"
+        )
+        log.info(
+            "appointment_flow",
+            extra={
+                "session_id": session_id,
+                "acciones": appointment_handler.acciones,
+                "appointment_id": appointment_handler.appointment_id,
+                "lead_id": appointment_handler.lead_id,
+            },
+        )
 
     messages_llm.append({"role": "user", "content": mensaje_para_llm})
 
