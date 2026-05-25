@@ -204,9 +204,7 @@ def test_approve_con_approved_by_lo_pasa_a_metadata(client: TestClient) -> None:
         new_callable=AsyncMock,
         return_value={"sent": True, "channel": "telegram"},
     ):
-        resp = client.post(
-            "/api/appointments/55/approve", json={"approved_by": "lily@maple.mx"}
-        )
+        resp = client.post("/api/appointments/55/approve", json={"approved_by": "lily@maple.mx"})
     assert resp.status_code == 200
     assert captured_event["metadata"]["approved_by"] == "lily@maple.mx"
 

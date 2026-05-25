@@ -78,13 +78,20 @@ class RejectIn(BaseModel):
 def _formato_fecha_humana(dt: datetime) -> str:
     dias = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
     meses = [
-        "enero", "febrero", "marzo", "abril", "mayo", "junio",
-        "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+        "enero",
+        "febrero",
+        "marzo",
+        "abril",
+        "mayo",
+        "junio",
+        "julio",
+        "agosto",
+        "septiembre",
+        "octubre",
+        "noviembre",
+        "diciembre",
     ]
-    return (
-        f"{dias[dt.weekday()]} {dt.day} de {meses[dt.month - 1]}, "
-        f"{dt.hour:02d}:{dt.minute:02d}"
-    )
+    return f"{dias[dt.weekday()]} {dt.day} de {meses[dt.month - 1]}, {dt.hour:02d}:{dt.minute:02d}"
 
 
 async def _session_id_de_appointment(appointment_lead_id: int) -> str | None:
@@ -226,9 +233,8 @@ async def reject_appointment(
         fields: dict[str, Any] = {"fecha_hora": nueva_dt}
         # Nota de auditoría: que la fecha original quedó en una nota
         nota = (
-            (appt.notas or "")
-            + f"\n[Lily reagendó {appt.fecha_hora.isoformat()} → {nueva_dt.isoformat()}]"
-        )
+            appt.notas or ""
+        ) + f"\n[Lily reagendó {appt.fecha_hora.isoformat()} → {nueva_dt.isoformat()}]"
         if body.reason:
             nota += f" Motivo: {body.reason}"
         fields["notas"] = nota.strip()
@@ -274,9 +280,7 @@ async def reject_appointment(
         }
 
     # Caso B: rechazo simple → cancelada
-    notas_extra = (
-        (appt.notas or "") + f"\n[Lily canceló. Motivo: {body.reason or 'sin motivo'}]"
-    )
+    notas_extra = (appt.notas or "") + f"\n[Lily canceló. Motivo: {body.reason or 'sin motivo'}]"
     ok = await update_appointment(
         appointment_id,
         {"status": "cancelada", "notas": notas_extra.strip()},

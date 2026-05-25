@@ -37,8 +37,11 @@ def _settings() -> Settings:
 def _ventanas_lun_vie() -> list[LilyAvailabilityWindow]:
     return [
         LilyAvailabilityWindow(
-            day_of_week=d, start_time=time(9, 0), end_time=time(17, 0),
-            slot_duration_minutes=60, active=True,
+            day_of_week=d,
+            start_time=time(9, 0),
+            end_time=time(17, 0),
+            slot_duration_minutes=60,
+            active=True,
         )
         for d in (1, 2, 3, 4, 5)  # lun=1..vie=5 estilo PG
     ]
@@ -212,9 +215,7 @@ async def test_is_slot_available_ok() -> None:
 
     fecha_hora = datetime(2026, 5, 25, 10, 0, tzinfo=TZ_MONTERREY)  # lunes
     now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)  # antes
-    result = await is_slot_available(
-        fecha_hora, duracion_minutos=60, settings=_settings(), now=now
-    )
+    result = await is_slot_available(fecha_hora, duracion_minutos=60, settings=_settings(), now=now)
     assert result.available is True
     assert result.reason == "ok"
 

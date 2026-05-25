@@ -58,7 +58,9 @@ def _estado_base(
     )
 
 
-def _mock_extractor(monkeypatch, fecha: str | None, hora: str | None, confidence: float = 0.9) -> None:
+def _mock_extractor(
+    monkeypatch, fecha: str | None, hora: str | None, confidence: float = 0.9
+) -> None:
     """Reemplaza extract_datetime con un stub que devuelve los valores dados."""
 
     async def fake(mensaje: str, *, now=None):  # type: ignore[no-redef]
@@ -78,9 +80,7 @@ def _mock_extractor(monkeypatch, fecha: str | None, hora: str | None, confidence
 async def test_handler_sin_fecha_pide_aclaracion(monkeypatch) -> None:
     _mock_extractor(monkeypatch, fecha=None, hora=None, confidence=0.2)
     estado = _estado_base(nombre_papa="Ana", nivel=NivelEducativo.KINDER)
-    result = await handle_appointment_intent(
-        "quiero agendar", estado, settings=_settings()
-    )
+    result = await handle_appointment_intent("quiero agendar", estado, settings=_settings())
     assert isinstance(result, AppointmentHandlerResult)
     assert "extract_failed" in result.acciones
     assert "NO especificó fecha" in result.hint_para_prompt
@@ -96,9 +96,7 @@ async def test_handler_sin_fecha_pide_aclaracion(monkeypatch) -> None:
 async def test_handler_confidence_baja_pide_aclaracion(monkeypatch) -> None:
     _mock_extractor(monkeypatch, fecha="2026-05-26", hora="10:00", confidence=0.5)
     estado = _estado_base(nombre_papa="Ana", nivel=NivelEducativo.KINDER)
-    result = await handle_appointment_intent(
-        "tal vez el martes", estado, settings=_settings()
-    )
+    result = await handle_appointment_intent("tal vez el martes", estado, settings=_settings())
     assert "extract_failed" in result.acciones
 
 
@@ -128,9 +126,7 @@ async def test_handler_disponible_pero_sin_nombre_papa(monkeypatch) -> None:
     respx.get("https://x.supabase.co/rest/v1/appointments").mock(
         return_value=httpx.Response(200, json=[])
     )
-    respx.get("https://x.supabase.co/rest/v1/leads").mock(
-        return_value=httpx.Response(200, json=[])
-    )
+    respx.get("https://x.supabase.co/rest/v1/leads").mock(return_value=httpx.Response(200, json=[]))
 
     estado = _estado_base(nombre_papa=None, nivel=NivelEducativo.KINDER)
     now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)
@@ -410,8 +406,6 @@ async def test_handler_fecha_pasada(monkeypatch) -> None:
     # No mockeamos lily_availability porque availability_checker corta antes
     estado = _estado_base(nombre_papa="Ana", nivel=NivelEducativo.KINDER)
     now = datetime(2026, 5, 25, tzinfo=TZ_MONTERREY)
-    result = await handle_appointment_intent(
-        "ayer", estado, settings=_settings(), now=now
-    )
+    result = await handle_appointment_intent("ayer", estado, settings=_settings(), now=now)
     assert "availability:fecha_pasada" in result.acciones
     assert "ya pasó" in result.hint_para_prompt

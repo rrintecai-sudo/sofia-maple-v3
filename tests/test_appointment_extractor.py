@@ -123,9 +123,7 @@ def test_to_datetime_incompleto_devuelve_none() -> None:
 
 
 def test_to_datetime_formato_invalido() -> None:
-    appt = AppointmentDateTime(
-        fecha="2026/05/26", hora="10:00am", confidence=0.5, razonamiento="x"
-    )
+    appt = AppointmentDateTime(fecha="2026/05/26", hora="10:00am", confidence=0.5, razonamiento="x")
     assert appt.to_datetime() is None
 
 
@@ -209,9 +207,7 @@ async def test_extract_datetime_cualquier_dia_es_null(monkeypatch) -> None:
     monkeypatch.setattr(
         openai_client,
         "_singleton",
-        _StubOpenAI(
-            '{"fecha": null, "hora": null, "confidence": 0.2, "razonamiento": "ambiguo"}'
-        ),
+        _StubOpenAI('{"fecha": null, "hora": null, "confidence": 0.2, "razonamiento": "ambiguo"}'),
     )
     now = datetime(2026, 5, 25, tzinfo=TZ_MONTERREY)
     result = await extract_datetime("cualquier día", now=now)

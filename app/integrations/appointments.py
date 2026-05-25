@@ -144,7 +144,9 @@ async def update_appointment(
 
     payload = dict(fields)
     if "status" in payload and payload["status"] not in VALID_STATUSES:
-        log.warning("update_appointment status inválido (se omite)", extra={"status": payload["status"]})
+        log.warning(
+            "update_appointment status inválido (se omite)", extra={"status": payload["status"]}
+        )
         return False
     if "fecha_hora" in payload and isinstance(payload["fecha_hora"], datetime):
         payload["fecha_hora"] = payload["fecha_hora"].isoformat()

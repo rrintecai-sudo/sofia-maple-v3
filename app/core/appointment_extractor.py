@@ -100,7 +100,10 @@ def _parse_result(raw: str, fallback_razonamiento: str = "") -> AppointmentDateT
     except json.JSONDecodeError as exc:
         log.warning("appointment_extractor non-json", extra={"raw": raw[:200], "err": str(exc)})
         return AppointmentDateTime(
-            fecha=None, hora=None, confidence=0.0, razonamiento=fallback_razonamiento or "parse_error"
+            fecha=None,
+            hora=None,
+            confidence=0.0,
+            razonamiento=fallback_razonamiento or "parse_error",
         )
 
     fecha = data.get("fecha")
@@ -156,8 +159,6 @@ async def extract_datetime(
         raw = await openai.classify(text=mensaje, instructions=system_prompt)
     except Exception as exc:
         log.warning("appointment_extractor api error", extra={"error": str(exc)})
-        return AppointmentDateTime(
-            fecha=None, hora=None, confidence=0.0, razonamiento="api_error"
-        )
+        return AppointmentDateTime(fecha=None, hora=None, confidence=0.0, razonamiento="api_error")
 
     return _parse_result(raw)

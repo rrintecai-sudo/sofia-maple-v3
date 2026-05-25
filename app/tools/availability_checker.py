@@ -190,8 +190,12 @@ def _slot_dentro_de_horario(
     for w in windows:
         if w.day_of_week != dow or not w.active:
             continue
-        win_start = dt.replace(hour=w.start_time.hour, minute=w.start_time.minute, second=0, microsecond=0)
-        win_end = dt.replace(hour=w.end_time.hour, minute=w.end_time.minute, second=0, microsecond=0)
+        win_start = dt.replace(
+            hour=w.start_time.hour, minute=w.start_time.minute, second=0, microsecond=0
+        )
+        win_end = dt.replace(
+            hour=w.end_time.hour, minute=w.end_time.minute, second=0, microsecond=0
+        )
         if win_start <= dt and end_dt <= win_end:
             return True
     return False
@@ -339,9 +343,7 @@ async def is_slot_available(
             mensaje="Esa hora ya está ocupada.",
         )
 
-    return AvailabilityResult(
-        available=True, reason="ok", mensaje="Slot disponible."
-    )
+    return AvailabilityResult(available=True, reason="ok", mensaje="Slot disponible.")
 
 
 async def _proponer_alternativas(

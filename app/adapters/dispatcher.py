@@ -27,7 +27,9 @@ async def send_message_to_session(session_id: str, text: str) -> dict[str, Any]:
     try:
         canal, _identificador = parse_session_id(session_id)
     except ValueError as exc:
-        log.warning("dispatcher session_id_invalido", extra={"session_id": session_id, "error": str(exc)})
+        log.warning(
+            "dispatcher session_id_invalido", extra={"session_id": session_id, "error": str(exc)}
+        )
         return {"sent": False, "channel": "unknown", "detail": "session_id inválido"}
 
     if canal == "telegram":

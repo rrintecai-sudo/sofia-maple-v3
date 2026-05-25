@@ -316,9 +316,7 @@ async def procesar_turno(
 
     # Hint del handler de agendado (Bloque C.1)
     if appointment_handler is not None and appointment_handler.hint_para_prompt:
-        mensaje_para_llm = (
-            f"{mensaje_para_llm}\n\n{appointment_handler.hint_para_prompt}"
-        )
+        mensaje_para_llm = f"{mensaje_para_llm}\n\n{appointment_handler.hint_para_prompt}"
         log.info(
             "appointment_flow",
             extra={

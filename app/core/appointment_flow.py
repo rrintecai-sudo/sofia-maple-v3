@@ -65,13 +65,20 @@ def _formato_fecha_humana(dt: datetime) -> str:
     """Formato breve para mostrar al papá ('lunes 26 de mayo, 10:00')."""
     dias = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
     meses = [
-        "enero", "febrero", "marzo", "abril", "mayo", "junio",
-        "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+        "enero",
+        "febrero",
+        "marzo",
+        "abril",
+        "mayo",
+        "junio",
+        "julio",
+        "agosto",
+        "septiembre",
+        "octubre",
+        "noviembre",
+        "diciembre",
     ]
-    return (
-        f"{dias[dt.weekday()]} {dt.day} de {meses[dt.month - 1]}, "
-        f"{dt.hour:02d}:{dt.minute:02d}"
-    )
+    return f"{dias[dt.weekday()]} {dt.day} de {meses[dt.month - 1]}, {dt.hour:02d}:{dt.minute:02d}"
 
 
 def _formatear_alternativas(alts: list[datetime]) -> str:
@@ -107,9 +114,7 @@ def _primer_hijo(estado: EstadoConversacion) -> tuple[str | None, int | None]:
 # ============================================================
 
 
-async def _ensure_lead_para_cita(
-    estado: EstadoConversacion, *, settings: Settings
-) -> int | None:
+async def _ensure_lead_para_cita(estado: EstadoConversacion, *, settings: Settings) -> int | None:
     """Obtiene o crea el lead vinculado a esta sesión.
 
     Si el lead no existe pero tenemos `nombre_papa`, lo crea. Si no
@@ -197,9 +202,7 @@ async def handle_appointment_intent(
         )
 
     # 2. Verificar disponibilidad
-    avail = await is_slot_available(
-        fecha_dt, duracion_minutos=60, settings=settings, now=now
-    )
+    avail = await is_slot_available(fecha_dt, duracion_minutos=60, settings=settings, now=now)
     fecha_humana = _formato_fecha_humana(fecha_dt)
 
     if not avail.available:

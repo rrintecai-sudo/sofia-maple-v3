@@ -26,17 +26,21 @@ log = logging.getLogger(__name__)
 
 
 # Enums conocidos (espejo de los enums Postgres ya creados por Maple Platform).
-VALID_CHANNELS = frozenset({"whatsapp", "telegram", "web", "facebook", "instagram", "directo", "recomendado"})
+VALID_CHANNELS = frozenset(
+    {"whatsapp", "telegram", "web", "facebook", "instagram", "directo", "recomendado"}
+)
 VALID_NIVELES = frozenset({"maternal", "kinder", "primaria", "secundaria", "prepa"})
-VALID_STAGES = frozenset({
-    "contacto_inicial",
-    "filtro_completado",
-    "cita_agendada",
-    "visita_realizada",
-    "papeleria_entregada",
-    "proceso_iniciado",
-    "descartado",
-})
+VALID_STAGES = frozenset(
+    {
+        "contacto_inicial",
+        "filtro_completado",
+        "cita_agendada",
+        "visita_realizada",
+        "papeleria_entregada",
+        "proceso_iniciado",
+        "descartado",
+    }
+)
 
 
 @dataclass
@@ -82,9 +86,7 @@ def _auth_headers(settings: Settings, *, content_type: bool = False) -> dict[str
     return h
 
 
-async def get_lead_by_session(
-    session_id: str, *, settings: Settings | None = None
-) -> Lead | None:
+async def get_lead_by_session(session_id: str, *, settings: Settings | None = None) -> Lead | None:
     """Busca lead por `conversation_session_id`. Devuelve None si no existe
     o si Supabase falla."""
     settings = settings or get_settings()
@@ -105,7 +107,9 @@ async def get_lead_by_session(
         resp.raise_for_status()
         rows = resp.json()
     except Exception as exc:
-        log.warning("get_lead_by_session failed", extra={"error": str(exc), "session_id": session_id})
+        log.warning(
+            "get_lead_by_session failed", extra={"error": str(exc), "session_id": session_id}
+        )
         return None
 
     return _row_to_lead(rows[0]) if rows else None
@@ -158,7 +162,10 @@ async def create_lead(
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(
                 f"{settings.supabase_url}/rest/v1/leads",
-                headers={**_auth_headers(settings, content_type=True), "Prefer": "return=representation"},
+                headers={
+                    **_auth_headers(settings, content_type=True),
+                    "Prefer": "return=representation",
+                },
                 json=payload,
             )
     except Exception as exc:
@@ -217,7 +224,9 @@ async def update_lead(
         return False
 
     if resp.status_code >= 400:
-        log.warning("update_lead http_error", extra={"status": resp.status_code, "body": resp.text[:300]})
+        log.warning(
+            "update_lead http_error", extra={"status": resp.status_code, "body": resp.text[:300]}
+        )
         return False
     return True
 

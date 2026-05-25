@@ -52,9 +52,7 @@ def _settings() -> Settings:
 @pytest.mark.asyncio
 async def test_send_email_stub_loggea(caplog) -> None:
     caplog.set_level(logging.WARNING)
-    result = await send_email(
-        "lily@maple.mx", "Asunto X", "Body Y", settings=_settings()
-    )
+    result = await send_email("lily@maple.mx", "Asunto X", "Body Y", settings=_settings())
     assert isinstance(result, EmailPayload)
     assert result.delivered is False
     assert result.provider == "stub"
@@ -224,9 +222,7 @@ async def test_get_lead_by_session_existente() -> None:
 @pytest.mark.asyncio
 @respx.mock
 async def test_get_lead_by_session_no_existe() -> None:
-    respx.get("https://x.supabase.co/rest/v1/leads").mock(
-        return_value=httpx.Response(200, json=[])
-    )
+    respx.get("https://x.supabase.co/rest/v1/leads").mock(return_value=httpx.Response(200, json=[]))
     lead = await get_lead_by_session("telegram:999", settings=_settings())
     assert lead is None
 
@@ -289,9 +285,7 @@ async def test_update_lead_ok() -> None:
     respx.patch("https://x.supabase.co/rest/v1/leads").mock(
         return_value=httpx.Response(204, text="")
     )
-    ok = await update_lead(
-        7, {"parent_email": "ana@example.com"}, settings=_settings()
-    )
+    ok = await update_lead(7, {"parent_email": "ana@example.com"}, settings=_settings())
     assert ok is True
 
 
@@ -311,27 +305,21 @@ async def test_advance_stage_avanza_si_target_es_posterior() -> None:
     respx.patch("https://x.supabase.co/rest/v1/leads").mock(
         return_value=httpx.Response(204, text="")
     )
-    ok = await advance_stage_if_lower(
-        7, "contacto_inicial", "cita_agendada", settings=_settings()
-    )
+    ok = await advance_stage_if_lower(7, "contacto_inicial", "cita_agendada", settings=_settings())
     assert ok is True
 
 
 @pytest.mark.asyncio
 async def test_advance_stage_no_retrocede() -> None:
     """Si el lead ya está en visita_realizada, no se devuelve a cita_agendada."""
-    ok = await advance_stage_if_lower(
-        7, "visita_realizada", "cita_agendada", settings=_settings()
-    )
+    ok = await advance_stage_if_lower(7, "visita_realizada", "cita_agendada", settings=_settings())
     assert ok is False
 
 
 @pytest.mark.asyncio
 async def test_advance_stage_no_acepta_descartado() -> None:
     """Estados fuera del orden lineal (descartado) no se procesan."""
-    ok = await advance_stage_if_lower(
-        7, "descartado", "cita_agendada", settings=_settings()
-    )
+    ok = await advance_stage_if_lower(7, "descartado", "cita_agendada", settings=_settings())
     assert ok is False
 
 
