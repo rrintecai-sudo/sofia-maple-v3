@@ -66,6 +66,13 @@ class Settings(BaseSettings):
     alert_daily_cost_usd: float = 5.0
     alert_p95_latency_ms: int = 15000
 
+    # --- Notificaciones (Bloque C.1) ---
+    # Email de Lily para recibir aviso de cita pendiente. Si está vacío,
+    # el stub solo loggea (Maple Platform la verá igual en su dashboard
+    # vía activity_events).
+    lily_email: str = ""
+    appointment_approval_url: str = ""  # link a la cita en Maple Platform
+
     # --- Google Calendar ---
     google_calendar_id: str = "admisiones@maplesaltillo.com"
     google_oauth_client_id: str = ""
