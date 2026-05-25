@@ -212,3 +212,32 @@ def test_informacion_prompt_no_tiene_pregunta_automatica_costos_estancia() -> No
         assert "no uses la pregunta" in info_md, (
             "El prompt menciona 'pregunta primero' pero no la prohíbe explícitamente"
         )
+
+
+# ============================================================
+# Fix B.4 (2026-05-19, reunión Maple): longitud de respuestas en descubrimiento
+# ============================================================
+
+
+def test_descubrimiento_prompt_tiene_regla_longitud() -> None:
+    """El prompt de descubrimiento debe instruir máximo 4 párrafos en
+    explicaciones de método/filosofía/etapas."""
+    import re
+
+    desc_raw = load_prompt_file("journey/descubrimiento.md").lower()
+    # Normalizar removiendo asteriscos de markdown (** y *) para tests robustos
+    desc_md = re.sub(r"\*+", "", desc_raw)
+
+    assert "máximo 4 párrafos" in desc_md, (
+        "Falta la regla 'máximo 4 párrafos' en descubrimiento"
+    )
+    # Debe prohibir bullets en respuestas sobre filosofía/valores/hijo
+    assert "nunca uses bullets" in desc_md
+    assert "prosa fluida" in desc_md
+
+
+def test_descubrimiento_prompt_lista_excepciones_bullets() -> None:
+    """Los bullets están permitidos para horarios/costos/servicios/requisitos."""
+    desc_md = load_prompt_file("journey/descubrimiento.md").lower()
+    assert "horarios concretos" in desc_md
+    assert "costos detallados" in desc_md
