@@ -27,6 +27,7 @@ from pydantic import BaseModel
 
 from app.adapters.dispatcher import send_message_to_session
 from app.config import get_settings
+from app.core.appointment_extractor import TZ_MONTERREY
 from app.integrations.appointments import (
     get_appointment,
     update_appointment,
@@ -76,6 +77,10 @@ class RejectIn(BaseModel):
 
 
 def _formato_fecha_humana(dt: datetime) -> str:
+    # Supabase devuelve TIMESTAMPTZ con offset UTC; convertimos a Monterrey
+    # para mostrar la hora local que el papá entiende (UTC-6 estándar).
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(TZ_MONTERREY)
     dias = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
     meses = [
         "enero",
