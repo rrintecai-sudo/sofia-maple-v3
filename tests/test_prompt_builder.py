@@ -241,3 +241,48 @@ def test_descubrimiento_prompt_lista_excepciones_bullets() -> None:
     desc_md = load_prompt_file("journey/descubrimiento.md").lower()
     assert "horarios concretos" in desc_md
     assert "costos detallados" in desc_md
+
+
+# ============================================================
+# Fix B.6 (2026-05-19, PDF Journey Maple): micro-tensión + alianza
+# ============================================================
+
+
+def test_descubrimiento_prompt_tiene_micro_tension_con_ejemplos() -> None:
+    """El prompt debe tener sección MICRO-TENSIÓN con al menos 2 ejemplos."""
+    import re
+
+    desc_raw = load_prompt_file("journey/descubrimiento.md").lower()
+    desc_md = re.sub(r"\*+", "", desc_raw)
+
+    assert "micro-tensión" in desc_md or "micro tensión" in desc_md, (
+        "Falta sección MICRO-TENSIÓN en descubrimiento"
+    )
+    # Frases ejemplo del PDF Journey (al menos 2 deben aparecer)
+    ejemplos = [
+        "aprenden a cumplir",
+        "no necesariamente a sostener",
+        "cuando ya no hay maestro",
+        "obedecer puede funcionar bien",
+    ]
+    matches = sum(1 for e in ejemplos if e in desc_md)
+    assert matches >= 2, (
+        f"Sección de micro-tensión debe tener ≥2 ejemplos concretos. "
+        f"Matches encontrados: {matches}/{len(ejemplos)}"
+    )
+    # Regla: NO en el primer turno
+    assert "no en el primer turno" in desc_md
+
+
+def test_descubrimiento_alianza_obligatoria_antes_de_visita() -> None:
+    """La siembra de alianza debe estar marcada como obligatoria ANTES
+    de invitar a visita / cerrar tema modelo."""
+    import re
+
+    desc_raw = load_prompt_file("journey/descubrimiento.md").lower()
+    desc_md = re.sub(r"\*+", "", desc_raw)
+
+    # Debe haber referencia explícita a "antes de invitar" o "antes de cerrar"
+    assert "antes" in desc_md and "invitar" in desc_md
+    # Y debe afirmar que no es opcional
+    assert "no es opcional" in desc_md or "no opcional" in desc_md
