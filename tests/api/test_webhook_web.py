@@ -223,3 +223,66 @@ def test_chat_js_orden_bold_antes_italic() -> None:
     assert idx_bold != -1, "Falta regex de bold"
     if idx_italic_star != -1:
         assert idx_bold < idx_italic_star, "**bold** debe ir antes que *italic* en formatBubble"
+
+
+# ============================================================
+# Saludo estático del HTML — anti-regresión del Fix A.2
+# (commit ee58d2a cambió bienvenida.md; el HTML quedó desfasado hasta
+# este fix)
+# ============================================================
+
+
+def _chat_html_text() -> str:
+    from pathlib import Path
+
+    path = (
+        Path(__file__).resolve().parent.parent.parent / "web" / "templates" / "chat.html"
+    )
+    return path.read_text(encoding="utf-8")
+
+
+def test_chat_html_no_contiene_saludo_viejo() -> None:
+    """Fix A.2 (ee58d2a, 21-may): el saludo viejo '¿qué te trajo a
+    buscarnos?' fue eliminado del prompt. El HTML estático del web chat
+    debe seguir la misma línea — Gaby/Cecilia (19-may) reportaron la
+    frase como genérica y desconectada del descubrimiento.
+    """
+    html = _chat_html_text()
+    assert "qué te trajo a buscarnos" not in html.lower(), (
+        "regresión: el saludo viejo volvió al HTML estático"
+    )
+
+
+def test_chat_html_usa_saludo_nuevo_de_bienvenida_md() -> None:
+    """El primer mensaje del bot en el HTML debe matchear EXACTAMENTE la
+    apertura 'Primer contacto sin contexto' de
+    app/core/prompts/journey/bienvenida.md."""
+    from pathlib import Path
+
+    bienvenida = (
+        Path(__file__).resolve().parent.parent.parent
+        / "app"
+        / "core"
+        / "prompts"
+        / "journey"
+        / "bienvenida.md"
+    ).read_text(encoding="utf-8")
+
+    # Frase canónica extraída de bienvenida.md (sin emojis, sin negritas)
+    frase_canonica = (
+        "¡Hola! Qué gusto que nos escribas. Soy Sofía, del equipo de "
+        "admisiones de Maple Collège. Cuéntame, ¿para qué nivel te interesa "
+        "información?"
+    )
+    # Sanity: la frase canónica vive en bienvenida.md
+    assert frase_canonica in bienvenida, (
+        "bienvenida.md no contiene la frase canónica esperada; "
+        "revisar 'Primer contacto sin contexto'"
+    )
+
+    html = _chat_html_text()
+    assert frase_canonica in html, (
+        "El HTML estático debe contener la misma frase de bienvenida.md "
+        "para que el primer load no muestre un saludo distinto al que "
+        "Sofía generaría."
+    )
