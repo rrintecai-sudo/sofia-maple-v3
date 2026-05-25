@@ -222,6 +222,4 @@ def test_chat_js_orden_bold_antes_italic() -> None:
     idx_italic_star = chat_js.find("(?<![*\\w])\\*(")
     assert idx_bold != -1, "Falta regex de bold"
     if idx_italic_star != -1:
-        assert idx_bold < idx_italic_star, (
-            "**bold** debe ir antes que *italic* en formatBubble"
-        )
+        assert idx_bold < idx_italic_star, "**bold** debe ir antes que *italic* en formatBubble"

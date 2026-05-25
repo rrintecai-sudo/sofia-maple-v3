@@ -228,9 +228,7 @@ def test_descubrimiento_prompt_tiene_regla_longitud() -> None:
     # Normalizar removiendo asteriscos de markdown (** y *) para tests robustos
     desc_md = re.sub(r"\*+", "", desc_raw)
 
-    assert "máximo 4 párrafos" in desc_md, (
-        "Falta la regla 'máximo 4 párrafos' en descubrimiento"
-    )
+    assert "máximo 4 párrafos" in desc_md, "Falta la regla 'máximo 4 párrafos' en descubrimiento"
     # Debe prohibir bullets en respuestas sobre filosofía/valores/hijo
     assert "nunca uses bullets" in desc_md
     assert "prosa fluida" in desc_md
@@ -322,3 +320,33 @@ def test_informacion_prompt_pregunta_continuacion_no_cierre_brusco() -> None:
     assert "nunca cierres con un push directo a cita" in info_md or (
         "no cierres con un push" in info_md
     )
+
+
+# ============================================================
+# Fix B.5 (2026-05-19, PDF Cecilia En_blanco_26): regla Kinder ≠ PBL
+# ============================================================
+
+
+def test_rules_prompt_prohibe_pbl_en_kinder() -> None:
+    """Regla crítica del PDF: en Kinder NUNCA mencionar PBL / proyectos /
+    Challenge Based Learning."""
+    import re
+
+    rules_raw = load_prompt_file("rules.md").lower()
+    rules_md = re.sub(r"\*+", "", rules_raw)
+
+    # Debe haber sección "Kinder NO usa lenguaje de Primaria"
+    assert "kinder no usa lenguaje" in rules_md
+    # Debe prohibir explícitamente PBL / Challenge Based / proyectos
+    assert "pbl" in rules_md
+    assert "challenge based learning" in rules_md
+    # Y debe mencionar el lenguaje correcto para Kinder
+    assert "aprendizaje activo" in rules_md
+    assert "juego intencional" in rules_md
+
+
+def test_rules_prompt_cita_pdf_oficial_cecilia() -> None:
+    """La regla debe referenciar el PDF oficial de Cecilia."""
+    rules_md = load_prompt_file("rules.md").lower()
+    # Debe haber referencia al PDF como fuente de autoridad
+    assert "en blanco 26.pdf" in rules_md or "pdf oficial" in rules_md
