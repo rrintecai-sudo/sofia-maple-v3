@@ -65,7 +65,7 @@ Categorías disponibles:
 - pregunta_campus: dónde están, dirección, ubicación
 - pregunta_prepa: preparatoria, bachillerato
 - pregunta_general_maple: cualquier pregunta general sobre el colegio
-- quiere_agendar: quiero agendar, cita, visita, conocer el colegio
+- quiere_agendar: el papá expresa querer visitar/conocer el colegio o agendar/reagendar. Incluye ejemplos: "quiero agendar una visita", "sí quiero conocer Maple", "agenda para el martes", "puedo ir el lunes 10am", "cuándo puedo visitar", "me parece bien la visita", "agéndame", "podemos vernos el viernes", "cuándo podríamos pasar a verlos". NO uses esta categoría si el papá pregunta por **horarios escolares** del colegio (eso es pregunta_horario) ni por el **proceso de admisión** sin pedir cita (eso es pregunta_proceso_admision).
 - menciona_diagnostico: autismo, TDAH, diagnóstico, neurodivergente
 - objecion_caro: está caro, es mucho, no me alcanza
 - objecion_flexible: no hay disciplina, muy flexible, sin estructura

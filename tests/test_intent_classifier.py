@@ -270,3 +270,113 @@ async def test_guard_no_aplica_a_otros_intents(monkeypatch) -> None:
     monkeypatch.setattr(openai_client, "_singleton", FakeOpenAI())
     result = await classify_intent("cuánto cuesta", hay_turno_previo_assistant=True)
     assert result.intent == Intent.PREGUNTA_COSTOS  # sin override
+
+
+# ============================================================
+# QUIERE_AGENDAR — Bloque C.1 PASO 2
+# El intent ya existía; el system prompt fue reforzado con ejemplos
+# y disambiguación contra pregunta_horario / pregunta_proceso_admision.
+# ============================================================
+
+
+def test_system_prompt_contiene_ejemplos_canonicos_de_agendar() -> None:
+    """El system prompt enumera explícitamente los disparadores típicos
+    del PDF de Cecilia y de la reunión 19-may con Lily.
+    """
+    from app.core.intent_classifier import _SYSTEM_PROMPT
+
+    ejemplos_obligatorios = [
+        "quiero conocer Maple",
+        "agenda para el martes",
+        "puedo ir el lunes",
+        "cuándo puedo visitar",
+        "me parece bien la visita",
+    ]
+    prompt_low = _SYSTEM_PROMPT.lower()
+    faltantes = [e for e in ejemplos_obligatorios if e.lower() not in prompt_low]
+    assert not faltantes, f"system prompt sin ejemplos de agendar: {faltantes}"
+
+
+def test_system_prompt_disambigua_horario_y_proceso() -> None:
+    """El system prompt debe pedir explícitamente NO confundir agendar
+    con pregunta_horario o pregunta_proceso_admision."""
+    from app.core.intent_classifier import _SYSTEM_PROMPT
+
+    prompt_low = _SYSTEM_PROMPT.lower()
+    assert "pregunta_horario" in prompt_low
+    assert "pregunta_proceso_admision" in prompt_low
+
+
+class _StubOpenAI:
+    """OpenAI mock que devuelve siempre el intent que le pasen al init."""
+
+    settings = Settings(openai_api_key="sk-test")
+
+    def __init__(self, intent_value: str, confidence: float = 0.9) -> None:
+        self._intent = intent_value
+        self._confidence = confidence
+
+    def is_configured(self) -> bool:
+        return True
+
+    async def classify(self, text: str, instructions: str, model: str | None = None) -> str:
+        return f'{{"intent": "{self._intent}", "confidence": {self._confidence}}}'
+
+
+_AGENDAR_POSITIVOS = [
+    "sí quiero conocer Maple",
+    "agenda para el martes",
+    "puedo ir el lunes 10am",
+    "cuándo puedo visitar",
+    "me parece bien la visita",
+    "quiero agendar una cita",
+    "agéndame por favor",
+    "podemos vernos el viernes",
+    "cuándo podríamos pasar a verlos",
+    "me late, agendamos",
+]
+
+
+@pytest.mark.parametrize("mensaje", _AGENDAR_POSITIVOS)
+@pytest.mark.asyncio
+async def test_quiere_agendar_positivos_se_parsean(monkeypatch, mensaje: str) -> None:
+    """Plumbing: el classifier devuelve QUIERE_AGENDAR cuando el LLM lo
+    clasifica así. Cubre 10 mensajes típicos del PDF + reunión Lily."""
+    from app.adapters import openai_client
+
+    monkeypatch.setattr(openai_client, "_singleton", _StubOpenAI("quiere_agendar", 0.92))
+    result = await classify_intent(mensaje, hay_turno_previo_assistant=True)
+    assert result.intent == Intent.QUIERE_AGENDAR
+    assert result.confidence == 0.92
+
+
+_AGENDAR_NEGATIVOS = [
+    # (mensaje, intent_correcto)
+    ("a qué hora entran a clases?", "pregunta_horario"),
+    ("cuál es el horario escolar?", "pregunta_horario"),
+    ("a qué hora salen los niños?", "pregunta_horario"),
+    ("cómo es el proceso de admisión?", "pregunta_proceso_admision"),
+    ("qué papeles necesito para inscribir?", "pregunta_proceso_admision"),
+    ("cuánto cuesta?", "pregunta_costos"),
+    ("dónde están ubicados?", "pregunta_campus"),
+    ("qué método usan?", "pregunta_metodologia"),
+    ("tienen prepa?", "pregunta_prepa"),
+    ("gracias, hasta luego", "despedida"),
+]
+
+
+@pytest.mark.parametrize("mensaje,intent_esperado", _AGENDAR_NEGATIVOS)
+@pytest.mark.asyncio
+async def test_quiere_agendar_negativos_no_confunden(
+    monkeypatch, mensaje: str, intent_esperado: str
+) -> None:
+    """10 mensajes que NO son agendar deben quedarse en su intent natural.
+    Plumbing: si el LLM clasifica correctamente (lo emulamos), el resultado
+    no debe colarse a QUIERE_AGENDAR.
+    """
+    from app.adapters import openai_client
+
+    monkeypatch.setattr(openai_client, "_singleton", _StubOpenAI(intent_esperado, 0.88))
+    result = await classify_intent(mensaje, hay_turno_previo_assistant=True)
+    assert result.intent.value == intent_esperado
+    assert result.intent != Intent.QUIERE_AGENDAR
