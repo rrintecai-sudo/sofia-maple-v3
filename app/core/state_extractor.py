@@ -54,6 +54,7 @@ Recibes:
 Tu tarea: detectar datos NUEVOS que aparezcan en el mensaje. Si un dato ya está en el estado, NO lo repitas. Si no detectas nada nuevo en algún campo, déjalo como null o lista vacía.
 
 Reglas:
+- "nombre_papa": el nombre propio del papá/mamá cuando se presenta. Detecta patrones como: "Me llamo X", "Soy X", "Mi nombre es X", "Hola, soy X", "Habla X", o cuando firma con su nombre al final ("Saludos, X"). Toma SOLO el nombre y apellido(s) (NO incluyas titulos como "Sr.", "Sra.", "Dr."). Si el papá menciona el nombre del HIJO, eso va en "nombre_hijo", NO aquí. Ver ejemplos few-shot abajo.
 - "nivel_buscado": SOLO uno de: maternal, kinder, primaria, secundaria. Mapea variantes naturales: "2do de primaria"→primaria, "primero kinder"→kinder, "preescolar"→kinder, "secu"→secundaria, "mater"→maternal.
 - "edad_hijo": número entero entre 0 y 20 — SOLO cuando el papá habla explícitamente de **EDAD** (verbo "tener", palabras "años", "añitos", "meses", "cumplió"). Ver reglas de desambiguación abajo.
 - "cantidad_hijos": número entero entre 0 y 10 — SOLO cuando el papá menciona **CUÁNTOS HIJOS** tiene (no la edad). Ver reglas de desambiguación abajo.
@@ -114,6 +115,32 @@ Output: {"cantidad_hijos": null, "edad_hijo": null, ...}
 
 Mensaje: "cuatro"
 Output: {"cantidad_hijos": null, "edad_hijo": null, ...}
+
+## Ejemplos few-shot — nombre_papa
+
+Mensaje: "Me llamo Oscar Rodriguez"
+Output: {"nombre_papa": "Oscar Rodriguez", ...}
+
+Mensaje: "Soy Ana, busco info para mi hijo"
+Output: {"nombre_papa": "Ana", "quiere_agendar": false, ...}
+
+Mensaje: "Hola, soy Juan Carlos Pérez"
+Output: {"nombre_papa": "Juan Carlos Pérez", ...}
+
+Mensaje: "Mi nombre es Maria Elena"
+Output: {"nombre_papa": "Maria Elena", ...}
+
+Mensaje: "Me llamo Oscar Rodriguez, busco kinder para mi hijo de 5 años"
+Output: {"nombre_papa": "Oscar Rodriguez", "nivel_buscado": "kinder", "edad_hijo": 5, ...}
+
+Mensaje: "habla la mamá de Lucía"
+Output: {"nombre_papa": null, "nombre_hijo": "Lucía", ...}
+
+Mensaje: "mi hijo Diego está en 2do de primaria"
+Output: {"nombre_papa": null, "nombre_hijo": "Diego", "grado_hijo": "2do de primaria", "nivel_buscado": "primaria", ...}
+
+Mensaje: "Hola"
+Output: {"nombre_papa": null, ...}
 
 Devuelve EXCLUSIVAMENTE JSON con la estructura de ExtraccionTurno.
 """

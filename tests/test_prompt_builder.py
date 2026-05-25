@@ -96,6 +96,40 @@ def test_build_blocks_agendado_includes_post_agendado() -> None:
     assert "Anti-insistencia post-agendado" in full_text
 
 
+# ============================================================
+# Fix C.1.B — journey/agendado.md prioriza el hint del handler sobre la
+# plantilla canned "Listo, [nombre]. Te confirmo tu cita". Bug visto en
+# prod 2026-05-25: Sofía decía "Te confirmo tu cita" aún sin que el
+# handler hubiera creado la cita en BD.
+# ============================================================
+
+
+def test_agendado_prompt_prioriza_hint_del_flujo() -> None:
+    """En fase agendado, el prompt debe instruir al LLM a SEGUIR el hint
+    `[FLUJO AGENDADO ...]` como fuente de verdad."""
+    estado = EstadoConversacion.nueva("web:fixc1b")
+    estado.fase_journey = FaseJourney.AGENDADO
+    blocks = build_system_blocks(estado)
+    full = "\n".join(b["text"] for b in blocks)
+    # Regla crítica documentada
+    assert "FLUJO AGENDADO" in full
+    assert "fuente de verdad" in full.lower()
+
+
+def test_agendado_prompt_prohibe_te_confirmo_sin_aprobacion() -> None:
+    """El prompt debe enseñar que NO se diga 'te confirmo tu cita' cuando
+    la cita está pendiente de aprobación de Lily."""
+    estado = EstadoConversacion.nueva("web:fixc1b2")
+    estado.fase_journey = FaseJourney.AGENDADO
+    blocks = build_system_blocks(estado)
+    full = "\n".join(b["text"] for b in blocks)
+    full_low = full.lower()
+    # El prompt debe contener la prohibición explícita
+    assert "nunca digas" in full_low
+    assert "te confirmo tu cita" in full_low
+    assert "pendiente" in full_low
+
+
 def test_build_blocks_modo_aprendizaje() -> None:
     """Modo aprendizaje → carga el archivo extra."""
     estado = EstadoConversacion.nueva("web:test4")

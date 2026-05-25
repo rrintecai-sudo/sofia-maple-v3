@@ -168,3 +168,43 @@ def test_aplicar_edad_hijo_correcto_si_es_edad() -> None:
     nuevo = aplicar_extraccion(actual, extr)
     assert len(nuevo.hijos) == 1
     assert nuevo.hijos[0].edad == 4
+
+
+# ============================================================
+# Fix C.1.A — extractor debe capturar nombre_papa (faltaba regla + few-shot)
+# Bug detectado en prod 2026-05-25: papá dijo "Me llamo Oscar Rodriguez"
+# y nombre_papa quedó None → handler de agendado no pudo crear lead
+# (parent_name NOT NULL) → Sofía alucinó la confirmación.
+# ============================================================
+
+
+def test_system_prompt_documenta_nombre_papa() -> None:
+    """El system prompt enumera explícitamente nombre_papa en sus reglas y
+    contiene ejemplos few-shot."""
+    from app.core.state_extractor import _SYSTEM_PROMPT
+
+    prompt_low = _SYSTEM_PROMPT.lower()
+    # Regla
+    assert "nombre_papa" in _SYSTEM_PROMPT
+    # Patrones canónicos
+    for pat in ["me llamo", "soy ", "mi nombre es", "habla la mamá"]:
+        assert pat in prompt_low, f"few-shot patrón ausente: {pat!r}"
+    # Disambiguación contra nombre_hijo
+    assert "nombre del hijo" in prompt_low or "nombre_hijo" in _SYSTEM_PROMPT
+
+
+def test_parse_extraction_nombre_papa() -> None:
+    """Plumbing: si el LLM devuelve nombre_papa, el parser lo conserva."""
+    raw = '{"nombre_papa": "Oscar Rodriguez", "nivel_buscado": "kinder", "edad_hijo": 5}'
+    result = _parse_extraction(raw)
+    assert result.nombre_papa == "Oscar Rodriguez"
+    assert result.nivel_buscado == "kinder"
+    assert result.edad_hijo == 5
+
+
+def test_aplicar_extraccion_nombre_papa_nuevo() -> None:
+    """Si nombre_papa estaba None, se aplica el nuevo."""
+    actual = EstadoCapturado()
+    extr = ExtraccionTurno(nombre_papa="Oscar Rodriguez")
+    nuevo = aplicar_extraccion(actual, extr)
+    assert nuevo.nombre_papa == "Oscar Rodriguez"
