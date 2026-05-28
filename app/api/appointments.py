@@ -28,6 +28,7 @@ from pydantic import BaseModel
 from app.adapters.dispatcher import send_message_to_session
 from app.config import get_settings
 from app.core.appointment_extractor import TZ_MONTERREY
+from app.core.appointment_messages import render_confirmation_message
 from app.integrations.appointments import (
     get_appointment,
     update_appointment,
@@ -189,30 +190,20 @@ async def approve_appointment(
     if appt.campus_id is not None:
         campus = await get_campus_by_id(appt.campus_id)
 
-    # Mensaje al papá — incluye nombre, dirección y link Maps del campus
+    # Mensaje al papá — texto determinístico D.4 (Gaby 2026-05-27).
+    # Mismo formato (📅/🕐/📍/🗺️) que el de registro pero con copy de
+    # confirmación. NO depende del LLM.
     message_sent: dict[str, Any] = {"sent": False, "channel": None}
     if session_id:
         nombre_papa = None
-        if session_id:
-            lead_msg = await get_lead_by_session(session_id)
-            if lead_msg:
-                nombre_papa = lead_msg.parent_name
-        saludo = f"¡Listo, {nombre_papa}!" if nombre_papa else "¡Listo!"
-        lineas = [
-            f"{saludo} Te confirmamos tu visita para {fecha_humana}",
-        ]
-        if campus:
-            lineas[-1] += f" en nuestro **{campus.nombre}**."
-            lineas.append(f"📍 {campus.direccion_legible()}")
-            if campus.google_maps_url:
-                lineas.append(f"🗺️ {campus.google_maps_url}")
-        else:
-            lineas[-1] += "."
-        lineas.append("")
-        lineas.append(
-            "Lily te recibirá personalmente. Si necesitas reagendar, escríbeme y lo coordinamos."
+        lead_msg = await get_lead_by_session(session_id)
+        if lead_msg:
+            nombre_papa = lead_msg.parent_name
+        texto = render_confirmation_message(
+            fecha_hora=appt.fecha_hora,
+            campus=campus,
+            nombre_papa=nombre_papa,
         )
-        texto = "\n".join(lineas)
         message_sent = await send_message_to_session(session_id, texto)
 
     return {

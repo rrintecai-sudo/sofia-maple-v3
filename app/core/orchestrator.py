@@ -31,6 +31,7 @@ from app.core.appointment_flow import (
     AppointmentHandlerResult,
     handle_appointment_intent,
 )
+from app.core.appointment_messages import render_registration_message
 from app.core.intent_classifier import (
     Intent,
     IntentResult,
@@ -446,6 +447,36 @@ async def procesar_turno(
     for frase in nuevas_frases:
         estado.marcar_frase_usada(frase)
 
+    # 10. D.4 (Gaby 27-may): cuando el handler registró cita pendiente,
+    # reemplazamos la respuesta del LLM con el mensaje determinístico
+    # (texto oficial de Gaby) que incluye día+fecha, hora, campus, dirección
+    # y Maps. El LLM a veces omitía el link de Maps aún con el hint
+    # instruyéndolo copiar-pegar.
+    llm_response_original = response_text
+    if (
+        appointment_handler is not None
+        and appointment_handler.appointment_id is not None
+        and appointment_handler.appointment_datetime is not None
+    ):
+        fecha_dt = appointment_handler.appointment_datetime.to_datetime()
+        if fecha_dt is not None:
+            response_text = render_registration_message(
+                fecha_hora=fecha_dt,
+                campus=appointment_handler.campus,
+            )
+            log.info(
+                "appointment_registration_override",
+                extra={
+                    "session_id": session_id,
+                    "appointment_id": appointment_handler.appointment_id,
+                    "campus_id": appointment_handler.campus_id,
+                    "had_maps_url": bool(
+                        appointment_handler.campus
+                        and appointment_handler.campus.google_maps_url
+                    ),
+                },
+            )
+
     # 11. Persistir respuesta del assistant
     await _persist_assistant_message(
         repo,
@@ -470,7 +501,7 @@ async def procesar_turno(
         user_message=mensaje,
         intent=intent_result.intent.value,
         prompt_compuesto=prompt_compuesto[:50000],  # cap por si acaso
-        llm_response=response_text,
+        llm_response=llm_response_original,
         final_response=response_text,
         validators_passed=validators_passed,
         validators_failed=validators_failed,

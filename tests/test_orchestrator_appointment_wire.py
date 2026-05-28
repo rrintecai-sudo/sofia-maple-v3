@@ -197,3 +197,128 @@ async def test_orchestrator_resiliente_si_handler_falla(repo_mock) -> None:
     # El turno completó a pesar de que el handler explotó
     assert result.response == "respuesta normal"
     fake_handler.assert_called_once()
+
+
+# ============================================================
+# D.4 (Gaby 2026-05-27): override determinístico del mensaje de registro
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_overridea_response_cuando_handler_registro_cita(
+    repo_mock,
+) -> None:
+    """Si el handler creó una cita pendiente, el orchestrator reemplaza la
+    respuesta del LLM con el mensaje determinístico oficial (incluye
+    SIEMPRE día+fecha, hora, campus, dirección y Maps)."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.core.appointment_extractor import AppointmentDateTime
+    from app.tools.campus import CampusResult
+
+    fake_anthropic = AsyncMock()
+    # Aún si el LLM omite el link de Maps, el override lo reemplaza
+    fake_anthropic.chat = AsyncMock(return_value=_FakeMessage("Te agendé el martes a las 10."))
+
+    campus_resuelto = CampusResult(
+        id=1,
+        nombre="Campus 1",
+        direccion="José Figueroa Siller 156",
+        colonia="Doctores",
+        ciudad="Saltillo",
+        estado="Coahuila",
+        niveles=["kinder_1"],
+        google_maps_url="https://www.google.com/maps/search/?api=1&query=Jose",
+    )
+    handler_result = AppointmentHandlerResult(
+        hint_para_prompt="[FLUJO AGENDADO HINT]",
+        acciones=["appointment_created"],
+        lead_id=42,
+        appointment_id=99,
+        campus_id=1,
+        campus=campus_resuelto,
+        appointment_datetime=AppointmentDateTime(
+            fecha="2026-06-04", hora="10:00", confidence=0.95, razonamiento="ok"
+        ),
+    )
+    fake_handler = AsyncMock(return_value=handler_result)
+    fake_classify = AsyncMock(
+        return_value=IntentResult(
+            intent=Intent.QUIERE_AGENDAR, confidence=0.95, razonamiento_breve="x"
+        )
+    )
+
+    from app.core.state_extractor import ExtraccionTurno
+
+    fake_extract = AsyncMock(return_value=ExtraccionTurno())
+
+    with (
+        patch("app.core.orchestrator.get_repository", return_value=repo_mock),
+        patch("app.core.orchestrator.get_anthropic", return_value=fake_anthropic),
+        patch("app.core.orchestrator.handle_appointment_intent", fake_handler),
+        patch("app.core.orchestrator.classify_intent", fake_classify),
+        patch("app.core.orchestrator.extraer_de_mensaje", fake_extract),
+        patch("app.core.orchestrator.get_campus_para_nivel", AsyncMock(return_value=None)),
+        patch("app.core.orchestrator.consultar_edades_de_nivel", AsyncMock(return_value=None)),
+    ):
+        result = await procesar_turno(
+            mensaje="el martes 10am",
+            session_id="telegram:111",
+            canal=Canal.TELEGRAM,
+        )
+
+    # NO sale la respuesta cruda del LLM (que no incluía Maps)
+    assert "Te agendé el martes a las 10." not in result.response
+    # SÍ sale el template oficial de Gaby con todos los campos
+    assert "Listo, ya quedó agendada tu cita de informes" in result.response
+    assert "📅 Día: jueves 4 de junio de 2026" in result.response
+    assert "🕐 Hora: 10:00 a.m." in result.response
+    assert "📍 Campus: Campus 1" in result.response
+    assert "🗺️ Dirección" in result.response
+    assert "https://www.google.com/maps" in result.response
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_no_overridea_si_no_se_creo_cita(repo_mock) -> None:
+    """Si el handler NO creó cita (ej. faltan datos del lead, slot ocupado),
+    la respuesta del LLM se mantiene intacta — Sofía explica con su tono."""
+    fake_anthropic = AsyncMock()
+    fake_anthropic.chat = AsyncMock(
+        return_value=_FakeMessage("Necesito tu correo y celular para registrar la cita.")
+    )
+
+    handler_result = AppointmentHandlerResult(
+        hint_para_prompt="[FLUJO AGENDADO — falta datos]",
+        acciones=["missing_lead_data:correo electrónico"],
+        appointment_id=None,  # ← clave: no se creó
+    )
+    fake_handler = AsyncMock(return_value=handler_result)
+    fake_classify = AsyncMock(
+        return_value=IntentResult(
+            intent=Intent.QUIERE_AGENDAR, confidence=0.95, razonamiento_breve="x"
+        )
+    )
+
+    from app.core.state_extractor import ExtraccionTurno
+
+    fake_extract = AsyncMock(return_value=ExtraccionTurno())
+
+    with (
+        patch("app.core.orchestrator.get_repository", return_value=repo_mock),
+        patch("app.core.orchestrator.get_anthropic", return_value=fake_anthropic),
+        patch("app.core.orchestrator.handle_appointment_intent", fake_handler),
+        patch("app.core.orchestrator.classify_intent", fake_classify),
+        patch("app.core.orchestrator.extraer_de_mensaje", fake_extract),
+        patch("app.core.orchestrator.get_campus_para_nivel", AsyncMock(return_value=None)),
+        patch("app.core.orchestrator.consultar_edades_de_nivel", AsyncMock(return_value=None)),
+    ):
+        result = await procesar_turno(
+            mensaje="quiero agendar",
+            session_id="telegram:111",
+            canal=Canal.TELEGRAM,
+        )
+
+    # Como no se creó cita, NO hay override → la respuesta del LLM se mantiene
+    assert "Necesito tu correo y celular" in result.response
+    assert "Listo, ya quedó agendada" not in result.response

@@ -377,7 +377,10 @@ def test_approve_dispatcher_recibe_session_id_y_texto(client: TestClient) -> Non
     assert sid == "telegram:111"
     # Mensaje incluye nombre del papá (de _mock_get_lead_session → "Ana")
     assert "Ana" in texto
-    assert "confirmamos" in texto.lower()
+    # D.4 (Gaby 27-may): template oficial con "confirmó"
+    assert "confirmó" in texto.lower() or "confirmamos" in texto.lower()
+    # Estructura visual oficial: 📅 / 🕐 / 📍 / 🗺️
+    assert "📅" in texto and "📍" in texto and "🗺️" in texto
     # Bloque C.2: dirección + link Maps incluidos
     assert "Campus 1" in texto
     assert "José Figueroa Siller 156" in texto
