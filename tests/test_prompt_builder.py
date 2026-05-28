@@ -420,3 +420,49 @@ def test_rules_prompt_cita_pdf_oficial_cecilia() -> None:
     rules_md = load_prompt_file("rules.md").lower()
     # Debe haber referencia al PDF como fuente de autoridad
     assert "en blanco 26.pdf" in rules_md or "pdf oficial" in rules_md
+
+
+# ============================================================
+# D.1 (Gaby 2026-05-27): rules.md prohibe guiones largos/medios en respuestas
+# ============================================================
+
+
+def test_rules_prompt_prohibe_guiones_largos() -> None:
+    rules_md = load_prompt_file("rules.md").lower()
+    assert "guiones largos" in rules_md or "em-dash" in rules_md
+    assert "guiones medios" in rules_md or "en-dash" in rules_md
+
+
+# ============================================================
+# D.2 (Gaby 2026-05-27): meta_block inyecta fecha actual + regla de día+fecha
+# ============================================================
+
+
+def test_meta_block_incluye_fecha_actual() -> None:
+    """El bloque dinámico debe contener 'Hoy es {día} {DD} de {mes} de {YYYY}'."""
+    estado = EstadoConversacion.nueva("web:d2_1")
+    blocks = build_system_blocks(estado)
+    dyn = blocks[-1]["text"].lower()
+    assert "hoy es" in dyn
+    # Alguno de los días o meses debe aparecer
+    assert any(d in dyn for d in ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"))
+    assert any(m in dyn for m in ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"))
+
+
+def test_meta_block_explica_regla_dia_mas_fecha() -> None:
+    """El meta-bloque debe explicar que día siempre va con fecha exacta."""
+    estado = EstadoConversacion.nueva("web:d2_2")
+    blocks = build_system_blocks(estado)
+    dyn = blocks[-1]["text"].lower()
+    assert "fecha exacta" in dyn
+    assert "miércoles" in dyn  # ejemplo del bloque
+
+
+def test_agendado_prompt_exige_dia_mas_fecha() -> None:
+    """En fase agendado, el prompt explícitamente prohíbe decir solo el día."""
+    estado = EstadoConversacion.nueva("web:d2_3")
+    estado.fase_journey = FaseJourney.AGENDADO
+    blocks = build_system_blocks(estado)
+    full = "\n".join(b["text"] for b in blocks).lower()
+    assert "día + fecha exacta" in full or "día+fecha" in full or "siempre juntos" in full
+    assert "nunca menciones solo el día" in full or "nunca" in full and "solo el día" in full

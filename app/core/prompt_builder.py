@@ -10,14 +10,37 @@ Decisión: ver ARCHITECTURE §6 y DECISIONS ADR (prompts modulares + caching).
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from app.config import get_settings
 from app.core.state import EstadoConversacion, FaseJourney, Modo
 
 log = logging.getLogger(__name__)
+
+TZ_MONTERREY = ZoneInfo("America/Monterrey")
+
+_DIAS_ES = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+_MESES_ES = (
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+)
+
+
+def _hoy_humano(now: datetime | None = None) -> str:
+    """Devuelve 'jueves 28 de mayo de 2026' en zona America/Monterrey.
+
+    Parámetro `now` se inyecta en tests para determinismo.
+    """
+    dt = now or datetime.now(TZ_MONTERREY)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=TZ_MONTERREY)
+    else:
+        dt = dt.astimezone(TZ_MONTERREY)
+    return f"{_DIAS_ES[dt.weekday()]} {dt.day} de {_MESES_ES[dt.month - 1]} de {dt.year}"
 
 PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 
@@ -124,10 +147,15 @@ def _datos_capturados_block(estado: EstadoConversacion) -> str | None:
     )
 
 
-def _meta_block(estado: EstadoConversacion) -> str:
-    """Bloque dinámico con metadata del turno (canal, modo, fase)."""
+def _meta_block(estado: EstadoConversacion, *, now: datetime | None = None) -> str:
+    """Bloque dinámico con metadata del turno (canal, modo, fase, fecha actual)."""
     return (
         f"# CONTEXTO DEL TURNO\n\n"
+        f"- **Hoy es {_hoy_humano(now)}** (zona horaria America/Monterrey).\n"
+        f"  Cuando hables de un día (de cita, de reunión, etc.), **siempre** acompáñalo\n"
+        f"  de la fecha exacta calculada desde hoy. Ejemplo: si el papá dice 'el miércoles'\n"
+        f"  y hoy es jueves, te refieres al MIÉRCOLES de la próxima semana — escríbelo\n"
+        f"  como 'miércoles {{DD}} de {{mes}}', nunca solo 'miércoles'.\n"
         f"- Canal: **{estado.canal.value}**\n"
         f"- Fase actual del journey: **{estado.fase_journey.value}**\n"
         f"- Modo: **{estado.modo.value}**\n"
