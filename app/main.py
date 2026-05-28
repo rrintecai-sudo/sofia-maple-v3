@@ -20,6 +20,7 @@ from app.api.appointments import router as appointments_router
 from app.api.health import router as health_router
 from app.api.webhook_telegram import router as webhook_telegram_router
 from app.api.webhook_web import router as webhook_web_router
+from app.api.webhook_whatsapp import router as webhook_whatsapp_router
 from app.config import get_settings
 from app.core.repository import get_repository
 from app.observability.logger import get_logger, setup_logging
@@ -78,6 +79,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(webhook_web_router)
     app.include_router(webhook_telegram_router)
+    app.include_router(webhook_whatsapp_router)
     app.include_router(admin_router)
     app.include_router(appointments_router)
 
