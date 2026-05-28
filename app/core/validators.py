@@ -146,6 +146,11 @@ _AFIRMA_CITA_AGENDADA_RE = re.compile(
     re.IGNORECASE,
 )
 
+# D.1 (feedback Gaby 2026-05-27): guiones largos (em-dash —) y guiones medios
+# (en-dash –) en las respuestas de Sofía son señal de texto de IA. Bloqueamos
+# ambos caracteres en cualquier parte del texto.
+_GUION_LARGO_RE = re.compile(r"[—–]")
+
 
 # ============================================================
 # Resultado de validación
@@ -536,6 +541,34 @@ def validar_no_inventa_datos(
     return ValidationResult(validator="no_inventa_datos", passed=True, severity="warning")
 
 
+def validar_sin_guiones_largos(respuesta: str) -> ValidationResult:
+    """**Severity=error** — D.1 (Gaby 2026-05-27).
+
+    Falla si la respuesta contiene em-dash (—) o en-dash (–). Esos caracteres
+    son señal de texto de IA y rompen el registro de chat informal mexicano.
+    Sofía debe usar punto, coma o dos puntos para conectar ideas.
+
+    Pasa cualquier guión-minus normal (-) — los bullets en datos estructurados
+    son aceptables (lista de costos, horarios). El validator de markdown
+    excesivo ya limita su abuso.
+    """
+    match = _GUION_LARGO_RE.search(respuesta)
+    if match is None:
+        return ValidationResult(validator="sin_guiones_largos", passed=True)
+    char = match.group(0)
+    nombre = "guión largo (—)" if char == "—" else "guión medio (–)"
+    return ValidationResult(
+        validator="sin_guiones_largos",
+        passed=False,
+        reason=f"Usa {nombre} para conectar frases — suena a texto de IA",
+        suggested_fix=(
+            f"Quita TODOS los {nombre} de tu respuesta. Reemplázalos por punto, "
+            "coma o dos puntos. Ejemplo: 'Maple no es escuela tradicional — es activa' "
+            "→ 'Maple no es escuela tradicional. Es activa.'"
+        ),
+    )
+
+
 def validar_no_recita_info_no_pedida(respuesta: str, intent: Intent | None) -> ValidationResult:
     """**Severity=warning** — Bloque 5.7 ATAQUE 2.
 
@@ -707,6 +740,7 @@ def run_all_validators(
     report.results.append(validar_no_pregunta_repetida(respuesta, estado))
     report.results.append(validar_no_evasion(respuesta, intent))
     report.results.append(validar_no_markdown_excesivo(respuesta))
+    report.results.append(validar_sin_guiones_largos(respuesta))
     # Warnings heurísticos del 5.7 — no bloquean
     report.results.append(validar_no_inventa_datos(respuesta, estado, mensajes_papa))
     if fase_journey is not None:

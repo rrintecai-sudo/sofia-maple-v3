@@ -19,6 +19,7 @@ from app.core.validators import (
     validar_no_pregunta_repetida,
     validar_no_recita_info_no_pedida,
     validar_no_repeticion,
+    validar_sin_guiones_largos,
 )
 
 # ============================================================
@@ -266,19 +267,19 @@ def test_evasion_pasa_horario_con_hora() -> None:
 # ============================================================
 
 
-def test_run_all_returns_7_results_sin_fase() -> None:
-    """Sin fase_journey, run_all_validators corre 7 validators (5 error + 2 warning)."""
+def test_run_all_returns_8_results_sin_fase() -> None:
+    """Sin fase_journey, run_all_validators corre 8 validators (6 error + 2 warning)."""
     estado = EstadoCapturado()
     report = run_all_validators(
         respuesta="Hola, ¿cómo te puedo ayudar?",
         estado=estado,
         intent=Intent.SALUDO_INICIAL,
     )
-    assert len(report.results) == 7
+    assert len(report.results) == 8
     assert report.all_passed is True
 
 
-def test_run_all_returns_8_results_con_fase() -> None:
+def test_run_all_returns_9_results_con_fase() -> None:
     """Con fase_journey, agrega el validator de bullets-descubrimiento."""
     estado = EstadoCapturado()
     report = run_all_validators(
@@ -287,7 +288,7 @@ def test_run_all_returns_8_results_con_fase() -> None:
         intent=Intent.SALUDO_INICIAL,
         fase_journey=FaseJourney.DESCUBRIMIENTO,
     )
-    assert len(report.results) == 8
+    assert len(report.results) == 9
     assert report.all_passed is True
 
 
@@ -422,7 +423,7 @@ def test_validation_report_maps_for_db() -> None:
     )
     passed = report.passed_map
     failed = report.failed_map
-    assert isinstance(passed, dict) and len(passed) == 5  # solo errors
+    assert isinstance(passed, dict) and len(passed) == 6  # solo errors
     assert "no_envio_fantasma" in failed
 
 
@@ -663,3 +664,59 @@ def test_recita_falla_con_numerada() -> None:
         intent=Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO,
     )
     assert r.passed is False
+
+
+# ============================================================
+# validar_sin_guiones_largos (D.1 — Gaby 2026-05-27)
+# ============================================================
+
+
+def test_sin_guiones_largos_pasa_respuesta_normal() -> None:
+    r = validar_sin_guiones_largos(
+        "Maple no es escuela tradicional. Es educación activa para el siglo XXI."
+    )
+    assert r.passed is True
+
+
+def test_sin_guiones_largos_pasa_con_bullet_hyphen() -> None:
+    """Los bullets con '-' al inicio de línea son válidos (datos estructurados)."""
+    r = validar_sin_guiones_largos("Costos:\n- Maternal: $X\n- Kinder: $Y")
+    assert r.passed is True
+
+
+def test_sin_guiones_largos_falla_con_em_dash() -> None:
+    r = validar_sin_guiones_largos(
+        "Maple no es escuela tradicional — es educación activa."
+    )
+    assert r.passed is False
+    assert "guión largo" in (r.reason or "").lower()
+    assert r.suggested_fix is not None
+    assert r.severity == "error"
+
+
+def test_sin_guiones_largos_falla_con_en_dash() -> None:
+    r = validar_sin_guiones_largos(
+        "Lo notas en casa – deja de pedir respuestas y empieza a pensar."
+    )
+    assert r.passed is False
+    assert "guión medio" in (r.reason or "").lower()
+
+
+def test_sin_guiones_largos_falla_aunque_haya_uno_solo() -> None:
+    """Un solo em-dash basta para fallar."""
+    r = validar_sin_guiones_largos("Texto largo conversacional sin nada raro — bueno casi.")
+    assert r.passed is False
+
+
+def test_run_all_validators_incluye_guiones() -> None:
+    """El runner global ejecuta el validator de guiones."""
+    estado = EstadoCapturado()
+    report = run_all_validators(
+        respuesta="Maple es buena — sí.",
+        estado=estado,
+        intent=None,
+    )
+    nombres = [r.validator for r in report.results]
+    assert "sin_guiones_largos" in nombres
+    failed = [r for r in report.results if not r.passed and r.validator == "sin_guiones_largos"]
+    assert len(failed) == 1
