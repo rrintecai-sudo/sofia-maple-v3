@@ -51,6 +51,7 @@ class Lead:
     parent_email: str | None
     child_name: str | None
     child_age: int | None
+    child_grade: str | None  # D.3 (Lily 2026-05-27): grado escolar
     nivel: str | None
     channel: str
     stage: str
@@ -67,6 +68,7 @@ def _row_to_lead(r: dict[str, Any]) -> Lead:
         parent_email=r.get("parent_email"),
         child_name=r.get("child_name"),
         child_age=r.get("child_age"),
+        child_grade=r.get("child_grade"),
         nivel=r.get("nivel"),
         channel=r["channel"],
         stage=r["stage"],
@@ -124,6 +126,7 @@ async def create_lead(
     parent_email: str | None = None,
     child_name: str | None = None,
     child_age: int | None = None,
+    child_grade: str | None = None,
     nivel: str | None = None,
     notes: str | None = None,
     settings: Settings | None = None,
@@ -152,6 +155,7 @@ async def create_lead(
         ("parent_email", parent_email),
         ("child_name", child_name),
         ("child_age", child_age),
+        ("child_grade", child_grade),
         ("nivel", nivel),
         ("notes", notes),
     ):

@@ -27,6 +27,8 @@ class ExtraccionTurno(BaseModel):
     """Output del extractor. Cualquier campo puede ser None si no se detectó."""
 
     nombre_papa: str | None = None
+    email_papa: str | None = None  # D.3 (Lily 2026-05-27): captura pre-cita
+    telefono: str | None = None  # D.3: número celular del papá
     nivel_buscado: str | None = None  # 'maternal'|'kinder'|'primaria'|'secundaria'|None
     nombre_hijo: str | None = None
     edad_hijo: int | None = Field(default=None, ge=0, le=20)
@@ -55,6 +57,8 @@ Tu tarea: detectar datos NUEVOS que aparezcan en el mensaje. Si un dato ya está
 
 Reglas:
 - "nombre_papa": el nombre propio del papá/mamá cuando se presenta. Detecta patrones como: "Me llamo X", "Soy X", "Mi nombre es X", "Hola, soy X", "Habla X", o cuando firma con su nombre al final ("Saludos, X"). Toma SOLO el nombre y apellido(s) (NO incluyas titulos como "Sr.", "Sra.", "Dr."). Si el papá menciona el nombre del HIJO, eso va en "nombre_hijo", NO aquí. Ver ejemplos few-shot abajo.
+- "email_papa": email del papá si aparece (formato `algo@dominio.tld`). Captura literal, sin cambiar mayúsculas. Si no aparece, null.
+- "telefono": número celular del papá si aparece. Acepta formatos: "8441234567", "844 123 4567", "+52 844 123 4567", "844-123-45-67". Captura solo dígitos + signo +, sin espacios ni guiones (normaliza). Mínimo 10 dígitos. Si no aparece, null.
 - "nivel_buscado": SOLO uno de: maternal, kinder, primaria, secundaria. Mapea variantes naturales: "2do de primaria"→primaria, "primero kinder"→kinder, "preescolar"→kinder, "secu"→secundaria, "mater"→maternal.
 - "edad_hijo": número entero entre 0 y 20 — SOLO cuando el papá habla explícitamente de **EDAD** (verbo "tener", palabras "años", "añitos", "meses", "cumplió"). Ver reglas de desambiguación abajo.
 - "cantidad_hijos": número entero entre 0 y 10 — SOLO cuando el papá menciona **CUÁNTOS HIJOS** tiene (no la edad). Ver reglas de desambiguación abajo.
@@ -142,6 +146,23 @@ Output: {"nombre_papa": null, "nombre_hijo": "Diego", "grado_hijo": "2do de prim
 Mensaje: "Hola"
 Output: {"nombre_papa": null, ...}
 
+## Ejemplos few-shot — email_papa y telefono (D.3 — Lily 2026-05-27)
+
+Mensaje: "Mi correo es oscar@example.com"
+Output: {"email_papa": "oscar@example.com", ...}
+
+Mensaje: "Soy Oscar, mi número es 8441234567"
+Output: {"nombre_papa": "Oscar", "telefono": "8441234567", ...}
+
+Mensaje: "Mi celular es +52 844 123 4567 y mi correo ana.perez@gmail.com"
+Output: {"telefono": "+528441234567", "email_papa": "ana.perez@gmail.com", ...}
+
+Mensaje: "844-123-45-67"
+Output: {"telefono": "8441234567", ...}
+
+Mensaje: "te paso mi info: María López, 844 555 1212, maria@correo.mx"
+Output: {"nombre_papa": "María López", "telefono": "8445551212", "email_papa": "maria@correo.mx", ...}
+
 Devuelve EXCLUSIVAMENTE JSON con la estructura de ExtraccionTurno.
 """
 
@@ -206,6 +227,12 @@ def aplicar_extraccion(
 
     if extraccion.nombre_papa and not nuevo.nombre_papa:
         nuevo.nombre_papa = extraccion.nombre_papa
+
+    if extraccion.email_papa and not nuevo.email_papa:
+        nuevo.email_papa = extraccion.email_papa
+
+    if extraccion.telefono and not nuevo.telefono:
+        nuevo.telefono = extraccion.telefono
 
     if extraccion.pidio_costos:
         nuevo.pidio_costos = True

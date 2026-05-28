@@ -89,6 +89,52 @@ def _formatear_alternativas(alts: list[datetime]) -> str:
     return "; ".join(_formato_fecha_humana(a) for a in alts) or "(ninguna cercana)"
 
 
+def datos_lead_faltantes(estado: EstadoConversacion) -> list[str]:
+    """D.3 (Lily 2026-05-27): los 6 datos requeridos ANTES de crear la cita.
+
+    Devuelve la lista de campos legibles que faltan. Si está vacía, está OK
+    para agendar. Lily definió en la reunión 27-may los datos exactos:
+
+      1. Nombre del alumno (hijo)
+      2. Edad del hijo
+      3. Grado escolar del hijo  (excepto Maternal, donde la edad ya define el grupo)
+      4. Nombre del papá/mamá
+      5. Correo electrónico del papá
+      6. Número celular del papá
+
+    Para Maternal, el "grado" no aplica como tal — la edad y el nivel ya
+    definen el sub-grupo (Cubs/Baby/Infants/Toddlers). En ese caso no se
+    pide grado.
+    """
+    capt = estado.estado_capturado
+    faltantes: list[str] = []
+
+    primer_hijo = capt.hijos[0] if capt.hijos else None
+    nombre_hijo = primer_hijo.nombre if primer_hijo else None
+    edad_hijo = primer_hijo.edad if primer_hijo else None
+    grado_hijo = primer_hijo.grado if primer_hijo else None
+    nivel_hijo = primer_hijo.nivel if primer_hijo else capt.nivel_buscado_actual
+
+    if not nombre_hijo:
+        faltantes.append("nombre del hijo")
+    if edad_hijo is None:
+        faltantes.append("edad del hijo")
+    # Grado solo requerido si el nivel NO es maternal (Maternal usa edad como criterio)
+    if not grado_hijo and nivel_hijo is not None and nivel_hijo.value != "maternal":
+        faltantes.append("grado escolar del hijo")
+    elif not grado_hijo and nivel_hijo is None:
+        # Sin nivel definido todavía: pide grado (que también revela el nivel)
+        faltantes.append("grado escolar del hijo")
+    if not capt.nombre_papa:
+        faltantes.append("tu nombre")
+    if not capt.email_papa:
+        faltantes.append("correo electrónico")
+    if not capt.telefono:
+        faltantes.append("número de celular")
+
+    return faltantes
+
+
 def _nivel_para_leads(estado: EstadoConversacion) -> str | None:
     """Mapea el nivel del estado al enum lead_nivel.
 
@@ -118,44 +164,57 @@ def _primer_hijo(estado: EstadoConversacion) -> tuple[str | None, int | None]:
 # ============================================================
 
 
+def _primer_hijo_grado(estado: EstadoConversacion) -> str | None:
+    capt = estado.estado_capturado
+    if not capt.hijos:
+        return None
+    return capt.hijos[0].grado
+
+
 async def _ensure_lead_para_cita(estado: EstadoConversacion, *, settings: Settings) -> int | None:
     """Obtiene o crea el lead vinculado a esta sesión.
 
-    Si el lead no existe pero tenemos `nombre_papa`, lo crea. Si no
-    tenemos `nombre_papa`, NO crea — el handler entonces le pide a Sofía
-    que pregunte el nombre antes de cerrar la cita.
+    D.3 (Lily 2026-05-27): asume que `datos_lead_faltantes(estado)` ya validó
+    que los 6 datos estén presentes. Si no, hay un bug en el caller.
     """
+    capt = estado.estado_capturado
+    nombre_hijo, edad_hijo = _primer_hijo(estado)
+    grado_hijo = _primer_hijo_grado(estado)
+    nivel = _nivel_para_leads(estado)
+
     existing = await get_lead_by_session(estado.session_id, settings=settings)
     if existing:
-        # Actualiza datos que faltaran (best effort)
-        nombre_hijo, edad_hijo = _primer_hijo(estado)
         updates: dict = {}
         if existing.child_name is None and nombre_hijo:
             updates["child_name"] = nombre_hijo
         if existing.child_age is None and edad_hijo is not None:
             updates["child_age"] = edad_hijo
-        nivel = _nivel_para_leads(estado)
+        if existing.child_grade is None and grado_hijo:
+            updates["child_grade"] = grado_hijo
         if existing.nivel is None and nivel:
             updates["nivel"] = nivel
-        if existing.parent_phone is None and estado.estado_capturado.telefono:
-            updates["parent_phone"] = estado.estado_capturado.telefono
+        if existing.parent_phone is None and capt.telefono:
+            updates["parent_phone"] = capt.telefono
+        if existing.parent_email is None and capt.email_papa:
+            updates["parent_email"] = capt.email_papa
         if updates:
             await update_lead(existing.id, updates, settings=settings)
         return existing.id
 
-    parent_name = estado.estado_capturado.nombre_papa
+    parent_name = capt.nombre_papa
     if not parent_name:
         return None
 
-    nombre_hijo, edad_hijo = _primer_hijo(estado)
     return await create_lead(
         parent_name=parent_name,
         channel=estado.canal.value,
         conversation_session_id=estado.session_id,
-        parent_phone=estado.estado_capturado.telefono,
+        parent_phone=capt.telefono,
+        parent_email=capt.email_papa,
         child_name=nombre_hijo,
         child_age=edad_hijo,
-        nivel=_nivel_para_leads(estado),
+        child_grade=grado_hijo,
+        nivel=nivel,
         settings=settings,
     )
 
@@ -245,7 +304,33 @@ async def handle_appointment_intent(
             availability=avail,
         )
 
-    # 3. Disponible — necesitamos lead para crear la cita
+    # 3. D.3 (Lily 2026-05-27) — verificar los 6 datos requeridos del lead
+    # ANTES de crear la cita. Sin los 6, no registramos cita: Sofía pide
+    # los que faltan de forma conversacional.
+    faltantes = datos_lead_faltantes(estado)
+    if faltantes:
+        falt_str = ", ".join(faltantes)
+        return AppointmentHandlerResult(
+            hint_para_prompt=(
+                f"[FLUJO AGENDADO — la fecha ({fecha_humana}) está disponible, "
+                f"pero ANTES de registrar la cita necesitamos estos datos del lead: "
+                f"**{falt_str}**.\n"
+                f"\n"
+                f"Pídelos de forma natural y cálida, NO como formulario. Puedes agruparlos "
+                f"en 1-2 mensajes. Ejemplos de formato:\n"
+                f"  - Si faltan datos del hijo: '¿Me confirmas el nombre completo de tu "
+                f"hijo/a, su edad y grado escolar?'\n"
+                f"  - Si faltan datos de contacto: 'Y para enviarte la confirmación de la "
+                f"cita, ¿me compartes tu nombre, correo y número de celular?'\n"
+                f"NO crees la cita todavía — Lily nos pidió tener TODO el lead antes de "
+                f"agendar (reunión 27-may).]"
+            ),
+            acciones=[f"missing_lead_data:{','.join(faltantes)}"],
+            appointment_datetime=appt_dt,
+            availability=avail,
+        )
+
+    # 4. Datos completos — ahora sí, ensure_lead
     lead_id = await _ensure_lead_para_cita(estado, settings=settings)
     if lead_id is None:
         return AppointmentHandlerResult(

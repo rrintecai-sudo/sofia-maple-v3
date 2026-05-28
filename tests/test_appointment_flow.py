@@ -43,12 +43,28 @@ def _settings(lily_email: str = "") -> Settings:
 
 
 def _estado_base(
-    *, nombre_papa: str | None = None, nivel: NivelEducativo | None = None
+    *,
+    nombre_papa: str | None = None,
+    nivel: NivelEducativo | None = None,
+    email_papa: str | None = "ana@example.com",
+    telefono: str | None = "8441234567",
+    grado_hijo: str | None = "1° kinder",
+    nombre_hijo: str = "Luis",
+    edad_hijo: int = 5,
 ) -> EstadoConversacion:
+    """Fixture base. D.3 (Lily 27-may): por default trae los 6 datos del lead
+    completos para que el flujo feliz pase. Tests que validan campos faltantes
+    sobreescriben el campo correspondiente a None."""
     capt = EstadoCapturado(
         nombre_papa=nombre_papa,
+        telefono=telefono,
+        email_papa=email_papa,
         nivel_buscado_actual=nivel,
-        hijos=[HijoInfo(nombre="Luis", edad=5, nivel=nivel)] if nivel else [],
+        hijos=(
+            [HijoInfo(nombre=nombre_hijo, edad=edad_hijo, nivel=nivel, grado=grado_hijo)]
+            if nivel
+            else []
+        ),
     )
     return EstadoConversacion(
         session_id="telegram:111",
@@ -179,8 +195,10 @@ async def test_handler_disponible_pero_sin_nombre_papa(monkeypatch) -> None:
     result = await handle_appointment_intent(
         "el martes 10am", estado, settings=_settings(), now=now
     )
-    assert "missing_parent_name" in result.acciones
-    assert "cómo te llamas" in result.hint_para_prompt
+    # D.3 (Lily 27-may): falta solo el nombre del papá → ahora cae en
+    # missing_lead_data con esa entrada específica
+    assert any(a.startswith("missing_lead_data") for a in result.acciones)
+    assert "tu nombre" in result.hint_para_prompt
     assert result.appointment_id is None
 
 
@@ -557,8 +575,17 @@ async def test_campus_secundaria_es_campus_2(monkeypatch) -> None:
         identificador="111",
         estado_capturado=EstadoCapturado(
             nombre_papa="Ana",
+            telefono="8441234567",
+            email_papa="ana@example.com",
             nivel_buscado_actual=NivelEducativo.SECUNDARIA,
-            hijos=[HijoInfo(edad=13, nivel=NivelEducativo.SECUNDARIA)],
+            hijos=[
+                HijoInfo(
+                    nombre="Luis",
+                    edad=13,
+                    nivel=NivelEducativo.SECUNDARIA,
+                    grado="1° secundaria",
+                )
+            ],
         ),
     )
     now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)
@@ -584,8 +611,17 @@ async def test_campus_primaria_quinto_es_campus_1(monkeypatch) -> None:
         identificador="111",
         estado_capturado=EstadoCapturado(
             nombre_papa="Ana",
+            telefono="8441234567",
+            email_papa="ana@example.com",
             nivel_buscado_actual=NivelEducativo.PRIMARIA,
-            hijos=[HijoInfo(edad=10, nivel=NivelEducativo.PRIMARIA, grado="5to primaria")],
+            hijos=[
+                HijoInfo(
+                    nombre="Luis",
+                    edad=10,
+                    nivel=NivelEducativo.PRIMARIA,
+                    grado="5to primaria",
+                )
+            ],
         ),
     )
     now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)
@@ -610,8 +646,17 @@ async def test_campus_primaria_sexto_es_campus_2(monkeypatch) -> None:
         identificador="111",
         estado_capturado=EstadoCapturado(
             nombre_papa="Ana",
+            telefono="8441234567",
+            email_papa="ana@example.com",
             nivel_buscado_actual=NivelEducativo.PRIMARIA,
-            hijos=[HijoInfo(edad=11, nivel=NivelEducativo.PRIMARIA, grado="6to primaria")],
+            hijos=[
+                HijoInfo(
+                    nombre="Luis",
+                    edad=11,
+                    nivel=NivelEducativo.PRIMARIA,
+                    grado="6to primaria",
+                )
+            ],
         ),
     )
     now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)
@@ -677,20 +722,153 @@ async def test_campus_primaria_sin_grado_pide_grado(monkeypatch) -> None:
         return_value=httpx.Response(204, text="")
     )
 
+    # D.3 (Lily 27-may): los demás datos del lead están completos; solo
+    # falta el grado del hijo. Eso ya se captura como missing_lead_data
+    # antes de llegar al campus_resolver.
     estado = EstadoConversacion(
         session_id="telegram:111",
         canal=Canal.TELEGRAM,
         identificador="111",
         estado_capturado=EstadoCapturado(
             nombre_papa="Ana",
+            telefono="8441234567",
+            email_papa="ana@example.com",
             nivel_buscado_actual=NivelEducativo.PRIMARIA,
-            hijos=[HijoInfo(nivel=NivelEducativo.PRIMARIA)],  # sin edad ni grado
+            hijos=[
+                HijoInfo(
+                    nombre="Luis",
+                    edad=10,
+                    nivel=NivelEducativo.PRIMARIA,
+                )  # falta grado
+            ],
         ),
     )
     now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)
     result = await handle_appointment_intent(
         "martes 10am", estado, settings=_settings(), now=now
     )
-    assert "missing_grado" in result.acciones
+    assert any(a.startswith("missing_lead_data") for a in result.acciones)
+    assert "grado escolar del hijo" in result.acciones[0]
     assert result.appointment_id is None
     assert "grado" in result.hint_para_prompt.lower()
+
+
+# ============================================================
+# D.3 (Lily 2026-05-27): datos_lead_faltantes
+# ============================================================
+
+
+def test_datos_faltantes_lista_vacia_con_lead_completo() -> None:
+    from app.core.appointment_flow import datos_lead_faltantes
+
+    estado = _estado_base(nombre_papa="Ana", nivel=NivelEducativo.KINDER)
+    assert datos_lead_faltantes(estado) == []
+
+
+def test_datos_faltantes_detecta_email_celular_y_grado() -> None:
+    from app.core.appointment_flow import datos_lead_faltantes
+
+    estado = _estado_base(
+        nombre_papa="Ana",
+        nivel=NivelEducativo.PRIMARIA,
+        email_papa=None,
+        telefono=None,
+        grado_hijo=None,
+    )
+    faltan = datos_lead_faltantes(estado)
+    assert "correo electrónico" in faltan
+    assert "número de celular" in faltan
+    assert "grado escolar del hijo" in faltan
+
+
+def test_datos_faltantes_maternal_no_pide_grado() -> None:
+    """En Maternal, la edad determina el sub-grupo (Cubs/Baby/Infants/Toddlers).
+    No se exige grado_hijo separado."""
+    from app.core.appointment_flow import datos_lead_faltantes
+
+    estado = _estado_base(
+        nombre_papa="Ana",
+        nivel=NivelEducativo.MATERNAL,
+        grado_hijo=None,  # explícitamente sin grado
+        edad_hijo=2,
+    )
+    faltan = datos_lead_faltantes(estado)
+    assert "grado escolar del hijo" not in faltan
+
+
+def test_datos_faltantes_detecta_nombre_hijo_y_edad_faltantes() -> None:
+    from app.core.appointment_flow import datos_lead_faltantes
+    from app.core.state import EstadoConversacion as _EC, EstadoCapturado as _EK
+
+    estado = _EC(
+        session_id="telegram:111",
+        canal=Canal.TELEGRAM,
+        identificador="111",
+        estado_capturado=_EK(
+            nombre_papa="Ana",
+            telefono="8441234567",
+            email_papa="ana@example.com",
+            nivel_buscado_actual=NivelEducativo.KINDER,
+            # sin hijos
+        ),
+    )
+    faltan = datos_lead_faltantes(estado)
+    assert "nombre del hijo" in faltan
+    assert "edad del hijo" in faltan
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_handler_missing_lead_data_corta_antes_de_crear_cita(monkeypatch) -> None:
+    """Si faltan datos del lead, NO se crea la cita aunque el slot esté libre."""
+    _mock_extractor(monkeypatch, fecha="2026-05-26", hora="10:00")
+    respx.get("https://x.supabase.co/rest/v1/lily_availability").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "day_of_week": 2,
+                    "start_time": "09:00:00",
+                    "end_time": "17:00:00",
+                    "slot_duration_minutes": 60,
+                    "active": True,
+                }
+            ],
+        )
+    )
+    respx.get("https://x.supabase.co/rest/v1/appointments").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+
+    estado = _estado_base(
+        nombre_papa="Ana",
+        nivel=NivelEducativo.KINDER,
+        email_papa=None,  # falta
+        telefono=None,  # falta
+    )
+    now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)
+    result = await handle_appointment_intent(
+        "el martes 10am", estado, settings=_settings(), now=now
+    )
+    assert any(a.startswith("missing_lead_data") for a in result.acciones)
+    assert result.appointment_id is None
+    assert "correo" in result.hint_para_prompt.lower()
+    assert "celular" in result.hint_para_prompt.lower()
+
+
+# ============================================================
+# D.3 — prompt agendado.md documenta los 6 datos requeridos
+# ============================================================
+
+
+def test_agendado_prompt_documenta_6_datos_requeridos() -> None:
+    from app.core.prompt_builder import load_prompt_file, clear_cache
+
+    clear_cache()
+    md = load_prompt_file("journey/agendado.md").lower()
+    assert "6 datos" in md or "seis datos" in md
+    assert "nombre del alumno" in md
+    assert "grado escolar" in md
+    assert "correo electrónico" in md
+    assert "número de celular" in md
+    clear_cache()

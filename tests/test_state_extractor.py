@@ -208,3 +208,46 @@ def test_aplicar_extraccion_nombre_papa_nuevo() -> None:
     extr = ExtraccionTurno(nombre_papa="Oscar Rodriguez")
     nuevo = aplicar_extraccion(actual, extr)
     assert nuevo.nombre_papa == "Oscar Rodriguez"
+
+
+# ============================================================
+# D.3 (Lily 2026-05-27): email_papa y telefono
+# ============================================================
+
+
+def test_aplicar_extraccion_email_nuevo() -> None:
+    actual = EstadoCapturado()
+    extr = ExtraccionTurno(email_papa="oscar@example.com")
+    nuevo = aplicar_extraccion(actual, extr)
+    assert nuevo.email_papa == "oscar@example.com"
+
+
+def test_aplicar_extraccion_email_no_sobrescribe() -> None:
+    actual = EstadoCapturado(email_papa="ana@example.com")
+    extr = ExtraccionTurno(email_papa="otro@example.com")
+    nuevo = aplicar_extraccion(actual, extr)
+    assert nuevo.email_papa == "ana@example.com"
+
+
+def test_aplicar_extraccion_telefono_nuevo() -> None:
+    actual = EstadoCapturado()
+    extr = ExtraccionTurno(telefono="8441234567")
+    nuevo = aplicar_extraccion(actual, extr)
+    assert nuevo.telefono == "8441234567"
+
+
+def test_aplicar_extraccion_telefono_no_sobrescribe() -> None:
+    actual = EstadoCapturado(telefono="8441234567")
+    extr = ExtraccionTurno(telefono="9999999999")
+    nuevo = aplicar_extraccion(actual, extr)
+    assert nuevo.telefono == "8441234567"
+
+
+def test_extractor_prompt_documenta_email_y_telefono() -> None:
+    """El system prompt del extractor debe instruir cómo detectar email y celular."""
+    from app.core.state_extractor import _SYSTEM_PROMPT
+
+    p = _SYSTEM_PROMPT.lower()
+    assert "email_papa" in p
+    assert "telefono" in p
+    assert "celular" in p

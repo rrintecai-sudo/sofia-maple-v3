@@ -53,6 +53,7 @@ def test_estado_to_row_basic() -> None:
         "clasificacion": "sin_clasificar",
         "nombre_papa": None,
         "telefono": None,
+        "email_papa": None,
         "nivel_buscado_actual": None,
         "fecha_cita": None,
         "campus_cita": None,

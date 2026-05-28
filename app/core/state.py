@@ -79,6 +79,7 @@ class EstadoCapturado(BaseModel):
 
     nombre_papa: str | None = None
     telefono: str | None = None
+    email_papa: str | None = None  # D.3 (Lily 2026-05-27): requerido antes de agendar
     hijos: list[HijoInfo] = Field(default_factory=list)
     nivel_buscado_actual: NivelEducativo | None = None  # el nivel del que se habla ahora
     presupuesto_mencionado: bool = False
