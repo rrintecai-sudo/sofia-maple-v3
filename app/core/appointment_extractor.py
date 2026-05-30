@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from app.adapters.openai_client import get_openai
@@ -22,6 +23,54 @@ log = logging.getLogger(__name__)
 
 TZ_MONTERREY = ZoneInfo("America/Monterrey")
 CONFIDENCE_MIN = 0.7
+
+
+# ============================================================
+# Detección de expresión temporal (FIX 1+3 — 2026-05-29)
+# ============================================================
+#
+# El flujo de agendado (fecha + gate de 6 datos + Maps) estaba acoplado a que
+# el intent fuese QUIERE_AGENDAR. En conversación fragmentada el papá responde
+# en fragmentos ("Viernes", "Mañana", "Mejor lunes") que el classifier NO marca
+# como QUIERE_AGENDAR, así que TODO el andamiaje determinístico se omitía y el
+# LLM improvisaba la fecha (mal). Este detector permite al orchestrator disparar
+# el resolver de fecha en CUALQUIER turno con expresión temporal.
+_TEMPORAL_RE = re.compile(
+    r"\b("
+    r"hoy|ma[ñn]ana|pasado\s+ma[ñn]ana|"
+    r"lunes|martes|mi[ée]rcoles|miercoles|jueves|viernes|s[áa]bado|sabado|domingo|"
+    r"pr[óo]xim[ao]\s+semana|esta\s+semana|entre\s+semana|fin\s+de\s+semana|finde|"
+    r"a\s+las\s+\d{1,2}|"
+    r"\d{1,2}\s*(?:am|pm|a\.?\s?m|p\.?\s?m|hrs?|horas?)|"
+    r"\d{1,2}\s*[:.]\s*\d{2}"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def contiene_expresion_temporal(mensaje: str) -> bool:
+    """True si el mensaje menciona un día/hora/expresión temporal accionable.
+
+    Usado por el orchestrator para decidir si invoca el resolver de fecha y el
+    flujo de agendado, independientemente del intent clasificado.
+    """
+    return bool(_TEMPORAL_RE.search(mensaje or ""))
+
+
+_DIAS_ES = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+_MESES_ES = (
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+)
+
+
+def fecha_humana_solo_dia(fecha_iso: str) -> str | None:
+    """'2026-06-01' → 'lunes 1 de junio'. None si el formato es inválido."""
+    try:
+        d = date.fromisoformat(fecha_iso)
+    except (ValueError, TypeError):
+        return None
+    return f"{_DIAS_ES[d.weekday()]} {d.day} de {_MESES_ES[d.month - 1]}"
 
 
 @dataclass

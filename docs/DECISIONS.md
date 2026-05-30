@@ -522,3 +522,50 @@ Atacar las dos causas raíz reales no resueltas, con base en aprendizajes del 5.
 **Justificación:** Filosofía 5.7: detectar bug real con heurística + dar contexto explícito en el prompt + medir (no bloquear) con warning. La heurística determinística override garantiza que el patrón se capture incluso cuando el LLM clasifica mal. El validator de soporte mide si Sofía hace caso al hint o lo ignora.
 
 ---
+
+## ADR-020 — FIX 4: nombre del papá inventado sube a severity=error (separado del bloque warning)
+
+**Fecha:** 2026-05-29
+**Contexto:** Primera prueba REAL por WhatsApp (papá humano, sofia2-test, 2026-05-29). Sofía llamó al papá **"María"** sin que él diera su nombre. Diagnóstico: NO era el `pushName` del JID (el adapter de Evolution nunca lo lee) — fue una **alucinación del LLM principal**. El sub-check de nombre inventado YA existía dentro de `validar_no_inventa_datos`, pero con `severity="warning"` (degradado en ADR-017/ADR-018 por causar regeneraciones excesivas y respuestas "cautelosas-pero-vacías"). Es decir: **lo detectaba y lo dejaba pasar.**
+
+**Decisión:** Separar SOLO el sub-check de nombre a un validator propio `validar_no_inventa_nombre_papa` con `severity="error"` (sí regenera). El resto de `validar_no_inventa_datos` (vio-contenido, nivel, edad, género, campus, cita) **permanece en warning** — NO revertimos ADR-017 en bloque.
+
+**Por qué solo el nombre a error:**
+- Inventar el nombre del papá rompe la confianza al instante (es de los peores fallos visibles).
+- El sub-check de nombre es de baja ambigüedad (saludo vocativo + nombre propio capitalizado), así que el riesgo de falso positivo es acotable — a diferencia de los de nivel/edad/género que dependen de contexto difuso.
+
+**Mitigación de falsos positivos (la preocupación central de ADR-017):**
+- Regex estricta `_NOMBRE_VOCATIVO_RE`: saludo vocativo conocido + palabra capitalizada.
+- Denylist `_PALABRAS_NO_NOMBRE` (incluye "maple", "claro", "gracias", "perfecto", etc.) → "Claro, Maple ofrece…" NO se bloquea.
+- Exclusiones: nombre en `estado.nombre_papa` o en los mensajes del papá → no bloquea.
+
+**Tests:** 6 unit (incluye 2 anti-falso-positivo: marca "Maple", "Gracias por…") + 2 E2E (terco bloquea / nombre real no bloquea).
+
+**Qué se mantiene en warning:** los 6 sub-chequeos restantes de `validar_no_inventa_datos`. Qué sube a error: solo nombre del papá.
+
+---
+
+## ADR-021 — FIX 1+2+3: el flujo de agendado se desacopla del intent + gate duro anti-confirmación-fantasma
+
+**Fecha:** 2026-05-29
+**Contexto:** En la misma prueba real, Sofía falló 3 garantías que dábamos por cerradas (D.2 fecha, D.3 seis-datos, D.4 Maps):
+- Dijo "lunes 2 de junio" cuando el lunes era 1; "mañana viernes 30 de mayo" cuando el 30 era sábado.
+- No pidió los 6 datos; cerró el agendado con solo nombre+edad del hijo.
+- No envió Maps; prometió "Lily te comparte la dirección" sin haber registrado nada.
+
+**Causa raíz común:** todo el andamiaje determinístico (resolver de fecha, gate de 6 datos, override de Maps) estaba **acoplado a `intent == QUIERE_AGENDAR`**, que se evalúa por mensaje individual. En conversación fragmentada ("Mejor lunes", "Mañana", "a las 9") el classifier NO marca QUIERE_AGENDAR, así que `handle_appointment_intent` no corría y el LLM improvisaba fecha + confirmación. Los tests de D.x eran sintéticos: entraban al flujo por la puerta de atrás (intent forzado + datos completos), nunca por conversación real.
+
+**Decisión (3 partes):**
+1. **Desacoplar del intent (FIX 1+3):** el orchestrator dispara `handle_appointment_intent` cuando `intent == QUIERE_AGENDAR` **o** `contiene_expresion_temporal(mensaje)` (nuevo detector determinístico en `appointment_extractor`). Así el resolver de fecha y el gate de 6 datos corren en cualquier turno con día/hora.
+2. **Fecha resuelta al LLM (FIX 1):** cuando el papá da día sin hora, el handler le pasa la fecha YA RESUELTA ("lunes 1 de junio") y le prohíbe recalcularla. Además, el prompt (`_meta_block`) incluye una **tabla pre-calculada de los próximos 7 días** (día → fecha) como red de respaldo para que Haiku nunca haga aritmética de calendario.
+3. **Gate duro anti-confirmación-fantasma (FIX 2+3):** nuevo validator `validar_no_confirma_cita_inexistente` con `severity="error"`. Si la respuesta AFIRMA haber registrado/agendado/confirmado una cita ("registré tu solicitud", "te agendo para", "Lily te comparte la dirección") **y** no existe `appointment_id` real (`cita_realmente_registrada=False`), regenera. Calibrado oración-por-oración para NO bloquear mensajes de proceso/condicionales ("en cuanto me confirmes los datos, registro tu solicitud").
+
+**Por qué un validator de error y no solo el hint:** D.3 ya pasaba un hint pidiendo los datos, pero el hint es una sugerencia que el LLM puede ignorar (y lo ignoró en la prueba real). El gate de error es la red dura: aunque el LLM insista, no sale al papá una confirmación falsa.
+
+**Riesgo asumido:** disparar el flujo ante cualquier expresión temporal añade una llamada a gpt-4o-mini (extractor) en turnos que mencionan un día sin querer agendar. Es acotado y el detector es específico (día/hora explícitos). Aceptado a cambio de fechas correctas y cero confirmaciones fantasma.
+
+**Tests:** 8 E2E de conversación fragmentada (`tests/e2e/test_conversacion_fragmentada.py`) + 6 unit del validator de cita (incluye 3 anti-falso-positivo) + detector temporal cubierto en E2E (routing positivo y control negativo).
+
+**Pendiente de validación REAL:** Oscar repite la conversación de "María" por WhatsApp en sofia2-test antes de cerrar el bloque. Los tests son sintéticos (LLM mockeado); confirman las garantías del orchestrator, no el comportamiento del LLM real.
+
+---

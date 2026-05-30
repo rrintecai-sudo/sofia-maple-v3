@@ -27,6 +27,7 @@ from typing import Any
 
 from app.adapters.anthropic_client import get_anthropic
 from app.config import get_settings
+from app.core.appointment_extractor import contiene_expresion_temporal
 from app.core.appointment_flow import (
     AppointmentHandlerResult,
     handle_appointment_intent,
@@ -234,8 +235,18 @@ async def procesar_turno(
     # (si todo cuadra) crear la cita en pendiente + notificar Lily. El
     # resultado se inyecta como hint al user message del LLM para que Sofía
     # responda con su tono.
+    # FIX 1+3 (2026-05-29): el flujo de agendado ya NO depende solo del intent
+    # QUIERE_AGENDAR. En conversación fragmentada el papá responde el día/hora en
+    # mensajes cortos ("Mejor lunes", "Mañana", "a las 9") que el classifier no
+    # marca como agendar. Disparamos el flujo ante CUALQUIER expresión temporal
+    # para que el resolver determinístico de fecha y el gate de 6 datos siempre
+    # corran, en vez de dejar que el LLM improvise la fecha y la confirmación.
     appointment_handler: AppointmentHandlerResult | None = None
-    if intent_result.intent == Intent.QUIERE_AGENDAR:
+    disparar_agendado = (
+        intent_result.intent == Intent.QUIERE_AGENDAR
+        or contiene_expresion_temporal(mensaje)
+    )
+    if disparar_agendado:
         try:
             appointment_handler = await handle_appointment_intent(mensaje, estado)
         except Exception as exc:  # resiliente: nunca rompemos el turno
@@ -333,6 +344,16 @@ async def procesar_turno(
     # 8. Persistir mensaje del usuario (antes de la llamada LLM)
     await _persist_user_message(repo, estado, mensaje)
 
+    # FIX 2/3 (2026-05-29): ¿hay una cita REALMENTE registrada (este turno o en
+    # turnos previos)? Solo entonces Sofía puede confirmarla. Si no, el validator
+    # `no_confirma_cita_inexistente` (severity=error) bloquea confirmaciones
+    # fantasma ("registré tu solicitud", "Lily te comparte la dirección") y fuerza
+    # a regenerar pidiendo los datos faltantes.
+    cita_realmente_registrada = bool(
+        (appointment_handler is not None and appointment_handler.appointment_id is not None)
+        or estado.estado_capturado.cita_agendada
+    )
+
     # 9. Llamar a Anthropic con loop de validación + regeneración
     anthropic = get_anthropic()
     max_regen = settings.max_regenerations_per_turn if settings.enable_validators else 0
@@ -388,6 +409,7 @@ async def procesar_turno(
             frases_usadas=estado.frases_usadas,
             mensajes_papa=[*mensajes_papa_lista, mensaje],
             fase_journey=estado.fase_journey,
+            cita_realmente_registrada=cita_realmente_registrada,
         )
 
         # Loggear warnings (NO disparan regeneración; severity="warning")

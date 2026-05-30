@@ -12,9 +12,11 @@ from app.core.validators import (
     extraer_frases_municion_usadas,
     run_all_validators,
     validar_no_bullets_en_descubrimiento,
+    validar_no_confirma_cita_inexistente,
     validar_no_envio_fantasma,
     validar_no_evasion,
     validar_no_inventa_datos,
+    validar_no_inventa_nombre_papa,
     validar_no_markdown_excesivo,
     validar_no_pregunta_repetida,
     validar_no_recita_info_no_pedida,
@@ -267,19 +269,22 @@ def test_evasion_pasa_horario_con_hora() -> None:
 # ============================================================
 
 
-def test_run_all_returns_8_results_sin_fase() -> None:
-    """Sin fase_journey, run_all_validators corre 8 validators (6 error + 2 warning)."""
+def test_run_all_returns_10_results_sin_fase() -> None:
+    """Sin fase_journey, run_all_validators corre 10 validators.
+
+    8 error (incluye no_inventa_nombre_papa [ADR-020] y
+    no_confirma_cita_inexistente [ADR-021]) + 2 warning."""
     estado = EstadoCapturado()
     report = run_all_validators(
         respuesta="Hola, ¿cómo te puedo ayudar?",
         estado=estado,
         intent=Intent.SALUDO_INICIAL,
     )
-    assert len(report.results) == 8
+    assert len(report.results) == 10
     assert report.all_passed is True
 
 
-def test_run_all_returns_9_results_con_fase() -> None:
+def test_run_all_returns_11_results_con_fase() -> None:
     """Con fase_journey, agrega el validator de bullets-descubrimiento."""
     estado = EstadoCapturado()
     report = run_all_validators(
@@ -288,7 +293,7 @@ def test_run_all_returns_9_results_con_fase() -> None:
         intent=Intent.SALUDO_INICIAL,
         fase_journey=FaseJourney.DESCUBRIMIENTO,
     )
-    assert len(report.results) == 9
+    assert len(report.results) == 11
     assert report.all_passed is True
 
 
@@ -423,7 +428,9 @@ def test_validation_report_maps_for_db() -> None:
     )
     passed = report.passed_map
     failed = report.failed_map
-    assert isinstance(passed, dict) and len(passed) == 6  # solo errors
+    # 8 validators de severity=error (incluye no_inventa_nombre_papa [ADR-020] y
+    # no_confirma_cita_inexistente [ADR-021]).
+    assert isinstance(passed, dict) and len(passed) == 8  # solo errors
     assert "no_envio_fantasma" in failed
 
 
@@ -453,13 +460,16 @@ def test_inventa_falla_vio_link_es_warning() -> None:
     assert "contenido externo" in (r.reason or "").lower()
 
 
-def test_inventa_falla_nombre_no_dado() -> None:
+def test_inventa_datos_ya_no_chequea_nombre() -> None:
+    """FIX 4 (ADR-020): el sub-check de nombre se movió a
+    `validar_no_inventa_nombre_papa` (error). `no_inventa_datos` ya NO lo
+    evalúa, así que un nombre inventado NO lo hace fallar a él."""
     r = validar_no_inventa_datos(
         "Hola Mateo, qué gusto.",
         EstadoCapturado(),
         mensajes_papa=["hola"],
     )
-    assert r.passed is False
+    assert r.passed is True
     assert r.severity == "warning"
 
 
@@ -720,3 +730,138 @@ def test_run_all_validators_incluye_guiones() -> None:
     assert "sin_guiones_largos" in nombres
     failed = [r for r in report.results if not r.passed and r.validator == "sin_guiones_largos"]
     assert len(failed) == 1
+
+
+# ============================================================
+# validar_no_inventa_nombre_papa (FIX 4 — ADR-020 — severity=error)
+# ============================================================
+
+
+def test_nombre_papa_falla_nombre_inventado() -> None:
+    """Bug 'María': el papá nunca dio su nombre y Sofía lo usa → error."""
+    r = validar_no_inventa_nombre_papa(
+        "Hola María, con gusto te ayudo.",
+        EstadoCapturado(),
+        mensajes_papa=["buenas, busco info de kinder"],
+    )
+    assert r.passed is False
+    assert r.severity == "error"
+    assert "María" in (r.reason or "")
+
+
+def test_nombre_papa_pasa_si_esta_en_estado() -> None:
+    r = validar_no_inventa_nombre_papa(
+        "Hola Oscar, con gusto te ayudo.",
+        EstadoCapturado(nombre_papa="Oscar"),
+        mensajes_papa=["soy oscar"],
+    )
+    assert r.passed is True
+
+
+def test_nombre_papa_pasa_si_el_papa_lo_dijo() -> None:
+    r = validar_no_inventa_nombre_papa(
+        "Hola Ana, gracias por escribir.",
+        EstadoCapturado(),
+        mensajes_papa=["hola, soy Ana"],
+    )
+    assert r.passed is True
+
+
+def test_nombre_papa_pasa_saludo_sin_nombre() -> None:
+    r = validar_no_inventa_nombre_papa(
+        "¡Hola! Con gusto te ayudo. ¿Qué nivel buscas?",
+        EstadoCapturado(),
+        mensajes_papa=["hola"],
+    )
+    assert r.passed is True
+
+
+def test_nombre_papa_no_falla_por_marca_maple() -> None:
+    """Calibración anti-falso-positivo: 'Claro, Maple ofrece...' NO es un
+    nombre del papá."""
+    r = validar_no_inventa_nombre_papa(
+        "Claro, Maple ofrece el mejor método activo. Perfecto, seguimos.",
+        EstadoCapturado(),
+        mensajes_papa=["cuéntame del método"],
+    )
+    assert r.passed is True
+
+
+def test_nombre_papa_no_falla_por_gracias_por() -> None:
+    r = validar_no_inventa_nombre_papa(
+        "Gracias por tu mensaje. Oye, ¿qué edad tiene tu peque?",
+        EstadoCapturado(),
+        mensajes_papa=["hola"],
+    )
+    assert r.passed is True
+
+
+# ============================================================
+# validar_no_confirma_cita_inexistente (FIX 2/3 — ADR-021 — severity=error)
+# ============================================================
+
+
+def test_confirma_cita_falla_registre_solicitud_sin_cita() -> None:
+    """Frase exacta del bug real: confirma sin appointment_id → error."""
+    r = validar_no_confirma_cita_inexistente(
+        "Registré tu solicitud, en breve Lily te confirma y te comparte la dirección.",
+        cita_realmente_registrada=False,
+    )
+    assert r.passed is False
+    assert r.severity == "error"
+
+
+def test_confirma_cita_falla_te_agendo_para() -> None:
+    r = validar_no_confirma_cita_inexistente(
+        "Listo, te agendo para mañana viernes 30 de mayo a las 9 a.m. en Campus 1.",
+        cita_realmente_registrada=False,
+    )
+    assert r.passed is False
+
+
+def test_confirma_cita_pasa_si_cita_existe() -> None:
+    """Si hay cita real, confirmar es correcto → NO bloquea."""
+    r = validar_no_confirma_cita_inexistente(
+        "Registré tu solicitud, en breve Lily te confirma.",
+        cita_realmente_registrada=True,
+    )
+    assert r.passed is True
+
+
+def test_confirma_cita_pasa_mensaje_de_proceso_condicional() -> None:
+    """Calibración: mensaje legítimo de proceso ('cuando me confirmes los
+    datos, registro tu solicitud') NO se bloquea."""
+    r = validar_no_confirma_cita_inexistente(
+        "En cuanto me confirmes tu nombre y correo, registro tu solicitud de cita.",
+        cita_realmente_registrada=False,
+    )
+    assert r.passed is True
+
+
+def test_confirma_cita_pasa_invitacion() -> None:
+    r = validar_no_confirma_cita_inexistente(
+        "¿Te gustaría que agendemos una visita esta semana? ¿Qué día te queda bien?",
+        cita_realmente_registrada=False,
+    )
+    assert r.passed is True
+
+
+def test_confirma_cita_pasa_pide_datos() -> None:
+    r = validar_no_confirma_cita_inexistente(
+        "Para dejar todo listo, ¿me compartes tu nombre, correo y celular?",
+        cita_realmente_registrada=False,
+    )
+    assert r.passed is True
+
+
+def test_run_all_validators_incluye_nuevos_error_validators() -> None:
+    estado = EstadoCapturado()
+    report = run_all_validators(
+        respuesta="Hola, ¿qué nivel buscas?",
+        estado=estado,
+        intent=Intent.SALUDO_INICIAL,
+        cita_realmente_registrada=False,
+    )
+    nombres = [r.validator for r in report.results]
+    assert "no_inventa_nombre_papa" in nombres
+    assert "no_confirma_cita_inexistente" in nombres

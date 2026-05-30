@@ -26,6 +26,7 @@ from app.config import Settings, get_settings
 from app.core.appointment_extractor import (
     AppointmentDateTime,
     extract_datetime,
+    fecha_humana_solo_dia,
 )
 from app.core.campus_resolver import resolve_campus_from_estado
 from app.core.state import EstadoConversacion
@@ -242,7 +243,9 @@ async def handle_appointment_intent(
 
     # 1. Extraer fecha/hora
     appt_dt = await extract_datetime(mensaje, now=now)
-    if not appt_dt.es_completo or not appt_dt.es_alta_confianza:
+
+    # 1a. Sin fecha usable (sin fecha o baja confianza) → pedir aclaración genérica.
+    if appt_dt.fecha is None or not appt_dt.es_alta_confianza:
         return AppointmentHandlerResult(
             hint_para_prompt=(
                 "[FLUJO AGENDADO — el papá quiere visitar pero NO especificó fecha "
@@ -250,6 +253,22 @@ async def handle_appointment_intent(
                 "queda mejor. NO inventes una fecha.]"
             ),
             acciones=["extract_failed"],
+            appointment_datetime=appt_dt,
+        )
+
+    # 1b. FIX 1 (2026-05-29): hay día (alta confianza) pero falta la hora. Le
+    # pasamos a Sofía la fecha YA RESUELTA para que NO la recalcule mal (bug
+    # real "lunes 2 de junio" cuando el lunes era el 1). Pide solo la hora.
+    if appt_dt.hora is None:
+        dia_resuelto = fecha_humana_solo_dia(appt_dt.fecha) or "ese día"
+        return AppointmentHandlerResult(
+            hint_para_prompt=(
+                f"[FLUJO AGENDADO — el papá indicó el día ({dia_resuelto}) pero NO la "
+                f"hora. Usa EXACTAMENTE esa fecha ({dia_resuelto}) cuando menciones el "
+                f"día; NO la recalcules ni inventes otra. Pregúntale a qué hora le queda "
+                f"mejor, en UNA oración breve. NO confirmes la cita todavía.]"
+            ),
+            acciones=["missing_time"],
             appointment_datetime=appt_dt,
         )
 

@@ -152,6 +152,54 @@ _AFIRMA_CITA_AGENDADA_RE = re.compile(
 _GUION_LARGO_RE = re.compile(r"[—–]")
 
 
+# FIX 4 (2026-05-29 — ADR-020): nombre del papá inventado, severity=error.
+# Regex estricta: saludo vocativo + palabra capitalizada. Más conservadora que
+# la versión warning para minimizar falsos positivos al subir a error (justo lo
+# que ADR-017 evitó al bajar el bloque general). Combinada con una denylist.
+_NOMBRE_VOCATIVO_RE = re.compile(
+    r"(?:^|[.!?¡¿]\s+|,\s+)"
+    r"(?:[Hh]ola|[Hh]ey|[Mm]ira|[Oo]ye|[Ff][íi]jate|[Pp]erfecto|[Cc]laro|[Gg]racias|"
+    r"[Bb]ienvenid[oa]|[Bb]uen[oa]s)[,]?\s+"
+    r"([A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,15})\b"
+)
+
+# Palabras que pueden seguir a un saludo SIN ser un nombre propio (evita
+# falsos positivos como "Claro, Maple ofrece..." o "Gracias por tu mensaje").
+_PALABRAS_NO_NOMBRE = frozenset({
+    "sof", "sofia", "sofía", "maple", "college", "collège", "colegio",
+    "que", "qué", "como", "cómo", "claro", "mira", "oye", "hola", "hey",
+    "gracias", "perfecto", "bienvenido", "bienvenida", "buenas", "buenos",
+    "mucho", "muchas", "un", "una", "por", "para", "con", "cuando", "entonces",
+    "ahora", "aqui", "aquí", "papa", "papá", "mama", "mamá", "claro", "genial",
+    "excelente", "encantada", "estamos", "estoy", "este", "esta", "todo", "ya",
+})
+
+# FIX 2/3 (2026-05-29 — ADR-021): confirmación de cita declarativa/completada.
+# Si Sofía afirma haber registrado/confirmado/agendado una cita Y no existe
+# appointment_id real, es una confirmación fantasma → bloqueo (severity=error).
+_CONFIRMA_CITA_RE = re.compile(
+    r"registr[ée]\s+(?:tu|su|la)\s+(?:solicitud|cita|visita)|"
+    r"(?:ya\s+)?qued[óo]\s+(?:agendada|registrada|confirmada|tu\s+cita|tu\s+visita)|"
+    r"ya\s+(?:est[áa]|qued[óo])\s+agendad[ao]|"
+    r"agend[ée]\s+(?:tu|su|la)\s+(?:cita|visita)|"
+    r"te\s+agendo\s+para|"
+    r"tu\s+cita\s+(?:es|ser[áa]|qued[óo]|est[áa]\s+confirmada|qued[óo]\s+agendada)|"
+    r"te\s+confirmo\s+(?:tu|la)\s+(?:cita|visita)|"
+    r"lily\s+te\s+(?:confirma|comparte\s+la\s+direcci[óo]n)|"
+    r"te\s+esperamos\s+el\s+\w+|"
+    r"nos\s+vemos\s+el\s+(?:lunes|martes|mi[ée]rcoles|miercoles|jueves|viernes|s[áa]bado|sabado|domingo)",
+    re.IGNORECASE,
+)
+
+# Marcadores condicionales/futuros que vuelven LEGÍTIMA la mención de registro
+# ("cuando me confirmes los datos, registro tu solicitud") → NO se bloquea.
+_CONDICIONAL_CITA_RE = re.compile(
+    r"\b(cuando|una\s+vez|en\s+cuanto|apenas|si\s+me|para\s+(?:registrar|agendar|confirmar)|"
+    r"necesito|me\s+confirm|me\s+compart|me\s+pas|antes\s+de|primero)\b",
+    re.IGNORECASE,
+)
+
+
 # ============================================================
 # Resultado de validación
 # ============================================================
@@ -450,21 +498,10 @@ def validar_no_inventa_datos(
             "Sofía no tiene acceso web. Si el papá compartió un enlace, agradécelo y pregunta qué le llamó la atención sin pretender haberlo visto.",
         )
 
-    # 2. Nombre del papá no presente
-    nombre_estado = (estado.nombre_papa or "").strip().lower()
-    no_papa = {"sof", "sofía", "sofia"}
-    for m in _AFIRMA_NOMBRE_PAPA_RE.finditer(respuesta):
-        candidato = m.group(1).lower()
-        if candidato in no_papa:
-            continue
-        if nombre_estado and candidato in nombre_estado:
-            continue
-        if candidato in texto_papa:
-            continue
-        return _fail(
-            f"Usa nombre '{m.group(1)}' que no está en estado ni en mensajes del papá",
-            f"Borra el nombre '{m.group(1)}'. Si quieres personalizar, saluda sin nombre.",
-        )
+    # 2. Nombre del papá → movido a `validar_no_inventa_nombre_papa`
+    #    (FIX 4, 2026-05-29 — ADR-020): este sub-check se separó y se subió a
+    #    severity=error porque inventar el nombre del papá es de los peores fallos
+    #    (rompe confianza al instante). El resto de sub-chequeos sigue en warning.
 
     # 3. Nivel del hijo afirmado sin respaldo
     niveles_conocidos: set[str] = set()
@@ -706,6 +743,106 @@ def validar_no_evasion(respuesta: str, intent: Intent | None) -> ValidationResul
 
 
 # ============================================================
+# FIX 4 (ADR-020) — Nombre del papá inventado, severity=error
+# ============================================================
+
+
+def validar_no_inventa_nombre_papa(
+    respuesta: str,
+    estado: EstadoCapturado,
+    mensajes_papa: list[str] | None = None,
+) -> ValidationResult:
+    """**Severity=error** — bloquea si Sofía usa un nombre propio para el papá
+    que NO está en `estado.nombre_papa` ni en lo que el papá escribió.
+
+    Causa raíz del bug "María" (2026-05-29): el LLM alucinó un nombre. El
+    sub-check existía en `validar_no_inventa_datos` pero como warning, así que
+    detectaba sin bloquear. ADR-020: se separa y se sube SOLO este caso a error
+    (no todo el bloque, que ADR-017 mantuvo en warning por sobre-regeneración).
+
+    Conservador: requiere saludo vocativo + nombre capitalizado, y descarta
+    palabras de una denylist. Si dudamos, NO bloqueamos.
+    """
+    mensajes_papa = mensajes_papa or []
+    texto_papa = " ".join(mensajes_papa).lower()
+    nombre_estado = (estado.nombre_papa or "").strip().lower()
+
+    for m in _NOMBRE_VOCATIVO_RE.finditer(respuesta):
+        candidato = m.group(1)
+        cand_low = candidato.lower()
+        if cand_low in _PALABRAS_NO_NOMBRE:
+            continue
+        if nombre_estado and cand_low in nombre_estado:
+            continue
+        if cand_low in texto_papa:
+            continue
+        return ValidationResult(
+            validator="no_inventa_nombre_papa",
+            passed=False,
+            reason=f"Usa el nombre '{candidato}' que el papá nunca dio ni está en el estado",
+            suggested_fix=(
+                f"Borra el nombre '{candidato}'. El papá NUNCA te dijo su nombre. "
+                f"Saluda sin nombre (ej. 'Hola, con gusto te ayudo'). NUNCA inventes "
+                f"ni asumas el nombre del papá."
+            ),
+            severity="error",
+        )
+
+    return ValidationResult(validator="no_inventa_nombre_papa", passed=True, severity="error")
+
+
+# ============================================================
+# FIX 2/3 (ADR-021) — Confirmación de cita inexistente, severity=error
+# ============================================================
+
+
+def validar_no_confirma_cita_inexistente(
+    respuesta: str,
+    cita_realmente_registrada: bool,
+) -> ValidationResult:
+    """**Severity=error** — bloquea si Sofía AFIRMA haber registrado/confirmado
+    una cita cuando NO existe un appointment_id real (`cita_realmente_registrada`
+    es False).
+
+    Ataca los bugs 2 y 3 (2026-05-29): sin los 6 datos el backend NO crea la
+    cita, pero el LLM igual decía "registré tu solicitud, Lily te comparte la
+    dirección". Este gate fuerza a regenerar pidiendo los datos faltantes en vez
+    de confirmar algo que no pasó.
+
+    Calibrado para NO bloquear mensajes de PROCESO/condicionales ("cuando me
+    confirmes los datos, registro tu solicitud"): se evalúa oración por oración
+    y se ignoran las que contienen un marcador condicional/futuro.
+    """
+    if cita_realmente_registrada:
+        return ValidationResult(validator="no_confirma_cita_inexistente", passed=True)
+
+    # Evaluar oración por oración: una confirmación declarativa SIN condicional.
+    oraciones = re.split(r"[.!?\n]+", respuesta)
+    for oracion in oraciones:
+        if not oracion.strip():
+            continue
+        if _CONFIRMA_CITA_RE.search(oracion) and not _CONDICIONAL_CITA_RE.search(oracion):
+            m = _CONFIRMA_CITA_RE.search(oracion)
+            return ValidationResult(
+                validator="no_confirma_cita_inexistente",
+                passed=False,
+                reason=(
+                    f"Confirma/registra una cita ('{m.group(0).strip()}') pero NO existe "
+                    f"una cita real (faltan datos o no se ha creado)"
+                ),
+                suggested_fix=(
+                    "NO digas que registraste, agendaste ni confirmaste la cita: todavía "
+                    "no existe. Pide de forma cálida los datos que faltan (nombre, correo, "
+                    "celular, grado) o propón el día como invitación. NUNCA prometas que "
+                    "'Lily te comparte la dirección' antes de registrar la cita."
+                ),
+                severity="error",
+            )
+
+    return ValidationResult(validator="no_confirma_cita_inexistente", passed=True)
+
+
+# ============================================================
 # Runner — ejecuta todos los validators
 # ============================================================
 
@@ -718,6 +855,7 @@ def run_all_validators(
     frases_usadas: list[str] | None = None,
     mensajes_papa: list[str] | None = None,
     fase_journey: FaseJourney | None = None,
+    cita_realmente_registrada: bool = False,
 ) -> ValidationReport:
     """Ejecuta todos los validators secuencialmente y agrega resultados.
 
@@ -741,6 +879,11 @@ def run_all_validators(
     report.results.append(validar_no_evasion(respuesta, intent))
     report.results.append(validar_no_markdown_excesivo(respuesta))
     report.results.append(validar_sin_guiones_largos(respuesta))
+    # FIX 4 (ADR-020) + FIX 2/3 (ADR-021) — severity=error (sí bloquean/regeneran)
+    report.results.append(validar_no_inventa_nombre_papa(respuesta, estado, mensajes_papa))
+    report.results.append(
+        validar_no_confirma_cita_inexistente(respuesta, cita_realmente_registrada)
+    )
     # Warnings heurísticos del 5.7 — no bloquean
     report.results.append(validar_no_inventa_datos(respuesta, estado, mensajes_papa))
     if fase_journey is not None:

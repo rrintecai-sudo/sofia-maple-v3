@@ -10,7 +10,7 @@ Decisión: ver ARCHITECTURE §6 y DECISIONS ADR (prompts modulares + caching).
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -147,15 +147,44 @@ def _datos_capturados_block(estado: EstadoConversacion) -> str | None:
     )
 
 
+def _tabla_proximos_dias(now: datetime | None = None) -> str:
+    """Tabla pre-calculada de hoy + próximos 7 días (FIX 1 — 2026-05-29).
+
+    Red de respaldo determinística: Haiku calculaba mal "el lunes = 2 de junio"
+    cuando el lunes era el 1. Le damos la equivalencia día→fecha ya resuelta
+    para que NUNCA haga aritmética de calendario por su cuenta.
+    """
+    dt = now or datetime.now(TZ_MONTERREY)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=TZ_MONTERREY)
+    else:
+        dt = dt.astimezone(TZ_MONTERREY)
+
+    lineas: list[str] = []
+    for i in range(8):
+        d = dt + timedelta(days=i)
+        if i == 0:
+            etiqueta = "hoy"
+        elif i == 1:
+            etiqueta = "mañana"
+        else:
+            etiqueta = _DIAS_ES[d.weekday()]
+        fecha_txt = f"{_DIAS_ES[d.weekday()]} {d.day} de {_MESES_ES[d.month - 1]}"
+        lineas.append(f"    - {etiqueta} = {fecha_txt}")
+    return "\n".join(lineas)
+
+
 def _meta_block(estado: EstadoConversacion, *, now: datetime | None = None) -> str:
     """Bloque dinámico con metadata del turno (canal, modo, fase, fecha actual)."""
     return (
         f"# CONTEXTO DEL TURNO\n\n"
         f"- **Hoy es {_hoy_humano(now)}** (zona horaria America/Monterrey).\n"
         f"  Cuando hables de un día (de cita, de reunión, etc.), **siempre** acompáñalo\n"
-        f"  de la fecha exacta calculada desde hoy. Ejemplo: si el papá dice 'el miércoles'\n"
-        f"  y hoy es jueves, te refieres al MIÉRCOLES de la próxima semana — escríbelo\n"
-        f"  como 'miércoles {{DD}} de {{mes}}', nunca solo 'miércoles'.\n"
+        f"  de la fecha exacta. **NO calcules la fecha tú: úsala de esta tabla ya resuelta.**\n"
+        f"  Equivalencia día → fecha (próximos 7 días):\n"
+        f"{_tabla_proximos_dias(now)}\n"
+        f"  Ejemplo: si el papá dice 'el lunes', escribe el 'lunes' con la fecha EXACTA de\n"
+        f"  la tabla, nunca solo 'lunes' ni una fecha inventada.\n"
         f"- Canal: **{estado.canal.value}**\n"
         f"- Fase actual del journey: **{estado.fase_journey.value}**\n"
         f"- Modo: **{estado.modo.value}**\n"
