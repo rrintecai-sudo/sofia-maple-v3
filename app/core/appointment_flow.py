@@ -24,6 +24,7 @@ from datetime import datetime
 
 from app.config import Settings, get_settings
 from app.core.appointment_extractor import (
+    TZ_MONTERREY,
     AppointmentDateTime,
     extract_datetime,
     fecha_humana_solo_dia,
@@ -241,11 +242,23 @@ async def handle_appointment_intent(
     """
     settings = settings or get_settings()
 
-    # 1. Extraer fecha/hora
-    appt_dt = await extract_datetime(mensaje, now=now)
+    capt = estado.estado_capturado
 
-    # 1a. Sin fecha usable (sin fecha o baja confianza) → pedir aclaración genérica.
-    if appt_dt.fecha is None or not appt_dt.es_alta_confianza:
+    # 1. Extraer fecha/hora del mensaje y FUNDIRLA en los slots persistentes.
+    # PASO 1 (2026-05-29): en conversación fragmentada el papá da el día en un
+    # turno y la hora/datos en otros. Guardamos lo resuelto en slots para no
+    # "olvidar" la fecha entre turnos. Solo actualizamos con alta confianza.
+    appt_dt = await extract_datetime(mensaje, now=now)
+    if appt_dt.es_alta_confianza and appt_dt.fecha:
+        capt.cita_fecha_slot = appt_dt.fecha
+        if appt_dt.hora:
+            capt.cita_hora_slot = appt_dt.hora
+
+    fecha_slot = capt.cita_fecha_slot
+    hora_slot = capt.cita_hora_slot
+
+    # 1a. Sin día en los slots (ni este turno ni antes) → pedir día y hora.
+    if fecha_slot is None:
         return AppointmentHandlerResult(
             hint_para_prompt=(
                 "[FLUJO AGENDADO — el papá quiere visitar pero NO especificó fecha "
@@ -256,11 +269,10 @@ async def handle_appointment_intent(
             appointment_datetime=appt_dt,
         )
 
-    # 1b. FIX 1 (2026-05-29): hay día (alta confianza) pero falta la hora. Le
-    # pasamos a Sofía la fecha YA RESUELTA para que NO la recalcule mal (bug
-    # real "lunes 2 de junio" cuando el lunes era el 1). Pide solo la hora.
-    if appt_dt.hora is None:
-        dia_resuelto = fecha_humana_solo_dia(appt_dt.fecha) or "ese día"
+    # 1b. Hay día en el slot pero falta la hora. Le pasamos a Sofía la fecha YA
+    # RESUELTA para que NO la recalcule mal (bug "lunes 2 de junio"). Pide hora.
+    if hora_slot is None:
+        dia_resuelto = fecha_humana_solo_dia(fecha_slot) or "ese día"
         return AppointmentHandlerResult(
             hint_para_prompt=(
                 f"[FLUJO AGENDADO — el papá indicó el día ({dia_resuelto}) pero NO la "
@@ -272,8 +284,17 @@ async def handle_appointment_intent(
             appointment_datetime=appt_dt,
         )
 
-    fecha_dt = appt_dt.to_datetime()
+    # Construir el datetime efectivo desde los slots (acumulado entre turnos).
+    try:
+        fecha_dt = datetime.strptime(f"{fecha_slot} {hora_slot}", "%Y-%m-%d %H:%M").replace(
+            tzinfo=TZ_MONTERREY
+        )
+    except ValueError:
+        fecha_dt = None
     if fecha_dt is None:
+        # Slot corrupto → limpiarlo para volver a pedir, no quedar en bucle.
+        capt.cita_fecha_slot = None
+        capt.cita_hora_slot = None
         return AppointmentHandlerResult(
             hint_para_prompt=(
                 "[FLUJO AGENDADO — no pude convertir la fecha del papá. Pídele que "
@@ -486,6 +507,12 @@ async def handle_appointment_intent(
         f"📍 {direccion_legible}\n"
         f"{maps_line}]"
     )
+    # PASO 1: devolvemos el datetime EFECTIVO de los slots (no el del último
+    # mensaje, que en cierre fragmentado puede no traer fecha) para que el
+    # override D.4 del orchestrator renderice la plantilla con la fecha correcta.
+    appointment_dt_efectivo = AppointmentDateTime(
+        fecha=fecha_slot, hora=hora_slot, confidence=1.0, razonamiento="slots"
+    )
     return AppointmentHandlerResult(
         hint_para_prompt=hint,
         acciones=acciones,
@@ -493,6 +520,6 @@ async def handle_appointment_intent(
         appointment_id=appointment_id,
         campus_id=campus_id,
         campus=campus,
-        appointment_datetime=appt_dt,
+        appointment_datetime=appointment_dt_efectivo,
         availability=avail,
     )

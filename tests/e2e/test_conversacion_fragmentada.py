@@ -412,3 +412,165 @@ async def test_nombre_real_del_papa_no_se_bloquea() -> None:
 
     assert "no_inventa_nombre_papa" not in result.validators_failed
     assert result.response == "Hola Oscar, con gusto te ayudo."
+
+
+# ============================================================
+# 5. PASO 1 — CIERRE FRAGMENTADO COMPLETO: la cita se CREA y persiste
+#    aunque la fecha y los datos lleguen en turnos distintos.
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_cierre_fragmentado_crea_y_persiste_cita() -> None:
+    """El papá da fecha en un turno, datos en otros. La fase pegajosa mantiene
+    'agendando', los slots de fecha persisten, y el CÓDIGO cierra creando el
+    appointment cuando todo está completo — sin depender de que Haiku improvise
+    ni de que el intent dispare turno a turno."""
+    import types
+
+    from app.core.appointment_extractor import AppointmentDateTime
+    from app.core.state import FaseAgendado
+    from app.tools.campus import CampusResult
+
+    # Guion por mensaje: (intent, extracción del state_extractor, (fecha,hora,conf))
+    SCRIPT = {
+        "Quiero agendar una visita": (
+            Intent.QUIERE_AGENDAR,
+            ExtraccionTurno(quiere_agendar=True, nivel_buscado="kinder"),
+            (None, None, 0.0),
+        ),
+        "El lunes a las 10am": (
+            Intent.CONFUSO_OTRO,
+            ExtraccionTurno(),
+            ("2026-06-01", "10:00", 0.95),
+        ),
+        "Mi hijo Diego, 5 años, va en kinder 3": (
+            Intent.CONFUSO_OTRO,
+            ExtraccionTurno(
+                nombre_hijo="Diego", edad_hijo=5, grado_hijo="3 kinder", nivel_buscado="kinder"
+            ),
+            (None, None, 0.0),  # ← este turno NO trae fecha; debe usar el slot previo
+        ),
+        "Soy Oscar, mi correo oscar@x.com y mi cel 8441234567": (
+            Intent.CONFUSO_OTRO,
+            ExtraccionTurno(
+                nombre_papa="Oscar", email_papa="oscar@x.com", telefono="8441234567"
+            ),
+            (None, None, 0.0),  # ← tampoco trae fecha; el slot persiste desde turno 2
+        ),
+    }
+
+    async def fake_classify(message, **kw):
+        return _intent(SCRIPT[message][0])
+
+    async def fake_extract(mensaje, estado_actual):
+        return SCRIPT[mensaje][1]
+
+    async def fake_extract_dt(mensaje, *, now=None):
+        f, h, c = SCRIPT[mensaje][2]
+        return AppointmentDateTime(fecha=f, hora=h, confidence=c, razonamiento="test")
+
+    campus1 = CampusResult(
+        id=1, nombre="Campus 1", direccion="José Figueroa Siller 156", colonia="Doctores",
+        ciudad="Saltillo", estado="Coahuila", niveles=["kinder_1", "kinder_2", "kinder_3"],
+        google_maps_url="https://www.google.com/maps/search/?api=1&query=Jose",
+    )
+
+    repo = _StatefulRepo()
+    anthropic = _fake_anthropic(["(respuesta de Sofía, será sustituida en el cierre)"])
+    create_appt = AsyncMock(return_value=123)
+
+    # Patches constantes (orchestrator + hojas de appointment_flow) abiertos
+    # durante toda la conversación.
+    leaf = [
+        patch("app.core.orchestrator.get_repository", return_value=repo),
+        patch("app.core.orchestrator.get_anthropic", return_value=anthropic),
+        patch("app.core.orchestrator.classify_intent", side_effect=fake_classify),
+        patch("app.core.orchestrator.extraer_de_mensaje", side_effect=fake_extract),
+        patch("app.core.orchestrator.get_campus_para_nivel", AsyncMock(return_value=None)),
+        patch("app.core.orchestrator.consultar_edades_de_nivel", AsyncMock(return_value=None)),
+        patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
+        patch(
+            "app.core.appointment_flow.is_slot_available",
+            AsyncMock(return_value=types.SimpleNamespace(
+                available=True, reason=None, alternativas=[])),
+        ),
+        patch("app.core.appointment_flow.create_appointment", create_appt),
+        patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=campus1)),
+        patch("app.core.appointment_flow.get_lead_by_session", AsyncMock(return_value=None)),
+        patch("app.core.appointment_flow.create_lead", AsyncMock(return_value=42)),
+        patch("app.core.appointment_flow.emit_event", AsyncMock()),
+        patch("app.core.appointment_flow.send_email", AsyncMock()),
+        patch("app.core.appointment_flow.advance_stage_if_lower", AsyncMock(return_value=True)),
+    ]
+
+    from app.core.orchestrator import procesar_turno
+
+    _enter(leaf)
+    try:
+        result = None
+        for mensaje in SCRIPT:
+            result = await procesar_turno(mensaje=mensaje, session_id="whatsapp:e2e", canal=None)
+    finally:
+        _exit(leaf)
+
+    capt = repo._conv.estado_capturado
+    # Slots de fecha persistieron desde el turno 2 hasta el cierre
+    assert capt.cita_fecha_slot == "2026-06-01"
+    assert capt.cita_hora_slot == "10:00"
+    # El CÓDIGO creó la cita exactamente una vez
+    create_appt.assert_awaited_once()
+    # Fase pegajosa cerró + estado agendado
+    assert capt.fase_agendado == FaseAgendado.CERRADO
+    assert repo._conv.agendado is True
+    assert capt.campus_cita == "Campus 1"
+    # La respuesta final es la plantilla determinística D.4 (no la de Haiku)
+    assert "ya quedó agendada" in result.response
+    assert "Campus 1" in result.response
+    assert "1 de junio" in result.response
+    assert "https://www.google.com/maps" in result.response
+
+
+@pytest.mark.asyncio
+async def test_fase_agendado_es_pegajosa_no_baja_sola() -> None:
+    """Una vez en AGENDANDO, un turno sin señal temporal NO regresa a
+    EXPLORANDO (sticky): el pipeline sigue corriendo."""
+    repo = _StatefulRepo()
+    await repo.insert_message("whatsapp:y", "assistant", "¿Qué día te queda?")
+
+    anthropic = _fake_anthropic(["ok"])
+    handler = AsyncMock(
+        return_value=AppointmentHandlerResult(hint_para_prompt="[FLUJO AGENDADO]", appointment_id=None)
+    )
+
+    from app.core.orchestrator import procesar_turno
+
+    # Turno 1: señal de agendar → AGENDANDO
+    ctx = _patches(
+        repo, anthropic,
+        classify=AsyncMock(return_value=_intent(Intent.QUIERE_AGENDAR)),
+        extract=AsyncMock(return_value=ExtraccionTurno()), handler=handler,
+    )
+    _enter(ctx)
+    try:
+        await procesar_turno(mensaje="quiero agendar", session_id="whatsapp:y")
+    finally:
+        _exit(ctx)
+    from app.core.state import FaseAgendado
+    assert repo._conv.estado_capturado.fase_agendado == FaseAgendado.AGENDANDO
+
+    # Turno 2: mensaje SIN señal temporal ni intent de agendar → sigue AGENDANDO
+    handler.reset_mock()
+    ctx = _patches(
+        repo, anthropic,
+        classify=AsyncMock(return_value=_intent(Intent.CONFUSO_OTRO)),
+        extract=AsyncMock(return_value=ExtraccionTurno()), handler=handler,
+    )
+    _enter(ctx)
+    try:
+        await procesar_turno(mensaje="ah ok perfecto gracias", session_id="whatsapp:y")
+    finally:
+        _exit(ctx)
+
+    assert repo._conv.estado_capturado.fase_agendado == FaseAgendado.AGENDANDO
+    handler.assert_awaited()  # el pipeline siguió corriendo pese a no haber señal

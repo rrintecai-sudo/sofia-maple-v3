@@ -45,6 +45,7 @@ from app.core.repository import get_repository
 from app.core.state import (
     Canal,
     EstadoConversacion,
+    FaseAgendado,
     FaseJourney,
     Modo,
 )
@@ -212,8 +213,30 @@ async def procesar_turno(
     # 4. Aplicar extracción al estado
     estado.estado_capturado = aplicar_extraccion(estado.estado_capturado, extraccion)
 
+    # 4bis. PASO 1 (2026-05-29) — máquina PEGAJOSA de agendado controlada por
+    # CÓDIGO (no por Haiku ni por el clasificador turno a turno). Se entra a
+    # AGENDANDO con la PRIMERA señal (intent QUIERE_AGENDAR o expresión temporal)
+    # y NO se reevalúa a la baja: el código colecta los 6 datos + día/hora hasta
+    # cerrar. Persiste en sofia_conversations.estado_capturado (JSONB).
+    capt = estado.estado_capturado
+    senal_agendado = (
+        intent_result.intent == Intent.QUIERE_AGENDAR
+        or contiene_expresion_temporal(mensaje)
+    )
+    if capt.fase_agendado == FaseAgendado.EXPLORANDO and senal_agendado:
+        capt.fase_agendado = FaseAgendado.AGENDANDO
+        log.info("agendado_fase EXPLORANDO→AGENDANDO", extra={"session_id": session_id})
+    en_agendado = capt.fase_agendado == FaseAgendado.AGENDANDO
+
     # 5. Decidir fase del journey
     estado.fase_journey = _decidir_fase(estado, intent_result.intent, es_nueva)
+    # PASO 1: la fase pegajosa de agendado MANDA sobre el journey para que el
+    # prompt cargue agendado.md (reglas de campus real, 6 datos, no-confirmar)
+    # durante toda la colección, sin depender de que el intent dispare.
+    if capt.fase_agendado == FaseAgendado.AGENDANDO:
+        estado.fase_journey = FaseJourney.AGENDADO
+    elif capt.fase_agendado == FaseAgendado.CERRADO:
+        estado.fase_journey = FaseJourney.POST_AGENDADO
 
     # 5bis. Pre-fetch tools cuando el intent lo amerita.
     # Por ahora: campus (Bloque 5.5) + niveles (Bloque 5.6 PASO 2).
@@ -235,18 +258,12 @@ async def procesar_turno(
     # (si todo cuadra) crear la cita en pendiente + notificar Lily. El
     # resultado se inyecta como hint al user message del LLM para que Sofía
     # responda con su tono.
-    # FIX 1+3 (2026-05-29): el flujo de agendado ya NO depende solo del intent
-    # QUIERE_AGENDAR. En conversación fragmentada el papá responde el día/hora en
-    # mensajes cortos ("Mejor lunes", "Mañana", "a las 9") que el classifier no
-    # marca como agendar. Disparamos el flujo ante CUALQUIER expresión temporal
-    # para que el resolver determinístico de fecha y el gate de 6 datos siempre
-    # corran, en vez de dejar que el LLM improvise la fecha y la confirmación.
+    # PASO 1 (2026-05-29): mientras la fase pegajosa esté en AGENDANDO, el handler
+    # determinístico corre CADA turno (no solo cuando el intent dispara). Así
+    # colecta los slots de día/hora + 6 datos de forma fragmentada y cierra solo
+    # cuando los tiene TODOS — el cierre lo decide el código, no Haiku.
     appointment_handler: AppointmentHandlerResult | None = None
-    disparar_agendado = (
-        intent_result.intent == Intent.QUIERE_AGENDAR
-        or contiene_expresion_temporal(mensaje)
-    )
-    if disparar_agendado:
+    if en_agendado:
         try:
             appointment_handler = await handle_appointment_intent(mensaje, estado)
         except Exception as exc:  # resiliente: nunca rompemos el turno
@@ -486,8 +503,21 @@ async def procesar_turno(
                 fecha_hora=fecha_dt,
                 campus=appointment_handler.campus,
             )
+            # PASO 1: el CÓDIGO cierra la fase pegajosa al crear la cita. El
+            # appointment_id es el RESULTADO de completar los slots, no un
+            # requisito previo. CERRADO impide reabrir el agendado.
+            campus_nombre = (
+                appointment_handler.campus.nombre if appointment_handler.campus else None
+            )
+            if campus_nombre in ("Campus 1", "Campus 2"):
+                estado.marcar_agendado(fecha_dt, campus_nombre)
+            else:
+                estado.agendado = True
+                estado.estado_capturado.cita_agendada = True
+                estado.estado_capturado.fecha_cita = fecha_dt
+            estado.estado_capturado.fase_agendado = FaseAgendado.CERRADO
             log.info(
-                "appointment_registration_override",
+                "appointment_registration_override+CERRADO",
                 extra={
                     "session_id": session_id,
                     "appointment_id": appointment_handler.appointment_id,

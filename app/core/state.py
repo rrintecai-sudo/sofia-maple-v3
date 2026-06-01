@@ -49,6 +49,24 @@ class NivelEducativo(StrEnum):
     SECUNDARIA = "secundaria"
 
 
+class FaseAgendado(StrEnum):
+    """Fase PEGAJOSA del sub-flujo de agendado (PASO 1, 2026-05-29).
+
+    Independiente de `FaseJourney` (que se recalcula por intent cada turno).
+    Esta máquina la controla el CÓDIGO, no Haiku ni el clasificador:
+
+    - EXPLORANDO: conversación normal; aún no hay señal de querer agendar.
+    - AGENDANDO: se entró con la primera señal (intent QUIERE_AGENDAR o
+      expresión temporal). NO se reevalúa a la baja turno a turno — el código
+      colecta los 6 datos + día/hora en los slots hasta tenerlos todos.
+    - CERRADO: la cita se creó (appointment_id existe). No se reabre.
+    """
+
+    EXPLORANDO = "explorando"
+    AGENDANDO = "agendando"
+    CERRADO = "cerrado"
+
+
 class ClasificacionLead(StrEnum):
     """Clasificación interna del prospecto."""
 
@@ -91,6 +109,16 @@ class EstadoCapturado(BaseModel):
     cita_agendada: bool = False
     fecha_cita: datetime | None = None
     campus_cita: Literal["Campus 1", "Campus 2"] | None = None
+
+    # PASO 1 (2026-05-29) — máquina de agendado controlada por código.
+    # fase_agendado es PEGAJOSA; los slots de fecha/hora persisten entre turnos
+    # para colectar la cita de forma fragmentada (el papá da el día en un turno
+    # y la hora/datos en otros). Todo vive en el JSONB estado_capturado → sin
+    # migración de esquema.
+    fase_agendado: FaseAgendado = FaseAgendado.EXPLORANDO
+    cita_fecha_slot: str | None = None  # 'YYYY-MM-DD' resuelto por código
+    cita_hora_slot: str | None = None  # 'HH:MM' (24h) resuelto por código
+
     handoff_a_lily: bool = False
     fuente_entrada: str | None = None  # 'dm_redes', 'anuncio_whatsapp', 'referido', 'directo'
     vive_fuera_saltillo: bool = False
