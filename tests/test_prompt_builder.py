@@ -465,4 +465,4 @@ def test_agendado_prompt_exige_dia_mas_fecha() -> None:
     blocks = build_system_blocks(estado)
     full = "\n".join(b["text"] for b in blocks).lower()
     assert "día + fecha exacta" in full or "día+fecha" in full or "siempre juntos" in full
-    assert "nunca menciones solo el día" in full or "nunca" in full and "solo el día" in full
+    assert "nunca menciones solo el día" in full or ("nunca" in full and "solo el día" in full)

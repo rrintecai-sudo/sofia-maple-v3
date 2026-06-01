@@ -76,6 +76,36 @@ def extraer_grado_simple(mensaje: str) -> tuple[str | None, str | None]:
     return None, None
 
 
+# ============================================================
+# Nombre del NIÑO pegado a la edad (FIX (c) 2026-06-01)
+# ============================================================
+#
+# "Jose, 4 años" → Jose es el NIÑO (nombre adyacente a la edad). El extractor LLM
+# lo metía como nombre del papá (caso real: nombre_papa="Jose", y luego "Oscar
+# Rodriguez" ya no podía sobreescribir). Este detector lo asigna al hijo.
+
+_NOMBRE_EDAD_RE = re.compile(
+    r"\b([a-záéíóúñ]{2,16})\b\s*,?\s+(?:de\s+|tiene\s+)?(\d{1,2})\s*a[ñn](?:o|os|ito|itos)?\b",
+    re.IGNORECASE,
+)
+_NO_NOMBRE_EDAD = frozenset({
+    "tengo", "tiene", "tienen", "mi", "su", "hijo", "hija", "niño", "niña", "nino",
+    "nina", "nene", "nena", "peque", "el", "la", "los", "las", "de", "del", "años",
+    "año", "ya", "mas", "más", "casi", "como", "unos", "una", "uno", "y", "es",
+    "son", "soy", "con", "para", "cumple", "cumplio", "cumplió",
+})
+
+
+def _nombre_junto_a_edad(mensaje: str) -> str | None:
+    """'Jose, 4 años' / 'Jose de 4 años' → 'Jose'. None si no hay nombre+edad."""
+    for m in _NOMBRE_EDAD_RE.finditer(mensaje or ""):
+        nombre = m.group(1)
+        if nombre.lower() in _NO_NOMBRE_EDAD:
+            continue
+        return nombre[:1].upper() + nombre[1:].lower()
+    return None
+
+
 class ExtraccionTurno(BaseModel):
     """Output del extractor. Cualquier campo puede ser None si no se detectó."""
 
@@ -196,6 +226,12 @@ Output: {"nombre_papa": null, "nombre_hijo": "Lucía", ...}
 Mensaje: "mi hijo Diego está en 2do de primaria"
 Output: {"nombre_papa": null, "nombre_hijo": "Diego", "grado_hijo": "2do de primaria", "nivel_buscado": "primaria", ...}
 
+Mensaje: "Jose, 4 años"
+Output: {"nombre_hijo": "Jose", "edad_hijo": 4, ...}
+
+Mensaje: "se llama Ana y tiene 3 añitos"
+Output: {"nombre_hijo": "Ana", "edad_hijo": 3, ...}
+
 Mensaje: "2 kinder"
 Output: {"grado_hijo": "2° de Kinder", "nivel_buscado": "kinder", ...}
 
@@ -236,33 +272,48 @@ async def extraer_de_mensaje(
     """
     openai = get_openai()
     if not openai.is_configured():
-        log.warning("openai not configured, skipping extraction")
-        return ExtraccionTurno()
-
-    estado_json = estado_actual.model_dump_json(exclude_defaults=True)
-    user_text = (
-        f"ESTADO YA CAPTURADO:\n{estado_json}\n\n"
-        f"ÚLTIMO MENSAJE DEL PAPÁ:\n{mensaje}\n\n"
-        f"Detecta SOLO datos NUEVOS que no estén ya en el estado."
-    )
-
-    try:
-        raw = await openai.classify(text=user_text, instructions=_SYSTEM_PROMPT)
-    except Exception as exc:
-        log.warning("state_extractor api error", extra={"error": str(exc)})
+        log.warning("openai not configured, solo extracción determinística")
         result = ExtraccionTurno()
     else:
-        result = _parse_extraction(raw)
+        estado_json = estado_actual.model_dump_json(exclude_defaults=True)
+        user_text = (
+            f"ESTADO YA CAPTURADO:\n{estado_json}\n\n"
+            f"ÚLTIMO MENSAJE DEL PAPÁ:\n{mensaje}\n\n"
+            f"Detecta SOLO datos NUEVOS que no estén ya en el estado."
+        )
+        try:
+            raw = await openai.classify(text=user_text, instructions=_SYSTEM_PROMPT)
+        except Exception as exc:
+            log.warning("state_extractor api error", extra={"error": str(exc)})
+            result = ExtraccionTurno()
+        else:
+            result = _parse_extraction(raw)
 
-    # FIX (2026-06-01): fallback determinístico de grado. El LLM a veces deja
-    # grado=None en frases como "2 kinder" → la cita no cerraba. Solo rellena si
-    # el LLM no lo capturó; nunca sobreescribe.
+    return _aplicar_fallbacks_deterministicos(result, mensaje)
+
+
+def _aplicar_fallbacks_deterministicos(result: ExtraccionTurno, mensaje: str) -> ExtraccionTurno:
+    """Refuerza la extracción del LLM con reglas determinísticas (FIX 2026-06-01).
+
+    Corre SIEMPRE (incluso si el LLM no estaba disponible). Nunca sobreescribe lo
+    que el LLM sí capturó, salvo la corrección nombre-papá→hijo de (c).
+    """
+    # (FIX 2) grado: "2 kinder" → "2° de Kinder" cuando el LLM lo dejó en None.
     if not result.grado_hijo:
         grado_det, nivel_det = extraer_grado_simple(mensaje)
         if grado_det:
             result.grado_hijo = grado_det
             if not result.nivel_buscado and nivel_det:
                 result.nivel_buscado = nivel_det
+
+    # (FIX c) "Jose, 4 años" → Jose es el NIÑO, no el papá.
+    nombre_nino = _nombre_junto_a_edad(mensaje)
+    if nombre_nino:
+        if not result.nombre_hijo:
+            result.nombre_hijo = nombre_nino
+        # Si el LLM lo asignó como nombre del papá, corrígelo (era el niño).
+        if result.nombre_papa and result.nombre_papa.strip().lower() == nombre_nino.lower():
+            result.nombre_papa = None
 
     return result
 
@@ -295,6 +346,17 @@ def aplicar_extraccion(
     - Si aparece nivel/nombre/edad de hijo, se agrega o actualiza HijoInfo.
     """
     nuevo = estado_actual.model_copy(deep=True)
+
+    # FIX (c) 2026-06-01: si el nombre clavado en nombre_papa resulta ser el del
+    # hijo (entró en el slot equivocado en un turno previo), libera el slot para
+    # que el nombre real del papá pueda entrar después. Evita "Jose" (niño) clavado
+    # como papá impidiendo a "Oscar" registrarse.
+    if (
+        extraccion.nombre_hijo
+        and nuevo.nombre_papa
+        and extraccion.nombre_hijo.strip().lower() == nuevo.nombre_papa.strip().lower()
+    ):
+        nuevo.nombre_papa = None
 
     if extraccion.nombre_papa and not nuevo.nombre_papa:
         nuevo.nombre_papa = extraccion.nombre_papa

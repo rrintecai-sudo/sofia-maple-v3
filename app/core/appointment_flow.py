@@ -26,12 +26,15 @@ from app.config import Settings, get_settings
 from app.core.appointment_extractor import (
     TZ_MONTERREY,
     AppointmentDateTime,
+    es_confirmacion,
     extract_datetime,
+    extraer_fecha_explicita,
     extraer_hora_simple,
     fecha_humana_solo_dia,
 )
 from app.core.campus_resolver import resolve_campus_from_estado
-from app.core.state import EstadoConversacion
+from app.core.state import EstadoCapturado, EstadoConversacion
+from app.core.state_extractor import extraer_grado_simple
 from app.integrations.appointments import create_appointment
 from app.integrations.events import emit_event
 from app.integrations.leads import (
@@ -227,12 +230,42 @@ async def _ensure_lead_para_cita(estado: EstadoConversacion, *, settings: Settin
 # ============================================================
 
 
+def _rescatar_de_propuesta(
+    capt: EstadoCapturado, propuesta: str, *, now: datetime | None = None
+) -> list[str]:
+    """FIX (b) 2026-06-01 — rescate por confirmación GENERAL.
+
+    Cuando el papá confirma, captura al slot lo que Sofía PROPUSO en su último
+    turno (`propuesta`): fecha, hora y grado. Solo rellena slots vacíos, nunca
+    sobreescribe. (El campus NO se rescata: lo deriva el código del grado/nivel.)
+    Devuelve la lista de campos rescatados (para auditoría/log).
+    """
+    rescatados: list[str] = []
+    if not capt.cita_fecha_slot:
+        f = extraer_fecha_explicita(propuesta, now)
+        if f:
+            capt.cita_fecha_slot = f
+            rescatados.append("fecha")
+    if not capt.cita_hora_slot:
+        h = extraer_hora_simple(propuesta)
+        if h:
+            capt.cita_hora_slot = h
+            rescatados.append("hora")
+    if capt.hijos and not capt.hijos[0].grado:
+        g, _niv = extraer_grado_simple(propuesta)
+        if g:
+            capt.hijos[0].grado = g
+            rescatados.append("grado")
+    return rescatados
+
+
 async def handle_appointment_intent(
     mensaje: str,
     estado: EstadoConversacion,
     *,
     settings: Settings | None = None,
     now: datetime | None = None,
+    ultimo_assistant: str | None = None,
 ) -> AppointmentHandlerResult:
     """Procesa el flujo de agendado cuando intent == QUIERE_AGENDAR.
 
@@ -240,10 +273,22 @@ async def handle_appointment_intent(
     AppointmentHandlerResult cuyo `hint_para_prompt` se inyecta al user
     message para que Sofía responda con su tono propio guiada por el
     estado real del agendado.
+
+    `ultimo_assistant`: el último mensaje de Sofía, para el rescate por
+    confirmación (FIX (b)).
     """
     settings = settings or get_settings()
 
     capt = estado.estado_capturado
+
+    # FIX (b) 2026-06-01: rescate por confirmación. Si el papá confirma ("sí",
+    # "dale", "correcto") y Sofía propuso un valor en su último turno, lo
+    # capturamos al slot AUNQUE el extractor LLM haya fallado el mensaje del papá
+    # (typo "10a", fecha que solo Sofía escribió, etc.).
+    if ultimo_assistant and es_confirmacion(mensaje):
+        rescatados = _rescatar_de_propuesta(capt, ultimo_assistant, now=now)
+        if rescatados:
+            log.info("rescate_por_confirmacion", extra={"campos": rescatados})
 
     # 1. Extraer fecha/hora del mensaje y FUNDIRLA en los slots persistentes.
     # PASO 1 (2026-05-29): en conversación fragmentada el papá da el día en un

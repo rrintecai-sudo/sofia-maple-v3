@@ -189,6 +189,13 @@ async def procesar_turno(
     hay_turno_previo_assistant = any(
         (m.get("role") or "").lower() in ("assistant", "ai") for m in historial
     )
+    # Último mensaje de Sofía — usado por el rescate por confirmación (FIX (b))
+    # y por el contexto de respuesta-corta (7bis).
+    ultimo_assistant_msg: str | None = None
+    for m in reversed(historial):
+        if (m.get("role") or "").lower() in ("assistant", "ai"):
+            ultimo_assistant_msg = m.get("content")
+            break
     # Últimos 3 mensajes con prefijo de rol → contexto para desambiguar
     # mensajes ambiguos del papá (ej. "interactuara y que aprenda").
     historial_para_classifier: list[str] = []
@@ -265,7 +272,9 @@ async def procesar_turno(
     appointment_handler: AppointmentHandlerResult | None = None
     if en_agendado:
         try:
-            appointment_handler = await handle_appointment_intent(mensaje, estado)
+            appointment_handler = await handle_appointment_intent(
+                mensaje, estado, ultimo_assistant=ultimo_assistant_msg
+            )
         except Exception as exc:  # resiliente: nunca rompemos el turno
             log.warning(
                 "appointment_handler error",
@@ -300,13 +309,7 @@ async def procesar_turno(
     # Si el papá responde con un mensaje muy corto (≤15 chars) que es
     # confirmación/continuación del turno previo de Sofía, inyectamos contexto
     # explícito para que NO recite info no pedida.
-    ultimo_assistant_msg: str | None = None
-    for m in reversed(historial):
-        role = (m.get("role") or "").lower()
-        if role in ("assistant", "ai"):
-            ultimo_assistant_msg = m.get("content")
-            break
-
+    # (ultimo_assistant_msg se computó en el paso 3, junto al historial.)
     hay_turno_previo_assistant_local = ultimo_assistant_msg is not None
     es_resp_corta = es_respuesta_corta_al_turno_previo(
         mensaje, hay_turno_previo_assistant=hay_turno_previo_assistant_local

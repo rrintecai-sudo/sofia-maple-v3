@@ -211,8 +211,6 @@ async def test_orchestrator_overridea_response_cuando_handler_registro_cita(
     """Si el handler creó una cita pendiente, el orchestrator reemplaza la
     respuesta del LLM con el mensaje determinístico oficial (incluye
     SIEMPRE día+fecha, hora, campus, dirección y Maps)."""
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
 
     from app.core.appointment_extractor import AppointmentDateTime
     from app.tools.campus import CampusResult

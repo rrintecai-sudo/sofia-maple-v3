@@ -798,7 +798,8 @@ def test_datos_faltantes_maternal_no_pide_grado() -> None:
 
 def test_datos_faltantes_detecta_nombre_hijo_y_edad_faltantes() -> None:
     from app.core.appointment_flow import datos_lead_faltantes
-    from app.core.state import EstadoConversacion as _EC, EstadoCapturado as _EK
+    from app.core.state import EstadoCapturado as _EK
+    from app.core.state import EstadoConversacion as _EC
 
     estado = _EC(
         session_id="telegram:111",
@@ -862,7 +863,7 @@ async def test_handler_missing_lead_data_corta_antes_de_crear_cita(monkeypatch) 
 
 
 def test_agendado_prompt_documenta_6_datos_requeridos() -> None:
-    from app.core.prompt_builder import load_prompt_file, clear_cache
+    from app.core.prompt_builder import clear_cache, load_prompt_file
 
     clear_cache()
     md = load_prompt_file("journey/agendado.md").lower()

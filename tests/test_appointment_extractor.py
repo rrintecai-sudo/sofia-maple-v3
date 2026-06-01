@@ -21,9 +21,72 @@ from app.core.appointment_extractor import (
     AppointmentDateTime,
     _build_system_prompt,
     _parse_result,
+    es_confirmacion,
     extract_datetime,
+    extraer_fecha_explicita,
     extraer_hora_simple,
 )
+
+# ============================================================
+# FIX (a) 2026-06-01 — hora "sucia": 10a, 10hrs, etc.
+# ============================================================
+
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        ("viernes 10a,", "10:00"),  # typo real de Oscar
+        ("10a", "10:00"),
+        ("2p", "14:00"),
+        ("10hrs", "10:00"),
+        ("10 hrs", "10:00"),
+        ("14h", "14:00"),
+        ("10 horas", "10:00"),
+    ],
+)
+def test_extraer_hora_simple_sucia(texto, esperado) -> None:
+    assert extraer_hora_simple(texto) == esperado
+
+
+# ============================================================
+# FIX (b) 2026-06-01 — es_confirmacion + extraer_fecha_explicita
+# ============================================================
+
+
+@pytest.mark.parametrize(
+    "texto",
+    ["sí", "si", "si dale", "sí dale", "dale", "ok", "okey", "va", "correcto",
+     "exacto", "claro", "perfecto", "de acuerdo", "está bien", "si esta bien", "así es"],
+)
+def test_es_confirmacion_positivos(texto) -> None:
+    assert es_confirmacion(texto) is True
+
+
+@pytest.mark.parametrize(
+    "texto",
+    ["no", "sí pero el lunes", "mejor el martes", "quiero kinder", "no gracias",
+     "a qué hora", "cuánto cuesta"],
+)
+def test_es_confirmacion_negativos(texto) -> None:
+    assert es_confirmacion(texto) is False
+
+
+def test_extraer_fecha_explicita_dia_mes() -> None:
+    now = datetime(2026, 6, 1, tzinfo=TZ_MONTERREY)  # lunes 1 jun
+    assert extraer_fecha_explicita("viernes 5 de junio", now) == "2026-06-05"
+    assert extraer_fecha_explicita("el 5 de junio a las 10", now) == "2026-06-05"
+
+
+def test_extraer_fecha_explicita_mes_pasado_va_a_proximo_anio() -> None:
+    now = datetime(2026, 6, 1, tzinfo=TZ_MONTERREY)
+    # enero ya pasó este año → próximo enero
+    assert extraer_fecha_explicita("15 de enero", now) == "2027-01-15"
+
+
+def test_extraer_fecha_explicita_sin_fecha() -> None:
+    now = datetime(2026, 6, 1, tzinfo=TZ_MONTERREY)
+    assert extraer_fecha_explicita("sí dale", now) is None
+    assert extraer_fecha_explicita("a las 10", now) is None
 
 # ============================================================
 # extraer_hora_simple (FIX 2026-06-01 — hora suelta determinística)

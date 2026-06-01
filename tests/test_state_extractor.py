@@ -6,10 +6,70 @@ import pytest
 from app.core.state import EstadoCapturado, HijoInfo, NivelEducativo
 from app.core.state_extractor import (
     ExtraccionTurno,
+    _aplicar_fallbacks_deterministicos,
+    _nombre_junto_a_edad,
     _parse_extraction,
     aplicar_extraccion,
     extraer_grado_simple,
 )
+
+# ============================================================
+# FIX (c) 2026-06-01 — "Jose, 4 años" → Jose es el NIÑO
+# ============================================================
+
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        ("Jose, 4 años", "Jose"),
+        ("Jose, 4 anos", "Jose"),
+        ("Jose de 4 años", "Jose"),
+        ("Ana, 3 añitos", "Ana"),
+        ("Diego, 5 años", "Diego"),
+    ],
+)
+def test_nombre_junto_a_edad_positivos(texto, esperado) -> None:
+    assert _nombre_junto_a_edad(texto) == esperado
+
+
+@pytest.mark.parametrize(
+    "texto",
+    ["tengo un hijo de 4 años", "mi hijo tiene 4 años", "tiene 5 años", "quiero kinder", "hola"],
+)
+def test_nombre_junto_a_edad_negativos(texto) -> None:
+    assert _nombre_junto_a_edad(texto) is None
+
+
+def test_fallback_corrige_nombre_papa_a_hijo() -> None:
+    """El LLM metió 'Jose' como nombre del papá; (c) lo mueve al hijo."""
+    buggy = ExtraccionTurno(nombre_papa="Jose", edad_hijo=4, nivel_buscado="kinder")
+    fixed = _aplicar_fallbacks_deterministicos(buggy, "Jose, 4 años")
+    assert fixed.nombre_hijo == "Jose"
+    assert fixed.nombre_papa is None
+
+
+def test_fallback_no_toca_nombre_papa_legitimo() -> None:
+    """'Soy Oscar' sin edad pegada → no se toca el nombre del papá."""
+    extr = ExtraccionTurno(nombre_papa="Oscar Rodriguez")
+    fixed = _aplicar_fallbacks_deterministicos(extr, "Oscar Rodriguez, oscar@x.com")
+    assert fixed.nombre_papa == "Oscar Rodriguez"
+    assert fixed.nombre_hijo is None
+
+
+def test_aplicar_extraccion_libera_nombre_papa_mal_asignado() -> None:
+    """Si 'Jose' quedó clavado como papá y luego se sabe que es el hijo,
+    se libera el slot para que el papá real (Oscar) entre después."""
+    # turno previo dejó nombre_papa="Jose" (mal)
+    actual = EstadoCapturado(nombre_papa="Jose")
+    # turno actual: el extractor ya corrigió → nombre_hijo="Jose"
+    extr = ExtraccionTurno(nombre_hijo="Jose")
+    nuevo = aplicar_extraccion(actual, extr)
+    assert nuevo.nombre_papa is None  # liberado
+    assert nuevo.hijos and nuevo.hijos[0].nombre == "Jose"
+
+    # ahora sí puede entrar Oscar
+    nuevo2 = aplicar_extraccion(nuevo, ExtraccionTurno(nombre_papa="Oscar Rodriguez"))
+    assert nuevo2.nombre_papa == "Oscar Rodriguez"
 
 # ============================================================
 # extraer_grado_simple (FIX 2026-06-01 — "2 kinder" → "2° de Kinder")

@@ -85,7 +85,15 @@ def fecha_humana_solo_dia(fecha_iso: str) -> str | None:
 # "de la tarde", "a las") para no confundir "4 años" o "kinder 2" con una hora.
 
 _HORA_AMPM_RE = re.compile(
-    r"\b(\d{1,2})(?:[:.](\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?)\b", re.IGNORECASE
+    r"\b(\d{1,2})(?:[:.](\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?|am|pm)\b", re.IGNORECASE
+)
+# FIX (a) 2026-06-01: meridiano BARE pegado al número, sin 'm' ("10a", "2p") —
+# typo común del papá ("viernes 10a,"). Solo pegado (sin espacio) para no
+# confundir "4 a" / "4 años".
+_HORA_BARE_RE = re.compile(r"\b(\d{1,2})(?:[:.](\d{2}))?(a|p)\b", re.IGNORECASE)
+# FIX (a): formato 24h con sufijo hrs/horas/h ("10hrs", "14h", "10 horas").
+_HORA_HRS_RE = re.compile(
+    r"\b([01]?\d|2[0-3])(?:[:.]([0-5]\d))?\s*(?:hrs?|horas?|h)\b", re.IGNORECASE
 )
 _HORA_FRANJA_RE = re.compile(
     r"\b(\d{1,2})(?:[:.](\d{2}))?\s*(?:de|en|por)\s+la\s+(ma[ñn]ana|tarde|noche)\b",
@@ -98,8 +106,8 @@ _HORA_ALAS_RE = re.compile(r"\ba\s+las?\s+(\d{1,2})(?:[:.](\d{2}))?\b", re.IGNOR
 def extraer_hora_simple(mensaje: str) -> str | None:
     """Devuelve 'HH:MM' (24h) si el mensaje contiene una hora con indicador, o None.
 
-    Ejemplos: '2pm'→'14:00', '2:30 p.m.'→'14:30', '10am'→'10:00',
-    '14:00'→'14:00', 'a las 2'→'14:00', '9 de la mañana'→'09:00'.
+    Ejemplos: '2pm'→'14:00', '2:30 p.m.'→'14:30', '10am'→'10:00', '10a'→'10:00',
+    '10hrs'→'10:00', '14:00'→'14:00', 'a las 2'→'14:00', '9 de la mañana'→'09:00'.
     'tengo 4 años' / 'kinder 2' → None (sin indicador de hora).
     """
     m = (mensaje or "").lower()
@@ -115,6 +123,21 @@ def extraer_hora_simple(mensaje: str) -> str | None:
             h = 0
         if 0 <= h <= 23 and 0 <= mi <= 59:
             return f"{h:02d}:{mi:02d}"
+
+    bare = _HORA_BARE_RE.search(m)
+    if bare:
+        h = int(bare.group(1))
+        mi = int(bare.group(2) or 0)
+        if bare.group(3).lower() == "p" and h != 12:
+            h += 12
+        elif bare.group(3).lower() == "a" and h == 12:
+            h = 0
+        if 0 <= h <= 23 and 0 <= mi <= 59:
+            return f"{h:02d}:{mi:02d}"
+
+    hrs = _HORA_HRS_RE.search(m)
+    if hrs:
+        return f"{int(hrs.group(1)):02d}:{int(hrs.group(2) or 0):02d}"
 
     franja = _HORA_FRANJA_RE.search(m)
     if franja:
@@ -141,6 +164,78 @@ def extraer_hora_simple(mensaje: str) -> str | None:
             h += 12
         if 0 <= h <= 23 and 0 <= mi <= 59:
             return f"{h:02d}:{mi:02d}"
+
+    return None
+
+
+# ============================================================
+# Confirmación general + fecha explícita (FIX (b) 2026-06-01)
+# ============================================================
+#
+# Robustez por confirmación: cuando Sofía PROPONE un valor (fecha, hora, grado)
+# y el papá confirma ("sí", "dale", "correcto", "ok"), el código captura el valor
+# propuesto al slot AUNQUE el extractor haya fallado el mensaje del papá. Así un
+# typo ("10a") o una fecha que solo Sofía escribió quedan rescatados.
+
+_CONFIRMA_RE = re.compile(
+    r"^\s*(?:"
+    r"s[ií]|sip|sep|dale|ok(?:ay|ey)?|va|sale|"
+    r"correcto|exacto(?:mente)?|claro|as[ií]\s+es|"
+    r"de\s+acuerdo|perfecto|confirmo|afirmativo|aj[aá]|"
+    r"est[aá]\s+bien|bien|t[aá]\s+bien|👍|✅"
+    r")"
+    r"(?:[\s,]+(?:dale|porfa|por\s+favor|claro|correcto|exacto|gracias|s[ií]|"
+    r"as[ií]\s+es|est[aá]\s+bien|bien|va|ok))*"
+    r"[\s\.\!]*$",
+    re.IGNORECASE,
+)
+
+
+def es_confirmacion(mensaje: str) -> bool:
+    """True si el mensaje es una confirmación pura ('sí', 'dale', 'ok', 'sí dale').
+
+    NO matchea si agrega información nueva ('sí pero el lunes') — solo afirmación.
+    """
+    return bool(_CONFIRMA_RE.match((mensaje or "").strip()))
+
+
+_MESES_NUM: dict[str, int] = {
+    "enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5, "junio": 6,
+    "julio": 7, "agosto": 8, "septiembre": 9, "setiembre": 9, "octubre": 10,
+    "noviembre": 11, "diciembre": 12,
+}
+_FECHA_DIA_MES_RE = re.compile(
+    r"\b(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|"
+    r"septiembre|setiembre|octubre|noviembre|diciembre)\b",
+    re.IGNORECASE,
+)
+
+
+def extraer_fecha_explicita(texto: str, now: datetime | None = None) -> str | None:
+    """'viernes 5 de junio' / '5 de junio' → '2026-06-05' (próxima ocurrencia futura).
+
+    Determinístico: usado para rescatar la fecha que Sofía PROPONE cuando el papá
+    confirma. Devuelve None si no hay un 'D de MES' explícito.
+    """
+    m = _FECHA_DIA_MES_RE.search((texto or "").lower())
+    if not m:
+        return None
+    dia = int(m.group(1))
+    mes = _MESES_NUM[m.group(2)]
+    base = now or datetime.now(TZ_MONTERREY)
+    if base.tzinfo is None:
+        base = base.replace(tzinfo=TZ_MONTERREY)
+    try:
+        d = date(base.year, mes, dia)
+    except ValueError:
+        return None
+    # Si ya pasó este año, asumimos el próximo año.
+    if d < base.astimezone(TZ_MONTERREY).date():
+        try:
+            d = date(base.year + 1, mes, dia)
+        except ValueError:
+            return None
+    return d.isoformat()
 
     return None
 
