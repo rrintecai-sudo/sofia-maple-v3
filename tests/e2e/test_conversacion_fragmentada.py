@@ -574,3 +574,130 @@ async def test_fase_agendado_es_pegajosa_no_baja_sola() -> None:
 
     assert repo._conv.estado_capturado.fase_agendado == FaseAgendado.AGENDANDO
     handler.assert_awaited()  # el pipeline siguió corriendo pese a no haber señal
+
+
+# ============================================================
+# 6. REPRODUCCIÓN de la prueba real de Oscar (2026-06-01):
+#    fecha y hora en mensajes SEPARADOS, "2 kinder", y SIN nombre del niño.
+#    Debe: (a) llenar la hora suelta, (b) NO cerrar sin el nombre del niño,
+#    (c) crear el appointment cuando el nombre llega.
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_reproduccion_oscar_hora_suelta_y_nombre_obligatorio() -> None:
+    import types
+
+    from app.core.appointment_extractor import AppointmentDateTime
+    from app.core.state import FaseAgendado
+    from app.tools.campus import CampusResult
+
+    # (intent, extracción, (fecha,hora,conf) que devuelve el extractor LLM de fecha)
+    SCRIPT = {
+        "hola, busco kinder para mi hijo de 4": (
+            Intent.SALUDO_INICIAL,
+            ExtraccionTurno(nivel_buscado="kinder", edad_hijo=4),
+            (None, None, 0.0),
+        ),
+        "quiero agendar una visita": (
+            Intent.QUIERE_AGENDAR, ExtraccionTurno(quiere_agendar=True), (None, None, 0.0),
+        ),
+        "Oscar Rodriguez, ing2oscar@gmail.com, +17866035862": (
+            Intent.CONFUSO_OTRO,
+            ExtraccionTurno(
+                nombre_papa="Oscar Rodriguez", email_papa="ing2oscar@gmail.com",
+                telefono="+17866035862",
+            ),
+            (None, None, 0.0),
+        ),
+        "el jueves": (
+            Intent.CONFUSO_OTRO, ExtraccionTurno(), ("2026-06-04", None, 0.95),
+        ),
+        # ↓ hora SOLA: el extractor LLM la devuelve vacía; el fallback determinístico la resuelve
+        "2pm": (Intent.CONFUSO_OTRO, ExtraccionTurno(), (None, None, 0.0)),
+        # ↓ grado que el LLM antes dejaba en None (ya viene normalizado simulando el fix)
+        "2 kinder": (
+            Intent.CONFUSO_OTRO,
+            ExtraccionTurno(grado_hijo="2° de Kinder", nivel_buscado="kinder"),
+            (None, None, 0.0),
+        ),
+        # ↓ recién aquí el papá da el nombre del niño → cierre
+        "se llama Diego": (
+            Intent.CONFUSO_OTRO, ExtraccionTurno(nombre_hijo="Diego"), (None, None, 0.0),
+        ),
+    }
+
+    async def fake_classify(message, **kw):
+        return _intent(SCRIPT[message][0])
+
+    async def fake_extract(mensaje, estado_actual):
+        return SCRIPT[mensaje][1]
+
+    async def fake_extract_dt(mensaje, *, now=None):
+        f, h, c = SCRIPT[mensaje][2]
+        return AppointmentDateTime(fecha=f, hora=h, confidence=c, razonamiento="test")
+
+    campus1 = CampusResult(
+        id=1, nombre="Campus 1", direccion="José Figueroa Siller 156", colonia="Doctores",
+        ciudad="Saltillo", estado="Coahuila", niveles=["kinder_1", "kinder_2", "kinder_3"],
+        google_maps_url="https://www.google.com/maps/search/?api=1&query=Jose",
+    )
+    repo = _StatefulRepo()
+    anthropic = _fake_anthropic(["(respuesta de Sofía)"])
+    create_appt = AsyncMock(return_value=123)
+
+    leaf = [
+        patch("app.core.orchestrator.get_repository", return_value=repo),
+        patch("app.core.orchestrator.get_anthropic", return_value=anthropic),
+        patch("app.core.orchestrator.classify_intent", side_effect=fake_classify),
+        patch("app.core.orchestrator.extraer_de_mensaje", side_effect=fake_extract),
+        patch("app.core.orchestrator.get_campus_para_nivel", AsyncMock(return_value=None)),
+        patch("app.core.orchestrator.consultar_edades_de_nivel", AsyncMock(return_value=None)),
+        # extract_datetime mockeado; extraer_hora_simple es REAL (prueba el fix de hora)
+        patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
+        patch(
+            "app.core.appointment_flow.is_slot_available",
+            AsyncMock(return_value=types.SimpleNamespace(
+                available=True, reason=None, alternativas=[])),
+        ),
+        patch("app.core.appointment_flow.create_appointment", create_appt),
+        patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=campus1)),
+        patch("app.core.appointment_flow.get_lead_by_session", AsyncMock(return_value=None)),
+        patch("app.core.appointment_flow.create_lead", AsyncMock(return_value=42)),
+        patch("app.core.appointment_flow.emit_event", AsyncMock()),
+        patch("app.core.appointment_flow.send_email", AsyncMock()),
+        patch("app.core.appointment_flow.advance_stage_if_lower", AsyncMock(return_value=True)),
+    ]
+
+    from app.core.orchestrator import procesar_turno
+
+    _enter(leaf)
+    try:
+        result = None
+        for mensaje in SCRIPT:
+            result = await procesar_turno(mensaje=mensaje, session_id="whatsapp:oscar", canal=None)
+            capt = repo._conv.estado_capturado
+            if mensaje == "2pm":
+                # FIX 1: la hora suelta SÍ se guardó aunque la fecha vino antes
+                assert capt.cita_hora_slot == "14:00", "la hora suelta no se guardó"
+            if mensaje == "2 kinder":
+                # FIX 3: con grado pero SIN nombre del niño, NO debe cerrar todavía
+                assert capt.hijos and capt.hijos[0].grado == "2° de Kinder"
+                assert create_appt.await_count == 0, "cerró sin el nombre del niño"
+                assert capt.fase_agendado == FaseAgendado.AGENDANDO
+    finally:
+        _exit(leaf)
+
+    capt = repo._conv.estado_capturado
+    # El cierre ocurrió SOLO tras dar el nombre del niño
+    create_appt.assert_awaited_once()
+    assert capt.fase_agendado == FaseAgendado.CERRADO
+    assert repo._conv.agendado is True
+    assert capt.cita_fecha_slot == "2026-06-04" and capt.cita_hora_slot == "14:00"
+    assert capt.hijos[0].nombre == "Diego"
+    assert capt.hijos[0].grado == "2° de Kinder"
+    # Mensaje final = plantilla D.4 con campus real + Maps
+    assert "ya quedó agendada" in result.response
+    assert "Campus 1" in result.response
+    assert "4 de junio" in result.response
+    assert "https://www.google.com/maps" in result.response

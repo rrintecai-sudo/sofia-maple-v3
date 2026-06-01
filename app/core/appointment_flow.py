@@ -27,6 +27,7 @@ from app.core.appointment_extractor import (
     TZ_MONTERREY,
     AppointmentDateTime,
     extract_datetime,
+    extraer_hora_simple,
     fecha_humana_solo_dia,
 )
 from app.core.campus_resolver import resolve_campus_from_estado
@@ -247,12 +248,23 @@ async def handle_appointment_intent(
     # 1. Extraer fecha/hora del mensaje y FUNDIRLA en los slots persistentes.
     # PASO 1 (2026-05-29): en conversación fragmentada el papá da el día en un
     # turno y la hora/datos en otros. Guardamos lo resuelto en slots para no
-    # "olvidar" la fecha entre turnos. Solo actualizamos con alta confianza.
+    # "olvidar" la fecha entre turnos.
+    #
+    # FIX (2026-06-01): la HORA se desanida de la fecha — se llena aunque venga
+    # en un mensaje aparte ("2pm" sin fecha). Antes solo se guardaba la hora si
+    # el MISMO mensaje traía fecha, así que la hora suelta se perdía y la cita
+    # nunca cerraba (bug real de la prueba de Oscar). Además, un fallback
+    # determinístico cubre cuando el extractor LLM no resuelve la hora suelta.
     appt_dt = await extract_datetime(mensaje, now=now)
-    if appt_dt.es_alta_confianza and appt_dt.fecha:
-        capt.cita_fecha_slot = appt_dt.fecha
+    if appt_dt.es_alta_confianza:
+        if appt_dt.fecha:
+            capt.cita_fecha_slot = appt_dt.fecha
         if appt_dt.hora:
             capt.cita_hora_slot = appt_dt.hora
+    if capt.cita_hora_slot is None:
+        hora_det = extraer_hora_simple(mensaje)
+        if hora_det:
+            capt.cita_hora_slot = hora_det
 
     fecha_slot = capt.cita_fecha_slot
     hora_slot = capt.cita_hora_slot

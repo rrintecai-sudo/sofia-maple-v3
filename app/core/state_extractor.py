@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -21,6 +22,58 @@ from app.adapters.openai_client import get_openai
 from app.core.state import EstadoCapturado, HijoInfo, NivelEducativo
 
 log = logging.getLogger(__name__)
+
+
+# ============================================================
+# Extractor determinístico de GRADO (FIX 2026-06-01)
+# ============================================================
+#
+# El extractor LLM a veces NO captura el grado de frases cortas como "2 kinder"
+# (caso real de la prueba de Oscar: dejó grado=None y la cita no cerró). Este
+# fallback lo normaliza por código: "2 kinder" → "2° de Kinder".
+
+_NUM_PALABRA: dict[str, int] = {
+    "1": 1, "1ro": 1, "1er": 1, "1°": 1, "primero": 1, "primer": 1, "primera": 1,
+    "2": 2, "2do": 2, "2°": 2, "segundo": 2, "segunda": 2,
+    "3": 3, "3ro": 3, "3er": 3, "3°": 3, "tercero": 3, "tercer": 3, "tercera": 3,
+    "4": 4, "4to": 4, "4°": 4, "cuarto": 4, "cuarta": 4,
+    "5": 5, "5to": 5, "5°": 5, "quinto": 5, "quinta": 5,
+    "6": 6, "6to": 6, "6°": 6, "sexto": 6, "sexta": 6,
+}
+_NIVEL_DISPLAY: dict[str, str] = {
+    "kinder": "Kinder", "kínder": "Kinder", "preescolar": "Kinder",
+    "primaria": "Primaria", "secundaria": "Secundaria",
+}
+_NIVEL_ENUM: dict[str, str] = {
+    "kinder": "kinder", "kínder": "kinder", "preescolar": "kinder",
+    "primaria": "primaria", "secundaria": "secundaria", "maternal": "maternal",
+}
+# Multi-char primero para que "2do"/"2°" ganen al dígito suelto.
+_NUMS_KW = (
+    r"1ro|1er|1°|2do|2°|3ro|3er|3°|4to|4°|5to|5°|6to|6°|"
+    r"primero|primera|primer|segundo|segunda|tercero|tercera|tercer|"
+    r"cuarto|cuarta|quinto|quinta|sexto|sexta|[1-6]"
+)
+_NIVELES_KW = r"kinder|kínder|preescolar|primaria|secundaria"
+_GRADO_NUM_NIVEL_RE = re.compile(
+    rf"\b({_NUMS_KW})\s*(?:°\s*)?(?:de\s+|grado\s+(?:de\s+)?)?({_NIVELES_KW})\b", re.IGNORECASE
+)
+_GRADO_NIVEL_NUM_RE = re.compile(rf"\b({_NIVELES_KW})\s+({_NUMS_KW})\b", re.IGNORECASE)
+
+
+def extraer_grado_simple(mensaje: str) -> tuple[str | None, str | None]:
+    """('2 kinder') → ('2° de Kinder', 'kinder'). Devuelve (grado, nivel) o (None, None)."""
+    m = (mensaje or "").lower()
+    for rx, num_first in ((_GRADO_NUM_NIVEL_RE, True), (_GRADO_NIVEL_NUM_RE, False)):
+        mt = rx.search(m)
+        if not mt:
+            continue
+        num_t = mt.group(1) if num_first else mt.group(2)
+        niv_t = mt.group(2) if num_first else mt.group(1)
+        num = _NUM_PALABRA.get(num_t.strip())
+        if num and niv_t in _NIVEL_DISPLAY:
+            return f"{num}° de {_NIVEL_DISPLAY[niv_t]}", _NIVEL_ENUM.get(niv_t)
+    return None, None
 
 
 class ExtraccionTurno(BaseModel):
@@ -143,6 +196,12 @@ Output: {"nombre_papa": null, "nombre_hijo": "Lucía", ...}
 Mensaje: "mi hijo Diego está en 2do de primaria"
 Output: {"nombre_papa": null, "nombre_hijo": "Diego", "grado_hijo": "2do de primaria", "nivel_buscado": "primaria", ...}
 
+Mensaje: "2 kinder"
+Output: {"grado_hijo": "2° de Kinder", "nivel_buscado": "kinder", ...}
+
+Mensaje: "va en kinder 3"
+Output: {"grado_hijo": "3° de Kinder", "nivel_buscado": "kinder", ...}
+
 Mensaje: "Hola"
 Output: {"nombre_papa": null, ...}
 
@@ -191,9 +250,21 @@ async def extraer_de_mensaje(
         raw = await openai.classify(text=user_text, instructions=_SYSTEM_PROMPT)
     except Exception as exc:
         log.warning("state_extractor api error", extra={"error": str(exc)})
-        return ExtraccionTurno()
+        result = ExtraccionTurno()
+    else:
+        result = _parse_extraction(raw)
 
-    return _parse_extraction(raw)
+    # FIX (2026-06-01): fallback determinístico de grado. El LLM a veces deja
+    # grado=None en frases como "2 kinder" → la cita no cerraba. Solo rellena si
+    # el LLM no lo capturó; nunca sobreescribe.
+    if not result.grado_hijo:
+        grado_det, nivel_det = extraer_grado_simple(mensaje)
+        if grado_det:
+            result.grado_hijo = grado_det
+            if not result.nivel_buscado and nivel_det:
+                result.nivel_buscado = nivel_det
+
+    return result
 
 
 def _parse_extraction(raw: str) -> ExtraccionTurno:

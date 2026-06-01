@@ -22,7 +22,46 @@ from app.core.appointment_extractor import (
     _build_system_prompt,
     _parse_result,
     extract_datetime,
+    extraer_hora_simple,
 )
+
+# ============================================================
+# extraer_hora_simple (FIX 2026-06-01 — hora suelta determinística)
+# ============================================================
+
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        ("2pm", "14:00"),
+        ("2 pm", "14:00"),
+        ("2 p.m.", "14:00"),
+        ("2:30pm", "14:30"),
+        ("10am", "10:00"),
+        ("10 a.m.", "10:00"),
+        ("12pm", "12:00"),
+        ("12am", "00:00"),
+        ("14:00", "14:00"),
+        ("9:15", "09:15"),
+        ("a las 2", "14:00"),
+        ("a las 10", "10:00"),
+        ("a las 2 pm", "14:00"),
+        ("2 de la tarde", "14:00"),
+        ("9 de la mañana", "09:00"),
+        ("8 de la noche", "20:00"),
+    ],
+)
+def test_extraer_hora_simple_positivos(texto, esperado) -> None:
+    assert extraer_hora_simple(texto) == esperado
+
+
+@pytest.mark.parametrize(
+    "texto",
+    ["tengo 4 años", "kinder 2", "mi hijo de 5", "2 kinder", "somos 3", "hola", ""],
+)
+def test_extraer_hora_simple_no_falsos_positivos(texto) -> None:
+    """No debe confundir edades/grados/conteos con una hora."""
+    assert extraer_hora_simple(texto) is None
 
 
 class _StubOpenAI:

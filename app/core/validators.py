@@ -170,7 +170,7 @@ _PALABRAS_NO_NOMBRE = frozenset({
     "que", "qué", "como", "cómo", "claro", "mira", "oye", "hola", "hey",
     "gracias", "perfecto", "bienvenido", "bienvenida", "buenas", "buenos",
     "mucho", "muchas", "un", "una", "por", "para", "con", "cuando", "entonces",
-    "ahora", "aqui", "aquí", "papa", "papá", "mama", "mamá", "claro", "genial",
+    "ahora", "aqui", "aquí", "papa", "papá", "mama", "mamá", "genial",
     "excelente", "encantada", "estamos", "estoy", "este", "esta", "todo", "ya",
 })
 

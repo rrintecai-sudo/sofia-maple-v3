@@ -2,12 +2,45 @@
 
 from __future__ import annotations
 
+import pytest
 from app.core.state import EstadoCapturado, HijoInfo, NivelEducativo
 from app.core.state_extractor import (
     ExtraccionTurno,
     _parse_extraction,
     aplicar_extraccion,
+    extraer_grado_simple,
 )
+
+# ============================================================
+# extraer_grado_simple (FIX 2026-06-01 — "2 kinder" → "2° de Kinder")
+# ============================================================
+
+
+@pytest.mark.parametrize(
+    "texto,grado,nivel",
+    [
+        ("2 kinder", "2° de Kinder", "kinder"),
+        ("2do kinder", "2° de Kinder", "kinder"),
+        ("kinder 3", "3° de Kinder", "kinder"),
+        ("segundo de kinder", "2° de Kinder", "kinder"),
+        ("va en kinder 2", "2° de Kinder", "kinder"),
+        ("3ro de primaria", "3° de Primaria", "primaria"),
+        ("5to primaria", "5° de Primaria", "primaria"),
+        ("primaria 6", "6° de Primaria", "primaria"),
+        ("1 secundaria", "1° de Secundaria", "secundaria"),
+    ],
+)
+def test_extraer_grado_simple_positivos(texto, grado, nivel) -> None:
+    g, n = extraer_grado_simple(texto)
+    assert g == grado
+    assert n == nivel
+
+
+@pytest.mark.parametrize(
+    "texto", ["tengo 4 años", "somos 3 hijos", "hola", "quiero info", "kinder", ""]
+)
+def test_extraer_grado_simple_no_falsos_positivos(texto) -> None:
+    assert extraer_grado_simple(texto) == (None, None)
 
 
 def test_parse_extraction_valid_json() -> None:

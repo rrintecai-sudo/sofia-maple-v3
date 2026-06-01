@@ -73,6 +73,78 @@ def fecha_humana_solo_dia(fecha_iso: str) -> str | None:
     return f"{_DIAS_ES[d.weekday()]} {d.day} de {_MESES_ES[d.month - 1]}"
 
 
+# ============================================================
+# Extractor determinístico de HORA suelta (FIX 2026-06-01)
+# ============================================================
+#
+# El extractor LLM solo resuelve la hora de forma fiable cuando viene junto a la
+# fecha. En conversación fragmentada el papá manda la hora sola ("2pm", "a las
+# 2") en un mensaje aparte, y el LLM la devolvía con baja confianza o null → el
+# slot de hora quedaba vacío y la cita nunca cerraba. Este fallback resuelve la
+# hora por código. Solo dispara si hay un INDICADOR de hora (am/pm, ":MM",
+# "de la tarde", "a las") para no confundir "4 años" o "kinder 2" con una hora.
+
+_HORA_AMPM_RE = re.compile(
+    r"\b(\d{1,2})(?:[:.](\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?)\b", re.IGNORECASE
+)
+_HORA_FRANJA_RE = re.compile(
+    r"\b(\d{1,2})(?:[:.](\d{2}))?\s*(?:de|en|por)\s+la\s+(ma[ñn]ana|tarde|noche)\b",
+    re.IGNORECASE,
+)
+_HORA_24_RE = re.compile(r"\b([01]?\d|2[0-3]):([0-5]\d)\b")
+_HORA_ALAS_RE = re.compile(r"\ba\s+las?\s+(\d{1,2})(?:[:.](\d{2}))?\b", re.IGNORECASE)
+
+
+def extraer_hora_simple(mensaje: str) -> str | None:
+    """Devuelve 'HH:MM' (24h) si el mensaje contiene una hora con indicador, o None.
+
+    Ejemplos: '2pm'→'14:00', '2:30 p.m.'→'14:30', '10am'→'10:00',
+    '14:00'→'14:00', 'a las 2'→'14:00', '9 de la mañana'→'09:00'.
+    'tengo 4 años' / 'kinder 2' → None (sin indicador de hora).
+    """
+    m = (mensaje or "").lower()
+
+    am_pm = _HORA_AMPM_RE.search(m)
+    if am_pm:
+        h = int(am_pm.group(1))
+        mi = int(am_pm.group(2) or 0)
+        mer = am_pm.group(3).replace(".", "").replace(" ", "")
+        if mer.startswith("p") and h != 12:
+            h += 12
+        elif mer.startswith("a") and h == 12:
+            h = 0
+        if 0 <= h <= 23 and 0 <= mi <= 59:
+            return f"{h:02d}:{mi:02d}"
+
+    franja = _HORA_FRANJA_RE.search(m)
+    if franja:
+        h = int(franja.group(1))
+        mi = int(franja.group(2) or 0)
+        f = franja.group(3)
+        if f in ("tarde", "noche") and h != 12:
+            h += 12
+        elif f.startswith("ma") and h == 12:
+            h = 0
+        if 0 <= h <= 23 and 0 <= mi <= 59:
+            return f"{h:02d}:{mi:02d}"
+
+    h24 = _HORA_24_RE.search(m)
+    if h24:
+        return f"{int(h24.group(1)):02d}:{int(h24.group(2)):02d}"
+
+    alas = _HORA_ALAS_RE.search(m)
+    if alas:
+        h = int(alas.group(1))
+        mi = int(alas.group(2) or 0)
+        # Horario laboral de Lily (8:00 a 15:00): una hora de 1 a 7 sin meridiano es PM.
+        if 1 <= h <= 7:
+            h += 12
+        if 0 <= h <= 23 and 0 <= mi <= 59:
+            return f"{h:02d}:{mi:02d}"
+
+    return None
+
+
 @dataclass
 class AppointmentDateTime:
     """Fecha/hora extraída de un mensaje. Si fecha o hora son None,
