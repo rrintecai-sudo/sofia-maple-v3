@@ -138,6 +138,32 @@ class EstadoCapturado(BaseModel):
             return valor  # solo True cuenta como conocido para flags
         return True
 
+    def hijo_efectivo(self) -> HijoInfo | None:
+        """Hijo 'efectivo' para el agendado: FUSIONA todos los hijos en uno
+        (primer valor no-None por campo), priorizando el que tiene nombre.
+
+        FIX (d) 2026-06-01: la cita es para UN niño. Si una conversación vieja
+        contaminada dejó un hijo HUÉRFANO (p.ej. {edad:4} sin nombre) y el niño
+        real quedó en otro registro, el gate de 6 datos NO debe mirar `hijos[0]`
+        a ciegas: consolida los fragmentos. NO muta la lista persistida.
+        """
+        if not self.hijos:
+            return None
+
+        def _score(h: HijoInfo) -> int:
+            llenos = sum(v is not None for v in (h.nombre, h.edad, h.nivel, h.grado))
+            return llenos + (2 if h.nombre else 0)  # desempata a favor del que tiene nombre
+
+        base = max(self.hijos, key=_score)
+        merged = base.model_copy(deep=True)
+        for h in self.hijos:
+            if h is base:
+                continue
+            for campo in ("nombre", "edad", "nivel", "grado", "escuela_actual", "diagnostico"):
+                if getattr(merged, campo) is None and getattr(h, campo) is not None:
+                    setattr(merged, campo, getattr(h, campo))
+        return merged
+
 
 class EstadoConversacion(BaseModel):
     """Estado completo de una sesión de Sofía.

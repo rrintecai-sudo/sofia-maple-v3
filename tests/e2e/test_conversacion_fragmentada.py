@@ -826,3 +826,117 @@ async def test_entrada_sucia_cierra_con_confirmacion() -> None:
     assert "ya quedó agendada" in result.response
     assert "5 de junio" in result.response
     assert "Campus 1" in result.response
+
+
+# ============================================================
+# 8. ESTADO PRE-CONTAMINADO (2026-06-01): sesión reusada con un hijo HUÉRFANO
+#    y nombre_papa viejo CLAVADO ("Jose"). El cierre debe crear el appointment
+#    con el niño y el papá correctos (FIX (d) + (e)). Caso real: en WhatsApp la
+#    sesión es el teléfono y persiste — esto pasará con papás reales.
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_estado_contaminado_cierra_con_datos_correctos() -> None:
+    import types
+
+    from app.core.appointment_extractor import AppointmentDateTime
+    from app.core.state import (
+        Canal,
+        EstadoCapturado,
+        EstadoConversacion,
+        FaseAgendado,
+        FaseJourney,
+        HijoInfo,
+    )
+    from app.tools.campus import CampusResult
+
+    # Estado CONTAMINADO de un intento viejo: Jose clavado como papá, hijo huérfano
+    # {edad:4}, fase ya AGENDANDO, slots de fecha/hora ya puestos, email/tel ya dados.
+    contaminado = EstadoConversacion(
+        session_id="web:dirty", canal=Canal.WEB, identificador="dirty",
+        fase_journey=FaseJourney.AGENDADO,
+        estado_capturado=EstadoCapturado(
+            nombre_papa="Jose",  # ← clavado y MAL (era el niño del intento viejo)
+            email_papa="ing2oscar@gmail.com", telefono="+17866035862",
+            hijos=[HijoInfo(edad=4)],  # ← huérfano sin nombre/nivel/grado
+            fase_agendado=FaseAgendado.AGENDANDO,
+            cita_fecha_slot="2026-06-05", cita_hora_slot="11:00",
+        ),
+    )
+
+    SCRIPT = {
+        # presentación explícita → (e) corrige "Jose"→"Oscar"; nombre del niño Emanuel
+        "Emanuel Rodriguez, yo soy Oscar Rodriguez":
+            '{"nombre_hijo": "Emanuel", "nombre_papa": "Oscar Rodriguez"}',
+        # grado + nivel del niño (crea/fusiona) → (d) consolida con el huérfano
+        "Emanuel, 2° de Kinder":
+            '{"nombre_hijo": "Emanuel", "grado_hijo": "2° de Kinder", "nivel_buscado": "kinder"}',
+    }
+
+    class _StubOpenAI:
+        def is_configured(self):
+            return True
+
+        async def classify(self, text, instructions, model=None):
+            for msg, js in SCRIPT.items():
+                if msg in text:
+                    return js
+            return "{}"
+
+    async def fake_extract_dt(mensaje, *, now=None):
+        return AppointmentDateTime(fecha=None, hora=None, confidence=0.0, razonamiento="t")
+
+    campus1 = CampusResult(
+        id=1, nombre="Campus 1", direccion="José Figueroa Siller 156", colonia="Doctores",
+        ciudad="Saltillo", estado="Coahuila", niveles=["kinder_1", "kinder_2", "kinder_3"],
+        google_maps_url="https://www.google.com/maps/search/?api=1&query=Jose",
+    )
+    repo = _StatefulRepo()
+    repo._conv = contaminado  # ← arrancamos con el estado sucio
+    anthropic = _fake_anthropic(["ok", "ok"])
+    create_appt = AsyncMock(return_value=555)
+
+    leaf = [
+        patch("app.core.orchestrator.get_repository", return_value=repo),
+        patch("app.core.orchestrator.get_anthropic", return_value=anthropic),
+        patch("app.core.orchestrator.classify_intent",
+              side_effect=lambda *a, **k: _intent(Intent.CONFUSO_OTRO)),
+        patch("app.core.orchestrator.get_campus_para_nivel", AsyncMock(return_value=None)),
+        patch("app.core.orchestrator.consultar_edades_de_nivel", AsyncMock(return_value=None)),
+        patch("app.core.state_extractor.get_openai", return_value=_StubOpenAI()),
+        patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
+        patch("app.core.appointment_flow.is_slot_available",
+              AsyncMock(return_value=types.SimpleNamespace(available=True, reason=None, alternativas=[]))),
+        patch("app.core.appointment_flow.create_appointment", create_appt),
+        patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=campus1)),
+        patch("app.core.appointment_flow.get_lead_by_session", AsyncMock(return_value=None)),
+        patch("app.core.appointment_flow.create_lead", AsyncMock(return_value=88)),
+        patch("app.core.appointment_flow.emit_event", AsyncMock()),
+        patch("app.core.appointment_flow.send_email", AsyncMock()),
+        patch("app.core.appointment_flow.advance_stage_if_lower", AsyncMock(return_value=True)),
+    ]
+
+    from app.core.orchestrator import procesar_turno
+
+    _enter(leaf)
+    try:
+        result = None
+        for mensaje in SCRIPT:
+            result = await procesar_turno(mensaje=mensaje, session_id="web:dirty", canal=None)
+    finally:
+        _exit(leaf)
+
+    capt = repo._conv.estado_capturado
+    # (e): el nombre del papá se corrigió de "Jose" a "Oscar Rodriguez"
+    assert capt.nombre_papa == "Oscar Rodriguez"
+    # (d): el hijo consolidado tiene nombre+edad+grado pese al huérfano
+    hijo = capt.hijo_efectivo()
+    assert hijo.nombre == "Emanuel"
+    assert hijo.edad == 4
+    assert hijo.grado == "2° de Kinder"
+    # cierre por código a pesar del estado contaminado
+    create_appt.assert_awaited_once()
+    assert capt.fase_agendado == FaseAgendado.CERRADO
+    assert "ya quedó agendada" in result.response
+    assert "5 de junio" in result.response

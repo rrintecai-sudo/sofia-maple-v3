@@ -155,8 +155,8 @@ def resolve_campus_from_estado(estado: EstadoConversacion) -> int | None:
     nivel_enum = capt.nivel_buscado_actual
     edad = None
     grado_texto = None
-    if capt.hijos:
-        h0 = capt.hijos[0]
+    h0 = capt.hijo_efectivo()  # FIX (d): hijo consolidado, no hijos[0] a ciegas
+    if h0 is not None:
         if nivel_enum is None:
             nivel_enum = h0.nivel
         edad = h0.edad

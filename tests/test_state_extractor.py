@@ -7,11 +7,46 @@ from app.core.state import EstadoCapturado, HijoInfo, NivelEducativo
 from app.core.state_extractor import (
     ExtraccionTurno,
     _aplicar_fallbacks_deterministicos,
+    _es_presentacion_explicita,
     _nombre_junto_a_edad,
     _parse_extraction,
     aplicar_extraccion,
     extraer_grado_simple,
 )
+
+# ============================================================
+# FIX (e) 2026-06-01 — "yo soy Oscar" corrige nombre_papa clavado
+# ============================================================
+
+
+@pytest.mark.parametrize(
+    "texto",
+    ["yo soy Oscar Rodriguez", "Emanuel, yo soy Oscar", "me llamo Ana", "mi nombre es Luis"],
+)
+def test_es_presentacion_explicita_positivos(texto) -> None:
+    assert _es_presentacion_explicita(texto) is True
+
+
+def test_presentacion_explicita_marca_flag() -> None:
+    extr = ExtraccionTurno(nombre_papa="Oscar Rodriguez")
+    fixed = _aplicar_fallbacks_deterministicos(extr, "Emanuel Rodriguez, yo soy Oscar Rodriguez")
+    assert fixed.nombre_papa_explicito is True
+
+
+def test_aplicar_extraccion_explicito_sobreescribe_clavado() -> None:
+    """'Jose' clavado de sesión contaminada; 'yo soy Oscar' lo corrige."""
+    actual = EstadoCapturado(nombre_papa="Jose")
+    extr = ExtraccionTurno(nombre_papa="Oscar Rodriguez", nombre_papa_explicito=True)
+    nuevo = aplicar_extraccion(actual, extr)
+    assert nuevo.nombre_papa == "Oscar Rodriguez"
+
+
+def test_aplicar_extraccion_no_explicito_no_sobreescribe() -> None:
+    """Sin presentación explícita NO se pisa un nombre ya capturado."""
+    actual = EstadoCapturado(nombre_papa="Jose")
+    extr = ExtraccionTurno(nombre_papa="Oscar", nombre_papa_explicito=False)
+    nuevo = aplicar_extraccion(actual, extr)
+    assert nuevo.nombre_papa == "Jose"
 
 # ============================================================
 # FIX (c) 2026-06-01 — "Jose, 4 años" → Jose es el NIÑO

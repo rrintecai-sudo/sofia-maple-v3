@@ -115,11 +115,12 @@ def datos_lead_faltantes(estado: EstadoConversacion) -> list[str]:
     capt = estado.estado_capturado
     faltantes: list[str] = []
 
-    primer_hijo = capt.hijos[0] if capt.hijos else None
+    # FIX (d): hijo CONSOLIDADO (fusiona huérfanos de sesión contaminada), no hijos[0].
+    primer_hijo = capt.hijo_efectivo()
     nombre_hijo = primer_hijo.nombre if primer_hijo else None
     edad_hijo = primer_hijo.edad if primer_hijo else None
     grado_hijo = primer_hijo.grado if primer_hijo else None
-    nivel_hijo = primer_hijo.nivel if primer_hijo else capt.nivel_buscado_actual
+    nivel_hijo = (primer_hijo.nivel if primer_hijo else None) or capt.nivel_buscado_actual
 
     if not nombre_hijo:
         faltantes.append("nombre del hijo")
@@ -149,19 +150,19 @@ def _nivel_para_leads(estado: EstadoConversacion) -> str | None:
     """
     capt = estado.estado_capturado
     nivel = capt.nivel_buscado_actual
-    if nivel is None and capt.hijos:
-        nivel = capt.hijos[0].nivel
+    if nivel is None:
+        h = capt.hijo_efectivo()
+        nivel = h.nivel if h else None
     if nivel is None:
         return None
     return nivel.value
 
 
 def _primer_hijo(estado: EstadoConversacion) -> tuple[str | None, int | None]:
-    """Devuelve (nombre_hijo, edad_hijo) del primer hijo registrado, o (None, None)."""
-    capt = estado.estado_capturado
-    if not capt.hijos:
+    """Devuelve (nombre_hijo, edad_hijo) del hijo CONSOLIDADO (FIX (d)), o (None, None)."""
+    h = estado.estado_capturado.hijo_efectivo()
+    if h is None:
         return None, None
-    h = capt.hijos[0]
     return h.nombre, h.edad
 
 
@@ -171,10 +172,8 @@ def _primer_hijo(estado: EstadoConversacion) -> tuple[str | None, int | None]:
 
 
 def _primer_hijo_grado(estado: EstadoConversacion) -> str | None:
-    capt = estado.estado_capturado
-    if not capt.hijos:
-        return None
-    return capt.hijos[0].grado
+    h = estado.estado_capturado.hijo_efectivo()  # FIX (d): hijo consolidado
+    return h.grado if h else None
 
 
 async def _ensure_lead_para_cita(estado: EstadoConversacion, *, settings: Settings) -> int | None:

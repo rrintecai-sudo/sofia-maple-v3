@@ -106,10 +106,26 @@ def _nombre_junto_a_edad(mensaje: str) -> str | None:
     return None
 
 
+# Presentación EXPLÍCITA del papá ("yo soy X", "me llamo X", "mi nombre es X").
+# FIX (e): habilita corregir un nombre_papa clavado de una sesión contaminada.
+_PRESENTACION_RE = re.compile(
+    r"(?:^|[\s,.;])(?:yo\s+soy|me\s+llamo|mi\s+nombre\s+es|soy)\s+[a-záéíóúñ]",
+    re.IGNORECASE,
+)
+
+
+def _es_presentacion_explicita(mensaje: str) -> bool:
+    return bool(_PRESENTACION_RE.search(mensaje or ""))
+
+
 class ExtraccionTurno(BaseModel):
     """Output del extractor. Cualquier campo puede ser None si no se detectó."""
 
     nombre_papa: str | None = None
+    # FIX (e) 2026-06-01: True si el papá se presentó EXPLÍCITAMENTE ("yo soy X",
+    # "me llamo X"). Permite corregir un nombre_papa mal asignado/clavado de una
+    # sesión contaminada (no se persiste; es señal de merge para aplicar_extraccion).
+    nombre_papa_explicito: bool = False
     email_papa: str | None = None  # D.3 (Lily 2026-05-27): captura pre-cita
     telefono: str | None = None  # D.3: número celular del papá
     nivel_buscado: str | None = None  # 'maternal'|'kinder'|'primaria'|'secundaria'|None
@@ -315,6 +331,11 @@ def _aplicar_fallbacks_deterministicos(result: ExtraccionTurno, mensaje: str) ->
         if result.nombre_papa and result.nombre_papa.strip().lower() == nombre_nino.lower():
             result.nombre_papa = None
 
+    # (FIX e) marca presentación explícita ("yo soy Oscar") para poder corregir un
+    # nombre_papa clavado de una sesión contaminada.
+    if result.nombre_papa and _es_presentacion_explicita(mensaje):
+        result.nombre_papa_explicito = True
+
     return result
 
 
@@ -358,7 +379,9 @@ def aplicar_extraccion(
     ):
         nuevo.nombre_papa = None
 
-    if extraccion.nombre_papa and not nuevo.nombre_papa:
+    # FIX (e): un nombre explícito ("yo soy Oscar") SOBREESCRIBE aunque ya haya uno
+    # clavado (corrige contaminación). Si no es explícito, solo llena si está vacío.
+    if extraccion.nombre_papa and (not nuevo.nombre_papa or extraccion.nombre_papa_explicito):
         nuevo.nombre_papa = extraccion.nombre_papa
 
     if extraccion.email_papa and not nuevo.email_papa:

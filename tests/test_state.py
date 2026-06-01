@@ -17,6 +17,33 @@ from app.core.state import (
 )
 
 
+def test_hijo_efectivo_fusiona_huerfano() -> None:
+    """FIX (d): un hijo huérfano {edad:4} + el real {nombre,nivel,grado} → uno solo."""
+    capt = EstadoCapturado(
+        hijos=[
+            HijoInfo(edad=4),  # huérfano de sesión contaminada
+            HijoInfo(nombre="Emanuel", nivel=NivelEducativo.KINDER, grado="2° de Kinder"),
+        ]
+    )
+    h = capt.hijo_efectivo()
+    assert h is not None
+    assert h.nombre == "Emanuel"
+    assert h.edad == 4
+    assert h.nivel == NivelEducativo.KINDER
+    assert h.grado == "2° de Kinder"
+
+
+def test_hijo_efectivo_vacio_devuelve_none() -> None:
+    assert EstadoCapturado().hijo_efectivo() is None
+
+
+def test_hijo_efectivo_no_muta_la_lista() -> None:
+    capt = EstadoCapturado(hijos=[HijoInfo(edad=4), HijoInfo(nombre="Ana")])
+    _ = capt.hijo_efectivo()
+    assert len(capt.hijos) == 2  # la lista persistida no se toca
+    assert capt.hijos[0].nombre is None
+
+
 def test_estado_conversacion_nueva_whatsapp() -> None:
     """`nueva()` parsea session_id con prefijo canal."""
     estado = EstadoConversacion.nueva("whatsapp:5218441302112@s.whatsapp.net")
