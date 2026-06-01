@@ -203,6 +203,7 @@ async def approve_appointment(
             fecha_hora=appt.fecha_hora,
             campus=campus,
             nombre_papa=nombre_papa,
+            canal=session_id.split(":", 1)[0] if session_id else None,  # FIX 2
         )
         message_sent = await send_message_to_session(session_id, texto)
 

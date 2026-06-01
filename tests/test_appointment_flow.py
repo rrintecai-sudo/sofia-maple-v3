@@ -737,9 +737,9 @@ async def test_campus_primaria_sin_grado_pide_grado(monkeypatch) -> None:
             hijos=[
                 HijoInfo(
                     nombre="Luis",
-                    edad=10,
+                    edad=None,  # FIX 1: sin edad NI grado no se puede deducir → se pide
                     nivel=NivelEducativo.PRIMARIA,
-                )  # falta grado
+                )
             ],
         ),
     )
@@ -766,6 +766,7 @@ def test_datos_faltantes_lista_vacia_con_lead_completo() -> None:
 
 
 def test_datos_faltantes_detecta_email_celular_y_grado() -> None:
+    """FIX 1: el grado solo se pide si NO hay edad (sin edad no se deduce)."""
     from app.core.appointment_flow import datos_lead_faltantes
 
     estado = _estado_base(
@@ -774,11 +775,64 @@ def test_datos_faltantes_detecta_email_celular_y_grado() -> None:
         email_papa=None,
         telefono=None,
         grado_hijo=None,
+        edad_hijo=None,  # sin edad → el grado no se puede deducir → se pide
     )
     faltan = datos_lead_faltantes(estado)
     assert "correo electrónico" in faltan
     assert "número de celular" in faltan
     assert "grado escolar del hijo" in faltan
+
+
+def test_datos_faltantes_no_pide_grado_si_hay_edad() -> None:
+    """FIX 1: con edad conocida, el grado se DEDUCE (no se pide)."""
+    from app.core.appointment_flow import datos_lead_faltantes
+
+    estado = _estado_base(
+        nombre_papa="Ana",
+        nivel=NivelEducativo.PRIMARIA,
+        grado_hijo=None,
+        edad_hijo=8,
+    )
+    faltan = datos_lead_faltantes(estado)
+    assert "grado escolar del hijo" not in faltan
+    assert faltan == []  # con edad+demás datos, nada falta
+
+
+# ============================================================
+# FIX 1 (2026-06-01) — derivar nivel/grado de la edad
+# ============================================================
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "edad,pref,cat,grado",
+    [
+        (3, None, "maternal", None),       # 3 default → Maternal (Toddlers)
+        (3, "kinder", "kinder", "1° de Kinder"),  # papá dice kinder → K1
+        (4, "kinder", "kinder", "2° de Kinder"),  # K2 = 4
+        (4, None, "kinder", "2° de Kinder"),      # 4 → Kinder 2 (no maternal a esa edad)
+        (5, None, "kinder", "3° de Kinder"),      # K3 = 5
+        (6, None, "primaria", "1° de Primaria"),  # 72m
+        (1, None, "maternal", None),       # 12m → Babies (maternal, sin grado)
+    ],
+)
+async def test_derivar_nivel_grado_de_edad(edad, pref, cat, grado) -> None:
+    """Sin Supabase usa el espejo determinístico _NIVELES_FALLBACK."""
+    from app.tools.niveles import derivar_nivel_grado_de_edad
+
+    res = await derivar_nivel_grado_de_edad(edad, nivel_preferido=pref)
+    assert res is not None
+    categoria, g, _display = res
+    assert categoria == cat
+    assert g == grado
+
+
+@pytest.mark.asyncio
+async def test_derivar_edad_fuera_de_tabla_devuelve_none() -> None:
+    from app.tools.niveles import derivar_nivel_grado_de_edad
+
+    assert await derivar_nivel_grado_de_edad(20) is None
+    assert await derivar_nivel_grado_de_edad(None) is None
 
 
 def test_datos_faltantes_maternal_no_pide_grado() -> None:

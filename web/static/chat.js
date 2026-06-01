@@ -25,6 +25,11 @@ function formatBubble(text) {
   // (un solo asterisco) no rompa el match de bold.
   const escaped = escapeHTML(text);
   return escaped
+    // [texto](url) → hipervínculo clickeable (FIX 2: link de Maps amigable)
+    .replace(
+      /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+    )
     // **negrita** Markdown estándar (lo que Sofía genera)
     .replace(/\*\*([^*\n]+?)\*\*/g, "<strong>$1</strong>")
     // *italic* / _italic_ (lookbehind/lookahead para no chocar con palabras)

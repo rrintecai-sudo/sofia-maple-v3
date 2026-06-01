@@ -33,7 +33,7 @@ from app.core.appointment_extractor import (
     fecha_humana_solo_dia,
 )
 from app.core.campus_resolver import resolve_campus_from_estado
-from app.core.state import EstadoCapturado, EstadoConversacion
+from app.core.state import EstadoCapturado, EstadoConversacion, NivelEducativo
 from app.core.state_extractor import extraer_grado_simple
 from app.integrations.appointments import create_appointment
 from app.integrations.events import emit_event
@@ -46,6 +46,7 @@ from app.integrations.leads import (
 from app.notifications.email import render_cita_pendiente_email, send_email
 from app.tools.availability_checker import AvailabilityResult, is_slot_available
 from app.tools.campus import CampusResult, get_campus_by_id
+from app.tools.niveles import derivar_nivel_grado_de_edad
 
 log = logging.getLogger(__name__)
 
@@ -126,11 +127,11 @@ def datos_lead_faltantes(estado: EstadoConversacion) -> list[str]:
         faltantes.append("nombre del hijo")
     if edad_hijo is None:
         faltantes.append("edad del hijo")
-    # Grado solo requerido si el nivel NO es maternal (Maternal usa edad como criterio)
-    if not grado_hijo and nivel_hijo is not None and nivel_hijo.value != "maternal":
-        faltantes.append("grado escolar del hijo")
-    elif not grado_hijo and nivel_hijo is None:
-        # Sin nivel definido todavía: pide grado (que también revela el nivel)
+    # FIX 1 (2026-06-01): el grado se DEDUCE de la edad (no se pregunta). Solo es
+    # faltante si NO hay grado NI edad (sin edad no hay de dónde deducir) y el
+    # nivel no es maternal (maternal usa la edad como criterio, sin grado).
+    es_maternal = nivel_hijo is not None and nivel_hijo.value == "maternal"
+    if not grado_hijo and not es_maternal and edad_hijo is None:
         faltantes.append("grado escolar del hijo")
     if not capt.nombre_papa:
         faltantes.append("tu nombre")
@@ -258,6 +259,38 @@ def _rescatar_de_propuesta(
     return rescatados
 
 
+async def _consolidar_y_derivar_hijo(
+    capt: EstadoCapturado, *, settings: Settings | None = None
+) -> tuple[str, str | None, str] | None:
+    """FIX 1 (2026-06-01): consolida los hijos en uno y DEDUCE nivel/grado de la
+    edad (no se pregunta). Devuelve (categoria, grado, nombre_display) deducido
+    para que Sofía lo DECLARE. Respeta el nivel/grado que el papá ya dio.
+    """
+    hijo = capt.hijo_efectivo()
+    if hijo is None:
+        return None
+    derivado: tuple[str, str | None, str] | None = None
+    if hijo.edad is not None and (hijo.nivel is None or not hijo.grado):
+        nivel_pref = hijo.nivel.value if hijo.nivel else (
+            capt.nivel_buscado_actual.value if capt.nivel_buscado_actual else None
+        )
+        derivado = await derivar_nivel_grado_de_edad(
+            hijo.edad, nivel_preferido=nivel_pref, settings=settings
+        )
+        if derivado:
+            categoria, grado, _disp = derivado
+            if hijo.nivel is None:
+                try:
+                    hijo.nivel = NivelEducativo(categoria)
+                except ValueError:
+                    pass
+            if grado and not hijo.grado:
+                hijo.grado = grado
+    # Consolida: colapsa huérfanos/fragmentos en un solo hijo enriquecido.
+    capt.hijos = [hijo]
+    return derivado
+
+
 async def handle_appointment_intent(
     mensaje: str,
     estado: EstadoConversacion,
@@ -288,6 +321,10 @@ async def handle_appointment_intent(
         rescatados = _rescatar_de_propuesta(capt, ultimo_assistant, now=now)
         if rescatados:
             log.info("rescate_por_confirmacion", extra={"campos": rescatados})
+
+    # FIX 1 (2026-06-01): consolida el/los hijos y DEDUCE nivel/grado de la edad
+    # (no se pregunta). `nivel_derivado` se usa para que Sofía lo declare.
+    nivel_derivado = await _consolidar_y_derivar_hijo(capt, settings=settings)
 
     # 1. Extraer fecha/hora del mensaje y FUNDIRLA en los slots persistentes.
     # PASO 1 (2026-05-29): en conversación fragmentada el papá da el día en un
@@ -406,16 +443,27 @@ async def handle_appointment_intent(
     faltantes = datos_lead_faltantes(estado)
     if faltantes:
         falt_str = ", ".join(faltantes)
+        # FIX 1: si dedujimos el nivel por la edad, instruir a Sofía a DECLARARLO
+        # (no preguntar el grado).
+        nivel_linea = ""
+        if nivel_derivado:
+            _cat, _grado, _display = nivel_derivado
+            nivel_linea = (
+                f"\nNOTA: el nivel del hijo ya se DEDUJO de su edad → **{_display}**. "
+                f"DECLÁRALO con naturalidad (ej. 'por su edad va en {_display}'); "
+                f"NUNCA preguntes el grado escolar.\n"
+            )
         return AppointmentHandlerResult(
             hint_para_prompt=(
                 f"[FLUJO AGENDADO — la fecha ({fecha_humana}) está disponible, "
                 f"pero ANTES de registrar la cita necesitamos estos datos del lead: "
                 f"**{falt_str}**.\n"
+                f"{nivel_linea}"
                 f"\n"
                 f"Pídelos de forma natural y cálida, NO como formulario. Puedes agruparlos "
                 f"en 1-2 mensajes. Ejemplos de formato:\n"
                 f"  - Si faltan datos del hijo: '¿Me confirmas el nombre completo de tu "
-                f"hijo/a, su edad y grado escolar?'\n"
+                f"hijo/a y su edad?'\n"
                 f"  - Si faltan datos de contacto: 'Y para enviarte la confirmación de la "
                 f"cita, ¿me compartes tu nombre, correo y número de celular?'\n"
                 f"NO crees la cita todavía — Lily nos pidió tener TODO el lead antes de "

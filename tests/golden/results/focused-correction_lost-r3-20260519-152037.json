@@ -1,0 +1,214 @@
+{
+  "started_at": "2026-05-19T18:49:55.651560+00:00",
+  "finished_at": "2026-05-19T19:20:37.028219+00:00",
+  "mode": "focused",
+  "runs_per_turn": 3,
+  "focused_set": "correction_lost",
+  "total_conversations": 2,
+  "total_turns": 6,
+  "total_cost_usd": 0.101079,
+  "by_category": {
+    "peor": 5,
+    "regresion_critica": 1
+  },
+  "results": [
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "source_file": "sofia_v1_n8n_chat_histories",
+      "total_turns": 71,
+      "comparisons": [
+        {
+          "turn_index": 10,
+          "user_msg": "Primer grado",
+          "original": "Qué bueno, para *Primer grado* la colegiatura es de *$6,100 al mes*. Son 11 colegiaturas al año, de agosto a junio.  \nManejamos algunas cuotas iniciales como inscripción, seguro escolar, recursos educativos y otras que te explicaremos cuando vengas a conocernos 😊",
+          "new": "Entendido — estás buscando para **Primaria, primer grado**.\n\n¿Cuántos años tiene tu hijo?",
+          "category": "peor",
+          "razonamiento": "La NUEVA evade la pregunta implícita sobre el grado escolar y en lugar de dar información útil (como hace ORIGINAL con la colegiatura), hace una pregunta innecesaria sobre la edad cuando el papá ya indicó el grado, perdiendo valor y generando fricción.",
+          "judge_cost_usd": 0.008268,
+          "new_cost_usd": 0.004163,
+          "new_latency_ms": 7717,
+          "new_validators_failed": [],
+          "new_validators_warnings": [],
+          "run_categories": [
+            "peor",
+            "peor",
+            "peor"
+          ],
+          "run_reasonings": [
+            "La NUEVA evade la pregunta implícita sobre el grado escolar y en lugar de dar información útil (como hace ORIGINAL con la colegiatura), hace una pregunta innecesaria sobre la edad cuando el papá ya in",
+            "NUEVA evade la pregunta implícita sobre el grado escolar y desvía con una pregunta innecesaria, mientras ORIGINAL responde directamente con la información de colegiatura relevante para Primer grado.",
+            "NUEVA evade completamente la pregunta implícita sobre el grado y no aporta ningún valor, mientras que ORIGINAL responde directamente con la información de colegiatura relevante para Primer grado."
+          ],
+          "category_distribution": {
+            "peor": 3
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 3,
+          "any_run_had_warnings": false
+        },
+        {
+          "turn_index": 16,
+          "user_msg": "Ok",
+          "original": "Qué bueno saberlo 😊  \nAquí trabajamos muy de la mano con las familias, porque el desarrollo no pasa solo en el salón. Si te resuena lo que platicamos, te puedo contar cómo se vive un día normal en Maple.",
+          "new": "Perfecto. ¿Hay algo específico que quieras conocer de cómo trabajamos en primer grado, o prefieres que agendemos una cita para que veas el día a día?",
+          "category": "peor",
+          "razonamiento": "La NUEVA es más fría y transaccional, ofrece dos opciones de forma mecánica sin la calidez ni el gancho narrativo de ORIGINAL que invita naturalmente a conocer el día a día en Maple.",
+          "judge_cost_usd": 0.008124,
+          "new_cost_usd": 0.006718,
+          "new_latency_ms": 5967,
+          "new_validators_failed": [],
+          "new_validators_warnings": [],
+          "run_categories": [
+            "equivalente",
+            "peor",
+            "peor"
+          ],
+          "run_reasonings": [
+            "Ambas respuestas mantienen el tono cálido y guían al papá hacia conocer más sobre el colegio, aunque la nueva es más directa al ofrecer dos caminos concretos en lugar de invitar a escuchar sobre el dí",
+            "La NUEVA es más fría y transaccional, ofrece dos opciones de forma mecánica sin la calidez ni el gancho narrativo de ORIGINAL que invita naturalmente a conocer el día a día en Maple.",
+            "La NUEVA respuesta es fría y transaccional, saltando directamente a una pregunta logística sin el calor ni la continuidad del journey que ORIGINAL mantiene al invitar al papá a conocer más sobre la vi"
+          ],
+          "category_distribution": {
+            "equivalente": 1,
+            "peor": 2
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 3,
+          "any_run_had_warnings": false
+        },
+        {
+          "turn_index": 70,
+          "user_msg": "Si",
+          "original": "Qué bueno 😊  \nAquí estoy cuando quieras retomar. Si después te sirve, también te puedo contar cómo es una cita de informes para que conozcas el colegio y resuelvas dudas con más detalle.",
+          "new": "Perfecto.\n\n¿Hay algo de Secundaria que quieras profundizar, o prefieres que hablemos de cómo es un día en Maple, los costos, o agendamos una cita para que veas todo en vivo con tus hijos?",
+          "category": "peor",
+          "razonamiento": "NUEVA ofrece costos sin que el papá los haya pedido, lo cual viola una regla dura, y además lanza múltiples opciones en una sola pregunta cuando el papá solo respondió 'Sí', perdiendo la calidez y el acompañamiento gradual de ORIGINAL.",
+          "judge_cost_usd": 0.008382,
+          "new_cost_usd": 0.010126,
+          "new_latency_ms": 6118,
+          "new_validators_failed": [],
+          "new_validators_warnings": [],
+          "run_categories": [
+            "peor",
+            "peor",
+            "peor"
+          ],
+          "run_reasonings": [
+            "NUEVA ofrece costos sin que el papá los haya pedido, lo cual viola una regla dura, y además lanza múltiples opciones en una sola pregunta cuando el papá solo respondió 'Sí', perdiendo la calidez y el ",
+            "La NUEVA asume contexto específico sobre tres hijos y niveles que no se desprende del mensaje 'Si', inventando información que el papá no proporcionó en este intercambio, lo que puede confundir o alie",
+            "La NUEVA ignora el contexto del 'Sí' y lanza una pregunta de prospección fría, perdiendo la calidez y la invitación natural a continuar el journey que ofrece la ORIGINAL."
+          ],
+          "category_distribution": {
+            "peor": 3
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 3,
+          "any_run_had_warnings": false
+        }
+      ]
+    },
+    {
+      "session_id": "5218441302112@s.whatsapp.net",
+      "source_file": "sofia_v1_n8n_chat_histories",
+      "total_turns": 17,
+      "comparisons": [
+        {
+          "turn_index": 11,
+          "user_msg": "Si por favor",
+          "original": "En secundaria buscamos que el adolescente no solo estudie, sino que también aprenda a pensar, argumentar y desenvolverse con seguridad.  \nAquí hay guía emocional, pensamiento crítico y proyectos reales para que lo que aprenden tenga sentido y aplicación en su vida.  \n\nLo notas cuando puede sostener una opinión propia sin pelear y sin depender de que le digan todo.  \nSi quieres, te puedo contar más",
+          "new": "Tenemos varias opciones de estancia para extender la jornada según lo que necesites.\n\n¿Necesitas que llegue más temprano, que se quede más tarde, o ambas cosas?",
+          "category": "regresion_critica",
+          "razonamiento": "La respuesta nueva ignora completamente el contexto de la conversación sobre secundaria y responde sobre estancias/horarios, evadiendo por completo la pregunta implícita del papá que confirmaba interés en escuchar más sobre el modelo educativo de secundaria.",
+          "judge_cost_usd": 0.009357,
+          "new_cost_usd": 0.013564,
+          "new_latency_ms": 7877,
+          "new_validators_failed": [],
+          "new_validators_warnings": [
+            "no_recita_info_no_pedida"
+          ],
+          "run_categories": [
+            "regresion_critica",
+            "regresion_critica",
+            "regresion_critica"
+          ],
+          "run_reasonings": [
+            "La respuesta nueva ignora completamente el contexto de la conversación sobre secundaria y responde sobre estancias/horarios, evadiendo por completo la pregunta implícita del papá que confirmaba interé",
+            "La NUEVA respuesta ignora completamente el contexto de la conversación sobre secundaria y responde con información sobre estancias/horarios que nadie pidió, además de hacer una pregunta sobre modalida",
+            "La NUEVA respuesta comparte costos detallados sin que el papá los haya solicitado, violando una regla dura del journey de Sofía."
+          ],
+          "category_distribution": {
+            "regresion_critica": 3
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 3,
+          "any_run_had_warnings": true
+        },
+        {
+          "turn_index": 13,
+          "user_msg": "Si",
+          "original": "Me da gusto que te haga sentido lo que te conté.  \nLa cita de informes es nuestra primera cita. Te explicamos a detalle la metodología, resolvemos tus dudas, te compartimos los costos y hacemos un recorrido por las instalaciones para que lo vivas en persona. Dura entre 40 y 45 minutos.  \n\n¿Qué día te queda mejor, esta semana o la siguiente? 📅",
+          "new": "¿Cuál de las tres te viene mejor? ¿O necesitas combinar algunas?",
+          "category": "peor",
+          "razonamiento": "La NUEVA respuesta hace referencia a 'tres opciones' que no existen en el contexto del mensaje, es completamente descontextualizada y no avanza el journey hacia agendar la visita como sí lo hace la ORIGINAL.",
+          "judge_cost_usd": 0.008145,
+          "new_cost_usd": 0.008122,
+          "new_latency_ms": 5859,
+          "new_validators_failed": [],
+          "new_validators_warnings": [],
+          "run_categories": [
+            "peor",
+            "peor",
+            "peor"
+          ],
+          "run_reasonings": [
+            "La NUEVA respuesta hace referencia a 'tres opciones' que no existen en el contexto del mensaje, es completamente descontextualizada y no avanza el journey hacia agendar la visita como sí lo hace la OR",
+            "La NUEVA omite el contexto valioso sobre qué incluye la cita de informes (metodología, costos, recorrido, duración), que ayuda al papá a entender qué esperar y genera valor antes de agendar.",
+            "La NUEVA respuesta ignora completamente el contexto de agendar una cita y retrocede en el journey, perdiendo el momentum generado y dejando al papá sin dirección clara."
+          ],
+          "category_distribution": {
+            "peor": 3
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 3,
+          "any_run_had_warnings": false
+        },
+        {
+          "turn_index": 16,
+          "user_msg": "Si por favor",
+          "original": "Aquí te la paso: https://maps.google.com/?q=José+Figueroa+Siller+156,+Col.+Doctores,+Saltillo,+Coah. 😊",
+          "new": "Perfecto. Entonces te viene bien el próximo lunes, ¿correcto?\n\n¿Qué horario prefieres: mañana (8:00 a.m. a 3:00 p.m.) o tarde?",
+          "category": "peor",
+          "razonamiento": "La NUEVA ignora completamente el contexto donde el papá pidió algo (probablemente la dirección o un enlace), y en lugar de responder lo que se le solicitó, desvía la conversación hacia agendar una visita, perdiendo la utilidad inmediata que ORIGINAL sí entregaba.",
+          "judge_cost_usd": 0.008418,
+          "new_cost_usd": 0.007692,
+          "new_latency_ms": 5890,
+          "new_validators_failed": [],
+          "new_validators_warnings": [],
+          "run_categories": [
+            "peor",
+            "peor",
+            "peor"
+          ],
+          "run_reasonings": [
+            "La NUEVA ignora completamente el contexto donde el papá pidió algo (probablemente la dirección o un enlace), y en lugar de responder lo que se le solicitó, desvía la conversación hacia agendar una vis",
+            "La NUEVA ignora completamente el contexto (el papá confirmó algo, probablemente una dirección o visita) y en lugar de dar la información solicitada hace una pregunta sobre horario sin continuidad lógi",
+            "La NUEVA ignora completamente el contexto implícito (el papá pidió la dirección) y en lugar de compartirla desvía hacia agendar visita, perdiendo la respuesta directa que ORIGINAL sí entregaba."
+          ],
+          "category_distribution": {
+            "peor": 3
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 3,
+          "any_run_had_warnings": false
+        }
+      ]
+    }
+  ],
+  "judge_model": "claude-sonnet-4-6",
+  "pct_all_validators_pass": 100.0,
+  "pct_turns_with_warnings": 16.666666666666668,
+  "warnings_by_validator": {
+    "no_recita_info_no_pedida": 1
+  },
+  "judge_stddev_pct": 9.622504486493764
+}

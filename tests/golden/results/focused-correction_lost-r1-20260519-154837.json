@@ -1,0 +1,189 @@
+{
+  "started_at": "2026-05-19T19:39:11.966581+00:00",
+  "finished_at": "2026-05-19T19:48:37.475134+00:00",
+  "mode": "focused",
+  "runs_per_turn": 1,
+  "focused_set": "correction_lost",
+  "total_conversations": 2,
+  "total_turns": 6,
+  "total_cost_usd": 0.038036,
+  "by_category": {
+    "peor": 5,
+    "regresion_critica": 1
+  },
+  "results": [
+    {
+      "session_id": "34662236125@s.whatsapp.net",
+      "source_file": "sofia_v1_n8n_chat_histories",
+      "total_turns": 71,
+      "comparisons": [
+        {
+          "turn_index": 10,
+          "user_msg": "Primer grado",
+          "original": "Qué bueno, para *Primer grado* la colegiatura es de *$6,100 al mes*. Son 11 colegiaturas al año, de agosto a junio.  \nManejamos algunas cuotas iniciales como inscripción, seguro escolar, recursos educativos y otras que te explicaremos cuando vengas a conocernos 😊",
+          "new": "Entiendo. Entonces tu hijo está en primer grado de primaria, ¿correcto?\n\n¿Cuál es su edad?",
+          "category": "peor",
+          "razonamiento": "La NUEVA evade la pregunta implícita sobre el grado y en lugar de dar información útil hace dos preguntas innecesarias, perdiendo el momentum y siendo más fría que la ORIGINAL que ya entregaba valor concreto.",
+          "judge_cost_usd": 0.002751,
+          "new_cost_usd": 0.002162,
+          "new_latency_ms": 5930,
+          "new_validators_failed": [],
+          "new_validators_warnings": [],
+          "run_categories": [
+            "peor"
+          ],
+          "run_reasonings": [
+            "La NUEVA evade la pregunta implícita sobre el grado y en lugar de dar información útil hace dos preguntas innecesarias, perdiendo el momentum y siendo más fría que la ORIGINAL que ya entregaba valor c"
+          ],
+          "category_distribution": {
+            "peor": 1
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 1,
+          "any_run_had_warnings": false
+        },
+        {
+          "turn_index": 16,
+          "user_msg": "Ok",
+          "original": "Qué bueno saberlo 😊  \nAquí trabajamos muy de la mano con las familias, porque el desarrollo no pasa solo en el salón. Si te resuena lo que platicamos, te puedo contar cómo se vive un día normal en Maple.",
+          "new": "Entiendo. ¿Ya conoces nuestra página o prefieres que te cuente más sobre cómo es el día a día en primer grado?",
+          "category": "peor",
+          "razonamiento": "La NUEVA es más fría y transaccional, lanza una pregunta cerrada que interrumpe el flujo natural, mientras que ORIGINAL mantiene calidez y avanza el journey de forma orgánica hacia contar cómo se vive un día en Maple.",
+          "judge_cost_usd": 0.002775,
+          "new_cost_usd": 0.002254,
+          "new_latency_ms": 5311,
+          "new_validators_failed": [],
+          "new_validators_warnings": [],
+          "run_categories": [
+            "peor"
+          ],
+          "run_reasonings": [
+            "La NUEVA es más fría y transaccional, lanza una pregunta cerrada que interrumpe el flujo natural, mientras que ORIGINAL mantiene calidez y avanza el journey de forma orgánica hacia contar cómo se vive"
+          ],
+          "category_distribution": {
+            "peor": 1
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 1,
+          "any_run_had_warnings": false
+        },
+        {
+          "turn_index": 70,
+          "user_msg": "Si",
+          "original": "Qué bueno 😊  \nAquí estoy cuando quieras retomar. Si después te sirve, también te puedo contar cómo es una cita de informes para que conozcas el colegio y resuelvas dudas con más detalle.",
+          "new": "¿Sí a qué, Gaby? ¿Te resonó lo de Primero de Secundaria, o hay algo que quieras que profundice?",
+          "category": "peor",
+          "razonamiento": "NUEVA pide aclaración de forma que puede sonar interrogativa y fría, mientras ORIGINAL mantiene calidez y avanza el journey ofreciendo el siguiente paso natural (cita de informes).",
+          "judge_cost_usd": 0.002538,
+          "new_cost_usd": 0.003387,
+          "new_latency_ms": 4941,
+          "new_validators_failed": [],
+          "new_validators_warnings": [],
+          "run_categories": [
+            "peor"
+          ],
+          "run_reasonings": [
+            "NUEVA pide aclaración de forma que puede sonar interrogativa y fría, mientras ORIGINAL mantiene calidez y avanza el journey ofreciendo el siguiente paso natural (cita de informes)."
+          ],
+          "category_distribution": {
+            "peor": 1
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 1,
+          "any_run_had_warnings": false
+        }
+      ]
+    },
+    {
+      "session_id": "5218441302112@s.whatsapp.net",
+      "source_file": "sofia_v1_n8n_chat_histories",
+      "total_turns": 17,
+      "comparisons": [
+        {
+          "turn_index": 11,
+          "user_msg": "Si por favor",
+          "original": "En secundaria buscamos que el adolescente no solo estudie, sino que también aprenda a pensar, argumentar y desenvolverse con seguridad.  \nAquí hay guía emocional, pensamiento crítico y proyectos reales para que lo que aprenden tenga sentido y aplicación en su vida.  \n\nLo notas cuando puede sostener una opinión propia sin pelear y sin depender de que le digan todo.  \nSi quieres, te puedo contar más",
+          "new": "Para secundaria tenemos varias opciones según lo que necesites:\n\n- Estancia de la mañana — 7:00 a.m. hasta la entrada — $550/mes\n- **Estancia media** — 7:00 a.m. a 3:30 p.m., con comida — $1,400/mes\n- After school — 7:00 a.m. a 7:00 p.m., con comida e incluye 1 academia — $3,100/mes\n- Por academia — solo los días de la academia que elijas, con comida — $630/mes + $1,000 de inscripción única\n\n¿Algu",
+          "category": "regresion_critica",
+          "razonamiento": "NUEVA comparte costos y estructura de precios sin que el papá los haya pedido, violando una regla dura, además de ignorar completamente el contexto de secundaria y el journey de acompañamiento educativo.",
+          "judge_cost_usd": 0.003327,
+          "new_cost_usd": 0.007839,
+          "new_latency_ms": 8139,
+          "new_validators_failed": [],
+          "new_validators_warnings": [
+            "no_recita_info_no_pedida"
+          ],
+          "run_categories": [
+            "regresion_critica"
+          ],
+          "run_reasonings": [
+            "NUEVA comparte costos y estructura de precios sin que el papá los haya pedido, violando una regla dura, además de ignorar completamente el contexto de secundaria y el journey de acompañamiento educati"
+          ],
+          "category_distribution": {
+            "regresion_critica": 1
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 1,
+          "any_run_had_warnings": true
+        },
+        {
+          "turn_index": 13,
+          "user_msg": "Si",
+          "original": "Me da gusto que te haga sentido lo que te conté.  \nLa cita de informes es nuestra primera cita. Te explicamos a detalle la metodología, resolvemos tus dudas, te compartimos los costos y hacemos un recorrido por las instalaciones para que lo vivas en persona. Dura entre 40 y 45 minutos.  \n\n¿Qué día te queda mejor, esta semana o la siguiente? 📅",
+          "new": "Excelente. ¿Te viene mejor esta semana o la siguiente?",
+          "category": "peor",
+          "razonamiento": "La NUEVA pierde información valiosa sobre qué incluye la cita de informes (metodología, costos, recorrido, duración), que ayuda al papá a comprometerse con la visita con expectativas claras.",
+          "judge_cost_usd": 0.002727,
+          "new_cost_usd": 0.002826,
+          "new_latency_ms": 5824,
+          "new_validators_failed": [],
+          "new_validators_warnings": [],
+          "run_categories": [
+            "peor"
+          ],
+          "run_reasonings": [
+            "La NUEVA pierde información valiosa sobre qué incluye la cita de informes (metodología, costos, recorrido, duración), que ayuda al papá a comprometerse con la visita con expectativas claras."
+          ],
+          "category_distribution": {
+            "peor": 1
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 1,
+          "any_run_had_warnings": false
+        },
+        {
+          "turn_index": 16,
+          "user_msg": "Si por favor",
+          "original": "Aquí te la paso: https://maps.google.com/?q=José+Figueroa+Siller+156,+Col.+Doctores,+Saltillo,+Coah. 😊",
+          "new": "Perfecto, anotado el próximo lunes.\n\n¿Prefieres mañana (antes de las 12) o tarde (después de las 12)?",
+          "category": "peor",
+          "razonamiento": "La NUEVA ignora completamente la solicitud implícita del papá (que dijo 'Sí por favor' probablemente pidiendo la dirección u otro dato) y en cambio pregunta sobre horarios sin haber compartido la información solicitada, perdiendo el hilo de la conversación.",
+          "judge_cost_usd": 0.002856,
+          "new_cost_usd": 0.002594,
+          "new_latency_ms": 6265,
+          "new_validators_failed": [],
+          "new_validators_warnings": [],
+          "run_categories": [
+            "peor"
+          ],
+          "run_reasonings": [
+            "La NUEVA ignora completamente la solicitud implícita del papá (que dijo 'Sí por favor' probablemente pidiendo la dirección u otro dato) y en cambio pregunta sobre horarios sin haber compartido la info"
+          ],
+          "category_distribution": {
+            "peor": 1
+          },
+          "all_validators_pass": true,
+          "all_validators_pass_count": 1,
+          "any_run_had_warnings": false
+        }
+      ]
+    }
+  ],
+  "judge_model": "claude-sonnet-4-6",
+  "pct_all_validators_pass": 100.0,
+  "pct_turns_with_warnings": 16.666666666666668,
+  "warnings_by_validator": {
+    "no_recita_info_no_pedida": 1
+  },
+  "judge_stddev_pct": null
+}

@@ -78,14 +78,30 @@ def formato_hora(dt: datetime) -> str:
     return f"{h12}:{minuto:02d} {sufijo}"
 
 
+def _maps_line(google_maps_url: str | None, canal: str | None) -> str | None:
+    """FIX 2 (2026-06-01): el link de Maps como hipervínculo según el canal.
+
+    - web / telegram: markdown clickeable con texto amigable.
+    - whatsapp (u otro/None): URL cruda (WhatsApp la vuelve clickeable nativo;
+      el markdown no aplica ahí).
+    """
+    if not google_maps_url:
+        return None
+    if canal in ("web", "telegram"):
+        return f"🗺️ [Ver ubicación en Google Maps]({google_maps_url})"
+    return f"🗺️ {google_maps_url}"
+
+
 def render_registration_message(
     *,
     fecha_hora: datetime,
     campus: CampusResult | None,
+    canal: str | None = None,
 ) -> str:
     """Mensaje que Sofía envía cuando la cita queda REGISTRADA como pendiente.
 
     Texto oficial de Gaby (reunión 27-may). Determinístico — NO depende del LLM.
+    El link de Maps se renderiza según `canal` (FIX 2).
     """
     dia = formato_dia_fecha(fecha_hora)
     hora = formato_hora(fecha_hora)
@@ -100,8 +116,9 @@ def render_registration_message(
         f"📍 Campus: {nombre_campus}",
         f"🗺️ Dirección: {direccion}",
     ]
-    if campus and campus.google_maps_url:
-        lineas.append(campus.google_maps_url)
+    maps = _maps_line(campus.google_maps_url if campus else None, canal)
+    if maps:
+        lineas.append(maps)
     lineas.extend(
         [
             "",
@@ -117,10 +134,12 @@ def render_confirmation_message(
     fecha_hora: datetime,
     campus: CampusResult | None,
     nombre_papa: str | None = None,
+    canal: str | None = None,
 ) -> str:
     """Mensaje cuando Lily APRUEBA la cita (POST /api/appointments/{id}/approve).
 
     Mismo formato visual que el de registro, pero con texto de confirmación.
+    El link de Maps se renderiza según `canal` (FIX 2).
     """
     dia = formato_dia_fecha(fecha_hora)
     hora = formato_hora(fecha_hora)
@@ -140,8 +159,9 @@ def render_confirmation_message(
         f"📍 Campus: {nombre_campus}",
         f"🗺️ Dirección: {direccion}",
     ]
-    if campus and campus.google_maps_url:
-        lineas.append(campus.google_maps_url)
+    maps = _maps_line(campus.google_maps_url if campus else None, canal)
+    if maps:
+        lineas.append(maps)
     lineas.extend(
         [
             "",

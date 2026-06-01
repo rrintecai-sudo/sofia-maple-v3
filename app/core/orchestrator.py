@@ -505,6 +505,7 @@ async def procesar_turno(
             response_text = render_registration_message(
                 fecha_hora=fecha_dt,
                 campus=appointment_handler.campus,
+                canal=estado.canal.value,  # FIX 2: Maps clickeable según canal
             )
             # PASO 1: el CÓDIGO cierra la fase pegajosa al crear la cita. El
             # appointment_id es el RESULTADO de completar los slots, no un

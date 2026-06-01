@@ -6,6 +6,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from app.core.appointment_messages import (
+    _maps_line,
     formato_dia_fecha,
     formato_hora,
     render_confirmation_message,
@@ -14,6 +15,47 @@ from app.core.appointment_messages import (
 from app.tools.campus import CampusResult
 
 TZ_MTY = ZoneInfo("America/Monterrey")
+_URL = "https://www.google.com/maps/search/?api=1&query=x"
+
+
+# ============================================================
+# FIX 2 (2026-06-01) — link de Maps como hipervínculo por canal
+# ============================================================
+
+
+def test_maps_line_web_y_telegram_markdown() -> None:
+    for canal in ("web", "telegram"):
+        linea = _maps_line(_URL, canal)
+        assert linea == f"🗺️ [Ver ubicación en Google Maps]({_URL})"
+
+
+def test_maps_line_whatsapp_url_cruda() -> None:
+    assert _maps_line(_URL, "whatsapp") == f"🗺️ {_URL}"
+
+
+def test_maps_line_canal_desconocido_url_cruda() -> None:
+    assert _maps_line(_URL, None) == f"🗺️ {_URL}"
+
+
+def test_maps_line_sin_url() -> None:
+    assert _maps_line(None, "web") is None
+
+
+def test_render_registration_web_lleva_hipervinculo() -> None:
+    from app.core.appointment_messages import render_registration_message as rr
+
+    dt = datetime(2026, 6, 3, 11, 0, tzinfo=TZ_MTY)
+    msg = rr(fecha_hora=dt, campus=_campus_1(), canal="web")
+    assert "[Ver ubicación en Google Maps](" in msg
+
+
+def test_render_registration_whatsapp_url_cruda() -> None:
+    from app.core.appointment_messages import render_registration_message as rr
+
+    dt = datetime(2026, 6, 3, 11, 0, tzinfo=TZ_MTY)
+    msg = rr(fecha_hora=dt, campus=_campus_1(), canal="whatsapp")
+    assert "[Ver ubicación" not in msg
+    assert "https://www.google.com/maps" in msg
 
 
 def _campus_1() -> CampusResult:

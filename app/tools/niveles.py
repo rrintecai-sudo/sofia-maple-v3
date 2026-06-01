@@ -173,6 +173,82 @@ async def consultar_edades_de_nivel(
     return _row_to_nivel(rows[0])
 
 
+# Espejo determinístico de `niveles_por_edad` (FIX 1, 2026-06-01). Fuente de
+# verdad = la tabla; este fallback se usa si Supabase no responde, para que la
+# DEDUCCIÓN de nivel/grado por edad nunca falle en el cierre de cita. Mismos
+# datos que la tabla (pending validación con Cecilia, igual que la tabla).
+# Tupla: (categoria, edad_min_meses, edad_max_meses, grados, nombre_display)
+_NIVELES_FALLBACK: tuple[tuple[str, int, int, list[str], str], ...] = (
+    ("maternal", 3, 11, [], "Cubs"),
+    ("maternal", 12, 18, [], "Babies"),
+    ("maternal", 18, 24, [], "Infants"),
+    ("maternal", 24, 36, [], "Toddlers"),
+    ("kinder", 36, 48, ["1°"], "Primero de Kinder"),
+    ("kinder", 48, 60, ["2°"], "Segundo de Kinder"),
+    ("kinder", 60, 72, ["3°"], "Tercero de Kinder"),
+    ("primaria", 72, 84, ["1°"], "Primero de Primaria"),
+    ("primaria", 84, 96, ["2°"], "Segundo de Primaria"),
+    ("primaria", 96, 108, ["3°"], "Tercero de Primaria"),
+)
+
+async def derivar_nivel_grado_de_edad(
+    edad_anos: int | None,
+    *,
+    nivel_preferido: str | None = None,
+    settings: Settings | None = None,
+) -> tuple[str, str | None, str] | None:
+    """Deduce (categoria, grado, nombre_display) de la edad. FIX 1 (2026-06-01).
+
+    Reglas:
+    - Usa `niveles_por_edad` (o el espejo `_NIVELES_FALLBACK` si Supabase falla).
+    - Si la edad cae en frontera (3 años = Maternal o Kinder) y el papá NO
+      especificó nivel → default al nivel más TEMPRANO (Maternal). Si SÍ
+      especificó (`nivel_preferido`), se respeta.
+    - Dentro de la categoría, el año se deriva por la edad exacta
+      (K1=3, K2=4, K3=5). Devuelve None si no hay match (edad fuera de tabla).
+    """
+    if edad_anos is None:
+        return None
+    edad_meses = edad_anos * 12
+
+    niveles = await listar_niveles_vigentes(settings=settings)
+    if niveles:
+        filas = [
+            (n.categoria, n.edad_min_meses, n.edad_max_meses, list(n.grados), n.nombre_display)
+            for n in niveles
+        ]
+    else:
+        filas = [tuple(f) for f in _NIVELES_FALLBACK]  # type: ignore[misc]
+
+    # Intervalo semi-abierto [min, max): con rangos contiguos cada edad cae en UNA
+    # sola fila. Esto da K2=4 (48m), K3=5 (60m) y Primaria a los 6 (72m), porque
+    # Kinder topa en K3=5 años. Fallback inclusivo para el tope de la tabla.
+    cands = [f for f in filas if f[1] <= edad_meses < f[2]]
+    if not cands:
+        cands = [f for f in filas if f[1] <= edad_meses <= f[2]]
+    if not cands:
+        return None
+    fila = min(cands, key=lambda f: f[1])
+    categoria = fila[0]
+
+    if nivel_preferido and nivel_preferido != categoria:
+        # El papá especificó otra categoría que también cubre la edad → respétala.
+        pref = [f for f in filas if f[0] == nivel_preferido and f[1] <= edad_meses <= f[2]]
+        if pref:
+            fila = min(pref, key=lambda f: abs(f[1] - edad_meses))
+            categoria = fila[0]
+    elif not nivel_preferido and categoria == "kinder" and edad_meses == 36:
+        # 3 años SIN preferencia → default Maternal (Toddlers), no pre-kinder.
+        mat = [f for f in filas if f[0] == "maternal" and f[1] <= 35 <= f[2]]
+        if mat:
+            fila = max(mat, key=lambda f: f[1])
+            categoria = "maternal"
+
+    _cat, _mn, _mx, grados, display = fila
+    grado = f"{grados[0]} de {categoria.capitalize()}" if grados else None
+    return categoria, grado, display
+
+
 async def listar_niveles_vigentes(*, settings: Settings | None = None) -> list[NivelInfo]:
     """Devuelve todos los niveles vigentes ordenados por edad."""
     settings = settings or get_settings()

@@ -921,9 +921,10 @@ async def test_estado_contaminado_cierra_con_datos_correctos() -> None:
 
     _enter(leaf)
     try:
-        result = None
+        respuestas = []
         for mensaje in SCRIPT:
-            result = await procesar_turno(mensaje=mensaje, session_id="web:dirty", canal=None)
+            r = await procesar_turno(mensaje=mensaje, session_id="web:dirty", canal=None)
+            respuestas.append(r.response)
     finally:
         _exit(leaf)
 
@@ -934,9 +935,12 @@ async def test_estado_contaminado_cierra_con_datos_correctos() -> None:
     hijo = capt.hijo_efectivo()
     assert hijo.nombre == "Emanuel"
     assert hijo.edad == 4
+    # FIX 1: con 4 años en Kinder, el grado se DEDUCE → "2° de Kinder"
     assert hijo.grado == "2° de Kinder"
-    # cierre por código a pesar del estado contaminado
+    # cierre por código a pesar del estado contaminado (puede cerrar en cuanto
+    # tiene todo, gracias a FIX 1 que deduce el grado de la edad)
     create_appt.assert_awaited_once()
     assert capt.fase_agendado == FaseAgendado.CERRADO
-    assert "ya quedó agendada" in result.response
-    assert "5 de junio" in result.response
+    # la plantilla D.4 salió en el turno del cierre
+    assert any("ya quedó agendada" in r for r in respuestas)
+    assert any("5 de junio" in r for r in respuestas)
