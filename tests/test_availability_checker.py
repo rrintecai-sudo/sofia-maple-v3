@@ -21,8 +21,32 @@ from app.tools.availability_checker import (
     _generar_candidatos_alternativos,
     _slot_choca_con_citas,
     _slot_dentro_de_horario,
+    evaluar_dia,
     is_slot_available,
+    resumen_disponibilidad_humano,
 )
+
+
+def _mock_lun_vie_8_15():
+    """respx: lily_availability lun-vie 8:00-15:00, appointments vacío."""
+    respx.get("https://x.supabase.co/rest/v1/lily_availability").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "day_of_week": d,
+                    "start_time": "08:00:00",
+                    "end_time": "15:00:00",
+                    "slot_duration_minutes": 60,
+                    "active": True,
+                }
+                for d in (1, 2, 3, 4, 5)
+            ],
+        )
+    )
+    respx.get("https://x.supabase.co/rest/v1/appointments").mock(
+        return_value=httpx.Response(200, json=[])
+    )
 
 
 def _settings() -> Settings:
@@ -160,7 +184,7 @@ def test_genera_candidatos_dentro_del_horario() -> None:
     """Lunes 10:30 → genera slots cada 60min dentro de 9-17 del mismo día
     y siguientes laborables."""
     base = datetime(2026, 5, 25, 10, 30, tzinfo=TZ_MONTERREY)
-    cands = _generar_candidatos_alternativos(base, 60, _ventanas_lun_vie())
+    cands = _generar_candidatos_alternativos(base, 60, _ventanas_lun_vie(), base)
     assert len(cands) > 0
     # Todos los candidatos caen dentro del horario de Lily
     for c in cands:
@@ -170,7 +194,7 @@ def test_genera_candidatos_dentro_del_horario() -> None:
 def test_candidatos_ordenados_por_cercania() -> None:
     """El primer candidato debe ser el más cercano al horario solicitado."""
     base = datetime(2026, 5, 25, 10, 30, tzinfo=TZ_MONTERREY)
-    cands = _generar_candidatos_alternativos(base, 60, _ventanas_lun_vie())
+    cands = _generar_candidatos_alternativos(base, 60, _ventanas_lun_vie(), base)
     # El más cercano debería ser 11:00 (siguiente slot mismo día)
     primer = cands[0]
     assert primer.day == 25
@@ -180,7 +204,7 @@ def test_candidatos_ordenados_por_cercania() -> None:
 def test_candidatos_excluyen_dias_no_laborables() -> None:
     """Sábado y domingo no aparecen entre los candidatos."""
     base = datetime(2026, 5, 25, 10, 0, tzinfo=TZ_MONTERREY)
-    cands = _generar_candidatos_alternativos(base, 60, _ventanas_lun_vie())
+    cands = _generar_candidatos_alternativos(base, 60, _ventanas_lun_vie(), base)
     for c in cands:
         dow = _dow_postgres_style(c)
         assert dow not in (0, 6), f"candidato {c} cae en fin de semana"
@@ -431,3 +455,76 @@ async def test_normaliza_fecha_sin_tz() -> None:
     now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)
     result = await is_slot_available(fecha_naive, settings=_settings(), now=now)
     assert result.available is True
+
+
+# ============================================================
+# FIX (2026-06-02) — endurecimiento fecha/hora/disponibilidad
+# ============================================================
+
+
+def test_resumen_disponibilidad_humano() -> None:
+    """lun-vie 8-15 → 'lunes a viernes de 8:00 a 15:00'."""
+    windows = [
+        LilyAvailabilityWindow(d, time(8, 0), time(15, 0), 60, True) for d in (1, 2, 3, 4, 5)
+    ]
+    assert resumen_disponibilidad_humano(windows) == "lunes a viernes de 8:00 a 15:00"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_evaluar_dia_hoy_lunes_9pm_no_ofrece_hoy() -> None:
+    """Escenario real: hoy lunes 21:00, el papá dice 'el lunes' → HOY ya cerró.
+    No disponible (fecha_pasada) y propone próximos slots reales (martes)."""
+    _mock_lun_vie_8_15()
+    hoy_lunes = datetime(2026, 6, 8, tzinfo=TZ_MONTERREY)  # 8-jun-2026 es lunes
+    now = datetime(2026, 6, 8, 21, 0, tzinfo=TZ_MONTERREY)
+    res = await evaluar_dia(hoy_lunes, settings=_settings(), now=now)
+    assert res.available is False
+    assert res.reason == "fecha_pasada"
+    assert res.alternativas, "debe proponer próximos slots reales"
+    # Las alternativas son del MARTES (9-jun) en adelante, NUNCA hoy
+    assert all(a.date() > now.date() for a in res.alternativas)
+    assert res.resumen == "lunes a viernes de 8:00 a 15:00"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_evaluar_dia_futuro_disponible_ofrece_horas() -> None:
+    """Día futuro laborable → available + horas libres de ese día."""
+    _mock_lun_vie_8_15()
+    martes = datetime(2026, 6, 9, tzinfo=TZ_MONTERREY)
+    now = datetime(2026, 6, 8, 21, 0, tzinfo=TZ_MONTERREY)
+    res = await evaluar_dia(martes, settings=_settings(), now=now)
+    assert res.available is True
+    assert res.alternativas[0].hour == 8  # primera hora del día
+    assert all(a.date() == martes.date() for a in res.alternativas)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_evaluar_dia_sabado_no_laborable() -> None:
+    _mock_lun_vie_8_15()
+    sabado = datetime(2026, 6, 13, tzinfo=TZ_MONTERREY)  # sábado
+    now = datetime(2026, 6, 8, 9, 0, tzinfo=TZ_MONTERREY)
+    res = await evaluar_dia(sabado, settings=_settings(), now=now)
+    assert res.available is False
+    assert res.reason == "dia_no_laborable"
+    assert res.alternativas  # propone días laborables
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_is_slot_available_viernes_5pm_fuera_horario_ofrece_mismo_dia() -> None:
+    """'viernes 5pm' con horario hasta 15:00 → fuera_de_horario, mensaje con
+    horario real, y la alternativa más cercana es el MISMO viernes más temprano."""
+    _mock_lun_vie_8_15()
+    viernes_5pm = datetime(2026, 6, 12, 17, 0, tzinfo=TZ_MONTERREY)  # viernes 17:00
+    now = datetime(2026, 6, 8, 9, 0, tzinfo=TZ_MONTERREY)  # lunes
+    res = await is_slot_available(viernes_5pm, settings=_settings(), now=now)
+    assert res.available is False
+    assert res.reason == "fuera_de_horario"
+    assert res.resumen == "lunes a viernes de 8:00 a 15:00"
+    assert res.alternativas
+    # La más cercana a las 17:00 del viernes es ese MISMO viernes a las 14:00
+    assert res.alternativas[0].date() == viernes_5pm.date()
+    assert res.alternativas[0].hour == 14

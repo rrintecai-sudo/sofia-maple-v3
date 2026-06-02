@@ -272,16 +272,15 @@ class AppointmentDateTime:
         return dt.replace(tzinfo=TZ_MONTERREY)
 
 
-_SYSTEM_PROMPT_TPL = """Eres un extractor de fechas en español mexicano. La zona horaria es America/Monterrey. Hoy es {fecha_actual} ({dia_semana}). Convierte expresiones a fecha y hora exactas.
+_SYSTEM_PROMPT_TPL = """Eres un extractor de fechas en español mexicano. La zona horaria es America/Monterrey. AHORA mismo es {fecha_actual} ({dia_semana}) a las {hora_actual}. Convierte expresiones a fecha y hora exactas, SIEMPRE en el futuro respecto a este momento.
 
 REGLAS:
 1. Si el papá no especifica AM/PM en una hora ambigua (ej. "a las 3"), asume horario laboral típico: 9-17h → 3 PM (15:00), no 3 AM.
-2. "Mañana" = fecha_actual + 1 día.
-3. "El martes" = el próximo martes (si hoy es martes y aún no llegó la hora, asume PRÓXIMO martes, no hoy).
-4. "La próxima semana" sin día = ambiguo → retorna fecha=null, hora=null.
-5. "Cualquier día" / "el que sea" = ambiguo → null.
-6. Solo retorna fechas FUTURAS. Nunca pasadas.
-7. NUNCA inventes una fecha. Si dudas, retorna null y deja confidence bajo (<0.7).
+2. "Mañana" = fecha de hoy + 1 día.
+3. "El <día de la semana>" = la PRÓXIMA ocurrencia futura de ese día. Si HOY es ese día pero ya pasó el horario de atención (después de las 15:00) o ya es de noche, NO uses hoy: usa el de la PRÓXIMA semana.
+4. NUNCA devuelvas una fecha/hora que ya pasó respecto al momento actual ({fecha_actual} {hora_actual}). Si el papá pide "hoy" pero ya es tarde, devuelve la fecha de hoy igual y deja que el sistema valide (pero nunca un día/hora anterior a ahora).
+5. "La próxima semana" sin día = ambiguo → fecha=null, hora=null. "Cualquier día" / "el que sea" = null.
+6. NUNCA inventes una fecha. Si dudas, retorna null y deja confidence bajo (<0.7).
 
 Devuelve EXCLUSIVAMENTE JSON con esta estructura:
 {{
@@ -306,7 +305,10 @@ _DIAS_SEMANA_ES = [
 def _build_system_prompt(now: datetime) -> str:
     fecha_actual = now.strftime("%Y-%m-%d")
     dia_semana = _DIAS_SEMANA_ES[now.weekday()]
-    return _SYSTEM_PROMPT_TPL.format(fecha_actual=fecha_actual, dia_semana=dia_semana)
+    hora_actual = now.strftime("%H:%M")
+    return _SYSTEM_PROMPT_TPL.format(
+        fecha_actual=fecha_actual, dia_semana=dia_semana, hora_actual=hora_actual
+    )
 
 
 def _parse_result(raw: str, fallback_razonamiento: str = "") -> AppointmentDateTime:

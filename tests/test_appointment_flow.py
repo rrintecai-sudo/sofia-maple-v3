@@ -799,6 +799,52 @@ def test_datos_faltantes_no_pide_grado_si_hay_edad() -> None:
 
 
 # ============================================================
+# FIX (2026-06-02) — fecha/hora ancladas al AHORA + disponibilidad real
+# ============================================================
+
+
+def _mock_disponibilidad_lun_vie_8_15() -> None:
+    respx.get("https://x.supabase.co/rest/v1/lily_availability").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "day_of_week": d, "start_time": "08:00:00", "end_time": "15:00:00",
+                    "slot_duration_minutes": 60, "active": True,
+                }
+                for d in (1, 2, 3, 4, 5)
+            ],
+        )
+    )
+    respx.get("https://x.supabase.co/rest/v1/appointments").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_handler_hoy_lunes_9pm_no_ofrece_hoy(monkeypatch) -> None:
+    """'el lunes' a las 21:00 del lunes → HOY ya cerró: NO se ofrece hoy, se
+    descarta el día y se proponen alternativas reales (martes)."""
+    _mock_disponibilidad_lun_vie_8_15()
+    _mock_extractor(monkeypatch, fecha="2026-06-08", hora=None, confidence=0.9)  # hoy lunes
+
+    estado = EstadoConversacion(
+        session_id="telegram:111", canal=Canal.TELEGRAM, identificador="111",
+        estado_capturado=EstadoCapturado(),
+    )
+    now = datetime(2026, 6, 8, 21, 0, tzinfo=TZ_MONTERREY)  # lunes 9pm
+    result = await handle_appointment_intent("el lunes", estado, settings=_settings(), now=now)
+
+    assert any(a.startswith("dia_no_disponible") for a in result.acciones)
+    assert result.appointment_id is None
+    # el día imposible se descarta (no se re-ofrece al turno siguiente)
+    assert estado.estado_capturado.cita_fecha_slot is None
+    # mensaje claro + alternativas, NUNCA pregunta "a qué hora" para hoy
+    assert "a qué hora" not in result.hint_para_prompt.lower()
+
+
+# ============================================================
 # FIX (2026-06-02) — al REUSAR lead, actualizar edad/nivel con lo nuevo
 # ============================================================
 

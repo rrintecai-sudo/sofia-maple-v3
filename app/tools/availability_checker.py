@@ -53,6 +53,56 @@ class AvailabilityResult:
     reason: ReasonCode
     alternativas: list[datetime] = field(default_factory=list)
     mensaje: str = ""
+    resumen: str = ""  # resumen humano del horario real de Lily (para el prompt)
+
+
+_DOW_NOMBRES = {
+    0: "domingo", 1: "lunes", 2: "martes", 3: "miércoles",
+    4: "jueves", 5: "viernes", 6: "sábado",
+}
+# Orden semanal lunes→domingo para listar rangos contiguos.
+_DOW_ORDEN = {1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 0: 6}
+
+
+def _fmt_hhmm(t: time) -> str:
+    return f"{t.hour}:{t.minute:02d}"
+
+
+def resumen_disponibilidad_humano(windows: list[LilyAvailabilityWindow]) -> str:
+    """'lunes a viernes de 8:00 a 15:00' a partir de las ventanas activas.
+
+    Agrupa días con el mismo horario y detecta rangos contiguos.
+    """
+    activos = [w for w in windows if w.active]
+    if not activos:
+        return ""
+    from collections import defaultdict
+
+    grupos: dict[tuple[time, time], list[int]] = defaultdict(list)
+    for w in activos:
+        grupos[(w.start_time, w.end_time)].append(w.day_of_week)
+
+    partes: list[str] = []
+    for (st, en), dows in sorted(grupos.items(), key=lambda kv: min(_DOW_ORDEN[d] for d in kv[1])):
+        ordenados = sorted(set(dows), key=lambda d: _DOW_ORDEN[d])
+        # ¿rango contiguo en orden semanal?
+        idxs = [_DOW_ORDEN[d] for d in ordenados]
+        contiguo = idxs == list(range(idxs[0], idxs[0] + len(idxs)))
+        if contiguo and len(ordenados) >= 2:
+            dias_txt = f"{_DOW_NOMBRES[ordenados[0]]} a {_DOW_NOMBRES[ordenados[-1]]}"
+        else:
+            dias_txt = ", ".join(_DOW_NOMBRES[d] for d in ordenados)
+        partes.append(f"{dias_txt} de {_fmt_hhmm(st)} a {_fmt_hhmm(en)}")
+    return "; ".join(partes)
+
+
+async def resumen_disponibilidad(settings: Settings | None = None) -> str:
+    """Resumen humano del horario de Lily (consulta lily_availability)."""
+    settings = settings or get_settings()
+    if not settings.supabase_url:
+        return ""
+    windows = await _fetch_availability_windows(settings)
+    return resumen_disponibilidad_humano(windows)
 
 
 # ============================================================
@@ -220,41 +270,45 @@ def _dia_es_laborable(dt: datetime, windows: list[LilyAvailabilityWindow]) -> bo
     return any(w.day_of_week == dow and w.active for w in windows)
 
 
+def _slots_del_dia(
+    dia: datetime, duracion_min: int, windows: list[LilyAvailabilityWindow]
+) -> list[datetime]:
+    """Todos los slots posibles (inicio) del día `dia` según las ventanas de Lily."""
+    dow = _dow_postgres_style(dia)
+    slots: list[datetime] = []
+    for w in windows:
+        if w.day_of_week != dow or not w.active:
+            continue
+        current = dia.replace(
+            hour=w.start_time.hour, minute=w.start_time.minute, second=0, microsecond=0
+        )
+        win_end = dia.replace(
+            hour=w.end_time.hour, minute=w.end_time.minute, second=0, microsecond=0
+        )
+        while current + timedelta(minutes=duracion_min) <= win_end:
+            slots.append(current)
+            current = current + timedelta(minutes=w.slot_duration_minutes)
+    return sorted(slots)
+
+
 def _generar_candidatos_alternativos(
     fecha_hora_solicitada: datetime,
     duracion_min: int,
     windows: list[LilyAvailabilityWindow],
+    now: datetime,
     max_dias_adelante: int = 7,
 ) -> list[datetime]:
-    """Genera slots candidatos cercanos al horario solicitado, dentro de
-    `max_dias_adelante` días. NO verifica colisión con citas — eso lo hace
-    el caller. Solo aplica la regla de horario de Lily.
-
-    Estrategia (en orden de cercanía):
-      1. Mismo día, mismas/siguientes horas dentro del horario
-      2. Siguientes días laborables, misma hora (o más cercana válida)
-    """
+    """Slots candidatos FUTUROS (> now) cercanos al horario solicitado, dentro de
+    `max_dias_adelante` días. Incluye el MISMO día en horas válidas (ej. ofrecer
+    'viernes 2pm' ante 'viernes 5pm'). NO verifica colisión con citas (lo hace el
+    caller). Ordenados por cercanía a lo pedido."""
     candidatos: list[datetime] = []
     base = fecha_hora_solicitada
     for offset_dias in range(0, max_dias_adelante + 1):
         dia = base + timedelta(days=offset_dias)
-        dow = _dow_postgres_style(dia)
-        for w in windows:
-            if w.day_of_week != dow or not w.active:
-                continue
-            # Generar slots de slot_duration_minutes desde start_time hasta end_time
-            slot_min = w.slot_duration_minutes
-            current = dia.replace(
-                hour=w.start_time.hour, minute=w.start_time.minute, second=0, microsecond=0
-            )
-            win_end_dt = dia.replace(
-                hour=w.end_time.hour, minute=w.end_time.minute, second=0, microsecond=0
-            )
-            while current + timedelta(minutes=duracion_min) <= win_end_dt:
-                if current > base and current != fecha_hora_solicitada:
-                    candidatos.append(current)
-                current = current + timedelta(minutes=slot_min)
-    # Ordenar por proximidad al horario solicitado
+        for current in _slots_del_dia(dia, duracion_min, windows):
+            if current > now and current != fecha_hora_solicitada:
+                candidatos.append(current)
     candidatos.sort(key=lambda c: abs((c - fecha_hora_solicitada).total_seconds()))
     return candidatos
 
@@ -309,25 +363,28 @@ async def is_slot_available(
             reason="supabase_error",
             mensaje="No pude verificar disponibilidad ahora. Inténtalo de nuevo.",
         )
+    resumen = resumen_disponibilidad_humano(windows)
 
     # ¿Día laborable de Lily?
     if not _dia_es_laborable(fecha_hora, windows):
-        alts = await _proponer_alternativas(fecha_hora, duracion_minutos, windows, settings)
+        alts = await _proponer_alternativas(fecha_hora, duracion_minutos, windows, settings, now_local)
         return AvailabilityResult(
             available=False,
             reason="dia_no_laborable",
             alternativas=alts,
             mensaje="Ese día Lily no está disponible.",
+            resumen=resumen,
         )
 
     # ¿Dentro del horario?
     if not _slot_dentro_de_horario(fecha_hora, duracion_minutos, windows):
-        alts = await _proponer_alternativas(fecha_hora, duracion_minutos, windows, settings)
+        alts = await _proponer_alternativas(fecha_hora, duracion_minutos, windows, settings, now_local)
         return AvailabilityResult(
             available=False,
             reason="fuera_de_horario",
             alternativas=alts,
             mensaje="Ese horario está fuera del rango de Lily.",
+            resumen=resumen,
         )
 
     # ¿Choca con otra cita?
@@ -335,15 +392,16 @@ async def is_slot_available(
     rango_fin = fecha_hora + timedelta(hours=2)
     citas = await _fetch_appointments_in_range(settings, rango_inicio, rango_fin)
     if _slot_choca_con_citas(fecha_hora, duracion_minutos, citas):
-        alts = await _proponer_alternativas(fecha_hora, duracion_minutos, windows, settings)
+        alts = await _proponer_alternativas(fecha_hora, duracion_minutos, windows, settings, now_local)
         return AvailabilityResult(
             available=False,
             reason="slot_ocupado",
             alternativas=alts,
             mensaje="Esa hora ya está ocupada.",
+            resumen=resumen,
         )
 
-    return AvailabilityResult(available=True, reason="ok", mensaje="Slot disponible.")
+    return AvailabilityResult(available=True, reason="ok", mensaje="Slot disponible.", resumen=resumen)
 
 
 async def _proponer_alternativas(
@@ -351,16 +409,16 @@ async def _proponer_alternativas(
     duracion_min: int,
     windows: list[LilyAvailabilityWindow],
     settings: Settings,
+    now: datetime,
     n: int = 3,
 ) -> list[datetime]:
-    """Genera 3 alternativas próximas que pasan horario Y no chocan con citas."""
-    candidatos = _generar_candidatos_alternativos(fecha_hora, duracion_min, windows)
+    """Genera hasta `n` alternativas FUTURAS que pasan horario Y no chocan con citas."""
+    candidatos = _generar_candidatos_alternativos(fecha_hora, duracion_min, windows, now)
     if not candidatos:
         return []
 
-    # Trae citas en una ventana amplia (7 días desde el primer candidato)
     rango_inicio = min(candidatos[0], fecha_hora) - timedelta(hours=1)
-    rango_fin = max(candidatos[-1] if candidatos else fecha_hora, fecha_hora) + timedelta(days=1)
+    rango_fin = max(candidatos[-1], fecha_hora) + timedelta(days=1)
     citas = await _fetch_appointments_in_range(settings, rango_inicio, rango_fin)
 
     seleccionadas: list[datetime] = []
@@ -370,3 +428,85 @@ async def _proponer_alternativas(
             if len(seleccionadas) >= n:
                 break
     return seleccionadas
+
+
+async def evaluar_dia(
+    fecha_dia: datetime,
+    *,
+    duracion_min: int = 60,
+    settings: Settings | None = None,
+    now: datetime | None = None,
+) -> AvailabilityResult:
+    """Evalúa un DÍA (sin hora específica) anclado al AHORA real. FIX 2026-06-02.
+
+    Para el caso "el papá dio el día pero no la hora": decide si ese día es
+    reservable considerando la hora actual y la disponibilidad real de Lily.
+
+    Returns AvailabilityResult con:
+    - available=True + `alternativas` = HORAS libres de ESE día (para ofrecerlas).
+    - available=False + reason fecha_pasada (día pasado u hoy ya cerró) /
+      dia_no_laborable / slot_ocupado, con `alternativas` = próximos slots reales.
+    """
+    settings = settings or get_settings()
+    now_local = _to_monterrey(now or datetime.now(TZ_MONTERREY))
+    dia = _to_monterrey(fecha_dia)
+
+    if dia.date() < now_local.date():
+        return AvailabilityResult(False, "fecha_pasada", [], "Ese día ya pasó.")
+    if not settings.supabase_url:
+        return AvailabilityResult(False, "supabase_error", [], "")
+    windows = await _fetch_availability_windows(settings)
+    if not windows:
+        return AvailabilityResult(False, "supabase_error", [], "")
+    resumen = resumen_disponibilidad_humano(windows)
+
+    if not _dia_es_laborable(dia, windows):
+        alts = await _proximos_slots(dia, duracion_min, windows, settings, now_local)
+        return AvailabilityResult(False, "dia_no_laborable", alts, "Ese día Lily no atiende.", resumen)
+
+    # Slots del día que TODAVÍA no pasaron (clave para "hoy 9pm").
+    slots = [s for s in _slots_del_dia(dia, duracion_min, windows) if s > now_local]
+    if not slots:
+        alts = await _proximos_slots(
+            dia + timedelta(days=1), duracion_min, windows, settings, now_local
+        )
+        return AvailabilityResult(
+            False, "fecha_pasada", alts, "Hoy ya pasó el horario de atención.", resumen
+        )
+
+    citas = await _fetch_appointments_in_range(
+        settings, slots[0] - timedelta(hours=1), slots[-1] + timedelta(hours=1)
+    )
+    libres = [s for s in slots if not _slot_choca_con_citas(s, duracion_min, citas)]
+    if not libres:
+        alts = await _proximos_slots(
+            dia + timedelta(days=1), duracion_min, windows, settings, now_local
+        )
+        return AvailabilityResult(False, "slot_ocupado", alts, "Ese día ya está lleno.", resumen)
+
+    return AvailabilityResult(True, "ok", libres, "", resumen)
+
+
+async def _proximos_slots(
+    desde: datetime,
+    duracion_min: int,
+    windows: list[LilyAvailabilityWindow],
+    settings: Settings,
+    now: datetime,
+    n: int = 3,
+) -> list[datetime]:
+    """Próximos `n` slots libres (futuros) desde `desde`, en los siguientes 7 días."""
+    base = max(_to_monterrey(desde), now)
+    cand: list[datetime] = []
+    for off in range(0, 8):
+        for s in _slots_del_dia(base + timedelta(days=off), duracion_min, windows):
+            if s > now:
+                cand.append(s)
+    cand = sorted(set(cand))
+    if not cand:
+        return []
+    citas = await _fetch_appointments_in_range(
+        settings, cand[0] - timedelta(hours=1), cand[-1] + timedelta(hours=1)
+    )
+    libres = [s for s in cand if not _slot_choca_con_citas(s, duracion_min, citas)]
+    return libres[:n]

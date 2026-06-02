@@ -262,7 +262,7 @@ def test_build_system_prompt_pide_no_inventar() -> None:
     now = datetime(2026, 5, 25, tzinfo=TZ_MONTERREY)
     prompt = _build_system_prompt(now)
     assert "NUNCA inventes" in prompt
-    assert "futuras" in prompt.lower()
+    assert "futur" in prompt.lower()
 
 
 # ============================================================

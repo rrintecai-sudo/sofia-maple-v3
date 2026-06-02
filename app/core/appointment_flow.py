@@ -44,7 +44,12 @@ from app.integrations.leads import (
     update_lead,
 )
 from app.notifications.email import render_cita_pendiente_email, send_email
-from app.tools.availability_checker import AvailabilityResult, is_slot_available
+from app.tools.availability_checker import (
+    AvailabilityResult,
+    evaluar_dia,
+    is_slot_available,
+    resumen_disponibilidad,
+)
 from app.tools.campus import CampusResult, get_campus_by_id
 from app.tools.niveles import derivar_nivel_grado_de_edad
 
@@ -94,6 +99,11 @@ def _formato_fecha_humana(dt: datetime) -> str:
 
 def _formatear_alternativas(alts: list[datetime]) -> str:
     return "; ".join(_formato_fecha_humana(a) for a in alts) or "(ninguna cercana)"
+
+
+def _formatear_horas(slots: list[datetime]) -> str:
+    """'8:00, 9:00, 10:00' — solo las horas (mismo día)."""
+    return ", ".join(f"{s.hour}:{s.minute:02d}" for s in slots) or "(por confirmar)"
 
 
 def datos_lead_faltantes(estado: EstadoConversacion) -> list[str]:
@@ -357,28 +367,82 @@ async def handle_appointment_intent(
     fecha_slot = capt.cita_fecha_slot
     hora_slot = capt.cita_hora_slot
 
-    # 1a. Sin día en los slots (ni este turno ni antes) → pedir día y hora.
+    # 1a. Sin día en los slots → pedir día y hora, anclando al horario REAL de Lily
+    # para que Sofía NUNCA diga "todos los días disponibles".
     if fecha_slot is None:
+        resumen = await resumen_disponibilidad(settings)
+        horario_linea = (
+            f" El horario REAL de Lily es: {resumen}. NUNCA digas 'todos los días' "
+            f"ni inventes disponibilidad; ofrece SOLO dentro de ese horario."
+            if resumen
+            else ""
+        )
         return AppointmentHandlerResult(
             hint_para_prompt=(
                 "[FLUJO AGENDADO — el papá quiere visitar pero NO especificó fecha "
                 "y hora claras. Pregúntale en UNA oración breve qué día y hora le "
-                "queda mejor. NO inventes una fecha.]"
+                f"queda mejor. NO inventes una fecha.{horario_linea}]"
             ),
             acciones=["extract_failed"],
             appointment_datetime=appt_dt,
         )
 
-    # 1b. Hay día en el slot pero falta la hora. Le pasamos a Sofía la fecha YA
-    # RESUELTA para que NO la recalcule mal (bug "lunes 2 de junio"). Pide hora.
+    # 1b. Hay día pero falta la hora. FIX (2026-06-02): validamos el DÍA contra el
+    # AHORA real + disponibilidad de Lily ANTES de pedir la hora. Así no se ofrece
+    # un día imposible (hoy ya cerró, día pasado, no laborable, lleno) y no se
+    # inventa "todos los días".
     if hora_slot is None:
         dia_resuelto = fecha_humana_solo_dia(fecha_slot) or "ese día"
+        try:
+            dia_dt = datetime.strptime(fecha_slot, "%Y-%m-%d").replace(tzinfo=TZ_MONTERREY)
+        except ValueError:
+            dia_dt = None
+
+        eval_dia = await evaluar_dia(dia_dt, settings=settings, now=now) if dia_dt else None
+
+        if eval_dia is not None and eval_dia.reason != "supabase_error" and not eval_dia.available:
+            # El día NO es reservable → descartar el slot y proponer alternativas REALES.
+            capt.cita_fecha_slot = None
+            capt.cita_hora_slot = None
+            alts_str = _formatear_alternativas(eval_dia.alternativas)
+            motivo = {
+                "fecha_pasada": (
+                    f"{dia_resuelto} ya no es posible (hoy ya pasó el horario de atención "
+                    f"o ese día ya pasó)"
+                ),
+                "dia_no_laborable": f"ese día ({dia_resuelto}) Lily no atiende",
+                "slot_ocupado": f"ese día ({dia_resuelto}) ya está lleno",
+            }.get(eval_dia.reason, f"{dia_resuelto} no está disponible")
+            horario = (
+                f" Horario real de Lily: {eval_dia.resumen}."
+                if eval_dia.resumen
+                else ""
+            )
+            return AppointmentHandlerResult(
+                hint_para_prompt=(
+                    f"[FLUJO AGENDADO — {motivo}.{horario} Dilo con claridad (NADA de "
+                    f"'no tengo claro') y propón EXACTAMENTE estas opciones, sin inventar "
+                    f"otras: {alts_str}. Una sola pregunta breve: '¿te queda alguna?']"
+                ),
+                acciones=[f"dia_no_disponible:{eval_dia.reason}"],
+                appointment_datetime=appt_dt,
+                availability=eval_dia,
+            )
+
+        # Día válido (o no se pudo verificar) → pedir la hora con la fecha RESUELTA
+        # y, si las tenemos, las horas reales libres de ese día.
+        horas_linea = ""
+        if eval_dia is not None and eval_dia.available and eval_dia.alternativas:
+            horas_linea = (
+                f" Ese día Lily tiene libre: {_formatear_horas(eval_dia.alternativas[:6])}. "
+                f"Ofrécele esas, NO inventes otras."
+            )
         return AppointmentHandlerResult(
             hint_para_prompt=(
                 f"[FLUJO AGENDADO — el papá indicó el día ({dia_resuelto}) pero NO la "
-                f"hora. Usa EXACTAMENTE esa fecha ({dia_resuelto}) cuando menciones el "
-                f"día; NO la recalcules ni inventes otra. Pregúntale a qué hora le queda "
-                f"mejor, en UNA oración breve. NO confirmes la cita todavía.]"
+                f"hora. Usa EXACTAMENTE esa fecha ({dia_resuelto}); NO la recalcules ni "
+                f"inventes otra.{horas_linea} Pregúntale a qué hora le queda mejor, en "
+                f"UNA oración breve. NO confirmes la cita todavía.]"
             ),
             acciones=["missing_time"],
             appointment_datetime=appt_dt,
@@ -410,26 +474,37 @@ async def handle_appointment_intent(
 
     if not avail.available:
         alts_str = _formatear_alternativas(avail.alternativas)
+        horario = f" Horario real de Lily: {avail.resumen}." if avail.resumen else ""
+        # FIX (2026-06-02): cuando el día/hora no sirve, descartar el slot para no
+        # reofrecer lo mismo, y dar mensaje CLARO + alternativa (nada de "no sé").
+        if avail.reason != "supabase_error":
+            capt.cita_hora_slot = None
+            if avail.reason in ("fecha_pasada", "dia_no_laborable"):
+                capt.cita_fecha_slot = None
+
         if avail.reason == "fecha_pasada":
             hint = (
-                f"[FLUJO AGENDADO — la fecha que pidió el papá ({fecha_humana}) ya pasó. "
-                f"Pídele otra fecha próxima en UNA oración breve.]"
+                f"[FLUJO AGENDADO — {fecha_humana} ya pasó (respecto a la hora actual). "
+                f"NO lo ofrezcas.{horario} Propón EXACTAMENTE: {alts_str}. "
+                f"Una sola pregunta breve.]"
             )
         elif avail.reason == "dia_no_laborable":
             hint = (
-                f"[FLUJO AGENDADO — ese día ({fecha_humana}) Lily no atiende. "
-                f"Propón estas alternativas SIN inventar nada más: {alts_str}. "
+                f"[FLUJO AGENDADO — ese día ({fecha_humana}) Lily NO atiende.{horario} "
+                f"Propón EXACTAMENTE estas alternativas, sin inventar otras: {alts_str}. "
                 f"Una sola pregunta breve: '¿te queda alguna de estas?']"
             )
         elif avail.reason == "fuera_de_horario":
             hint = (
-                f"[FLUJO AGENDADO — la hora ({fecha_humana}) está fuera del horario "
-                f"de Lily. Propón estas alternativas: {alts_str}. Una sola pregunta.]"
+                f"[FLUJO AGENDADO — esa hora ({fecha_humana}) está FUERA del horario de "
+                f"atención.{horario} Dilo claro (NADA de 'no tengo claro') y ofrece la "
+                f"opción más cercana dentro del horario. Propón EXACTAMENTE: {alts_str}. "
+                f"Una sola pregunta breve.]"
             )
         elif avail.reason == "slot_ocupado":
             hint = (
-                f"[FLUJO AGENDADO — ese horario ({fecha_humana}) ya está ocupado. "
-                f"Propón estas alternativas: {alts_str}. Una sola pregunta breve.]"
+                f"[FLUJO AGENDADO — ese horario ({fecha_humana}) ya está ocupado.{horario} "
+                f"Propón EXACTAMENTE estas alternativas: {alts_str}. Una sola pregunta breve.]"
             )
         else:  # supabase_error
             hint = (
