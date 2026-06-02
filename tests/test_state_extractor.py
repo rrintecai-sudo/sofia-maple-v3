@@ -18,6 +18,7 @@ from app.core.state_extractor import (
     extraer_nombre_hijo,
     extraer_nombre_papa,
     extraer_telefono,
+    nombre_papa_por_contexto,
 )
 
 # ============================================================
@@ -109,6 +110,35 @@ def test_fallback_se_llama_no_va_a_nombre_papa() -> None:
     res = _aplicar_fallbacks_deterministicos(ExtraccionTurno(), "se llama Emanuel")
     assert res.nombre_hijo == "Emanuel"
     assert res.nombre_papa is None
+
+
+@pytest.mark.parametrize(
+    "ultimo,mensaje,esperado",
+    [
+        ("¿Y tu nombre, por favor?", "Oscar Rodriguez", "Oscar Rodriguez"),
+        ("¿Cómo te llamas?", "Ana", "Ana"),
+        ("pregunta ÚNICAMENTE por: tu nombre.", "soy Pedro Rojas", "Pedro Rojas"),
+        # Sofía NO pidió el nombre → no captura nombre suelto.
+        ("¿Qué día te queda mejor?", "Oscar Rodriguez", None),
+        # Trae correo/teléfono → no es un nombre limpio.
+        ("¿tu nombre?", "ing2oscar@gmail.com, 7866035862", None),
+        # Confirmación / palabras-función → no es nombre.
+        ("¿tu nombre?", "si ya te lo dije", None),
+        ("¿tu nombre?", "no gracias", None),
+    ],
+)
+def test_nombre_papa_por_contexto(ultimo, mensaje, esperado) -> None:
+    assert nombre_papa_por_contexto(mensaje, ultimo) == esperado
+
+
+def test_fallback_captura_nombre_papa_suelto_tras_pregunta() -> None:
+    # El bug de Emanuel: 'Oscar Rodriguez' como respuesta a "¿tu nombre?".
+    res = _aplicar_fallbacks_deterministicos(
+        ExtraccionTurno(), "Oscar Rodriguez", ultimo_assistant="Listo. ¿Y tu nombre, por favor?"
+    )
+    assert res.nombre_papa == "Oscar Rodriguez"
+    assert res.nombre_papa_explicito is True
+    assert res.nombre_hijo is None
 
 
 @pytest.mark.parametrize(

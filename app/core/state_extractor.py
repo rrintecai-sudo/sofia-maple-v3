@@ -230,6 +230,56 @@ def extraer_nombre_hijo(mensaje: str) -> str | None:
     return None
 
 
+# El papá responde su nombre SUELTO ("Oscar Rodriguez") cuando Sofía se lo pidió.
+# Sin "yo soy", el extractor LLM a veces no lo captura → el gate seguía pidiendo
+# "tu nombre" en bucle (bug real de la prueba de Emanuel). Captura por CONTEXTO.
+_PIDE_NOMBRE_PAPA_RE = re.compile(
+    r"tu\s+nombre|c[óo]mo\s+te\s+llamas|qui[eé]n\s+tengo\s+el\s+gusto|"
+    r"me\s+(?:das|compartes|dices|regalas)\s+tu\s+nombre",
+    re.IGNORECASE,
+)
+# Palabras función que NO son nombre (descartan "si ya te lo dije", "ok claro").
+_PALABRAS_NO_NOMBRE = frozenset({
+    "si", "sí", "no", "ya", "te", "lo", "la", "le", "les", "me", "mi", "tu", "su",
+    "eso", "esa", "ese", "esta", "este", "esto", "aqui", "aquí", "alli", "allí",
+    "igual", "mismo", "dije", "dijo", "dado", "gracias", "ok", "okay", "dale",
+    "claro", "va", "sale", "bien", "asi", "así", "pues", "porque", "que", "cual",
+    "cuando", "como", "cómo", "y", "o", "el", "ella", "ellos", "es", "son", "soy",
+})
+# Prefijos de cortesía a ignorar antes del nombre ("soy Oscar", "me llamo Ana").
+_PREFIJO_CORTESIA = frozenset({"soy", "me", "llamo", "mi", "nombre", "es", "yo"})
+
+
+def nombre_papa_por_contexto(mensaje: str, ultimo_assistant: str | None) -> str | None:
+    """'Oscar Rodriguez' como respuesta a "¿tu nombre?" → 'Oscar Rodriguez'.
+
+    Solo dispara si el ÚLTIMO turno de Sofía pidió el nombre del papá y el mensaje
+    es un nombre limpio (sin email, sin teléfono, sin palabras-función)."""
+    if not ultimo_assistant or not _PIDE_NOMBRE_PAPA_RE.search(ultimo_assistant):
+        return None
+    txt = (mensaje or "").strip()
+    if "@" in txt or re.search(r"\d{3,}", txt):  # trae correo o teléfono → no es nombre
+        return None
+    # Si es una presentación del HIJO ("se llama X", "mi hijo X", "Ana, 4 años"),
+    # NO es el nombre del papá aunque Sofía haya pedido el nombre.
+    if extraer_nombre_hijo(txt) or _nombre_junto_a_edad(txt):
+        return None
+    tokens: list[str] = []
+    for raw in re.split(r"\s+", txt):
+        t = raw.lower().strip(",.;¿?¡!()")
+        if not t:
+            continue
+        if t in _PREFIJO_CORTESIA:  # ignora "soy", "me llamo"…
+            continue
+        if t in _PALABRAS_NO_NOMBRE or not re.match(r"^[a-záéíóúñ]+$", t):
+            return None  # token que no es nombre → el mensaje no es un nombre limpio
+        tokens.append(t)
+    if not tokens or len(tokens) > 4:
+        return None
+    nombre = " ".join(w[:1].upper() + w[1:] for w in tokens)
+    return nombre if _es_nombre_valido(nombre) else None
+
+
 # Presentación EXPLÍCITA del papá ("yo soy X", "me llamo X", "mi nombre es X").
 # FIX (e): habilita corregir un nombre_papa clavado de una sesión contaminada.
 _PRESENTACION_RE = re.compile(
@@ -405,8 +455,13 @@ Devuelve EXCLUSIVAMENTE JSON con la estructura de ExtraccionTurno.
 async def extraer_de_mensaje(
     mensaje: str,
     estado_actual: EstadoCapturado,
+    *,
+    ultimo_assistant: str | None = None,
 ) -> ExtraccionTurno:
     """Extrae datos nuevos del último mensaje del papá.
+
+    `ultimo_assistant`: último turno de Sofía, para capturar respuestas SUELTAS
+    por contexto (p.ej. el nombre del papá tras "¿tu nombre?").
 
     No mergea — eso lo hace el caller con `aplicar_extraccion()`.
     """
@@ -429,10 +484,12 @@ async def extraer_de_mensaje(
         else:
             result = _parse_extraction(raw)
 
-    return _aplicar_fallbacks_deterministicos(result, mensaje)
+    return _aplicar_fallbacks_deterministicos(result, mensaje, ultimo_assistant=ultimo_assistant)
 
 
-def _aplicar_fallbacks_deterministicos(result: ExtraccionTurno, mensaje: str) -> ExtraccionTurno:
+def _aplicar_fallbacks_deterministicos(
+    result: ExtraccionTurno, mensaje: str, *, ultimo_assistant: str | None = None
+) -> ExtraccionTurno:
     """Capa de captura DETERMINÍSTICA consolidada (FIX 2026-06-02).
 
     El LLM NO es load-bearing: corre SIEMPRE (incluso si el LLM no estaba
@@ -448,8 +505,11 @@ def _aplicar_fallbacks_deterministicos(result: ExtraccionTurno, mensaje: str) ->
     if tel_det:
         result.telefono = tel_det
 
-    # --- Nombre del papá: presentación explícita ("yo soy X") MANDA + marca flag. ---
-    nombre_papa_det = extraer_nombre_papa(mensaje)
+    # --- Nombre del papá: presentación explícita ("yo soy X") o respuesta SUELTA
+    # a "¿tu nombre?" ("Oscar Rodriguez") MANDAN + marcan flag. ---
+    nombre_papa_det = extraer_nombre_papa(mensaje) or nombre_papa_por_contexto(
+        mensaje, ultimo_assistant
+    )
     if nombre_papa_det:
         result.nombre_papa = nombre_papa_det
         result.nombre_papa_explicito = True

@@ -208,7 +208,11 @@ async def procesar_turno(
             historial_para_classifier.append(f"{role_short}: {content}")
 
     # 3b. Extraer estado y clasificar intención en paralelo (auxiliares baratos)
-    extraccion_task = asyncio.create_task(extraer_de_mensaje(mensaje, estado.estado_capturado))
+    extraccion_task = asyncio.create_task(
+        extraer_de_mensaje(
+            mensaje, estado.estado_capturado, ultimo_assistant=ultimo_assistant_msg
+        )
+    )
     intent_task = asyncio.create_task(
         classify_intent(
             mensaje,

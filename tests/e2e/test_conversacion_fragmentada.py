@@ -466,7 +466,7 @@ async def test_cierre_fragmentado_crea_y_persiste_cita() -> None:
     async def fake_classify(message, **kw):
         return _intent(SCRIPT[message][0])
 
-    async def fake_extract(mensaje, estado_actual):
+    async def fake_extract(mensaje, estado_actual, **kw):
         return SCRIPT[mensaje][1]
 
     async def fake_extract_dt(mensaje, *, now=None):
@@ -633,7 +633,7 @@ async def test_reproduccion_oscar_hora_suelta_y_nombre_obligatorio() -> None:
     async def fake_classify(message, **kw):
         return _intent(SCRIPT[message][0])
 
-    async def fake_extract(mensaje, estado_actual):
+    async def fake_extract(mensaje, estado_actual, **kw):
         return SCRIPT[mensaje][1]
 
     async def fake_extract_dt(mensaje, *, now=None):
@@ -1005,7 +1005,7 @@ async def test_rearmado_segunda_cita_se_crea_real() -> None:
     async def fake_classify(message, **kw):
         return _intent(SCRIPT[message][0])
 
-    async def fake_extract(mensaje, estado_actual):
+    async def fake_extract(mensaje, estado_actual, **kw):
         return SCRIPT[mensaje][1]
 
     async def fake_extract_dt(mensaje, *, now=None):
@@ -1150,7 +1150,7 @@ async def test_rearmado_captura_todo_del_mensaje_disparador() -> None:
     async def fake_classify(message, **kw):
         return _intent(Intent.QUIERE_AGENDAR)
 
-    async def fake_extract(mensaje, estado_actual):
+    async def fake_extract(mensaje, estado_actual, **kw):
         # el state-extractor captura nombre + edad del mismo mensaje
         return ExtraccionTurno(nombre_hijo="Lucía", edad_hijo=5, quiere_agendar=True)
 
@@ -1250,7 +1250,7 @@ async def test_tres_agendados_una_sesion_n_filas_y_grado_por_edad() -> None:
     async def fake_classify(message, **kw):
         return _intent(SCRIPT[message][0])
 
-    async def fake_extract(mensaje, estado_actual):
+    async def fake_extract(mensaje, estado_actual, **kw):
         return SCRIPT[mensaje][1]
 
     async def fake_extract_dt(mensaje, *, now=None):
@@ -1347,7 +1347,7 @@ async def test_primer_agendado_dia_cercano_resuelve_determinista_y_cierra() -> N
     async def fake_classify(message, **kw):
         return _intent(Intent.QUIERE_AGENDAR)
 
-    async def fake_extract(mensaje, estado_actual):
+    async def fake_extract(mensaje, estado_actual, **kw):
         return ExtraccionTurno(
             nombre_hijo="Mateo",
             edad_hijo=4,
@@ -1456,9 +1456,12 @@ def _leaf_determinista(repo, anthropic, create_appt):
     async def fake_classify(message, **kw):
         return _intent(Intent.CONFUSO_OTRO)  # el LLM de intent SIEMPRE falla
 
-    async def fake_extract(mensaje, estado_actual):
-        # LLM vacío → SOLO la capa determinística (regex) captura.
-        return _aplicar_fallbacks_deterministicos(ExtraccionTurno(), mensaje)
+    async def fake_extract(mensaje, estado_actual, *, ultimo_assistant=None, **kw):
+        # LLM vacío → SOLO la capa determinística (regex) captura. Incluye el
+        # contexto del último turno de Sofía (para el nombre suelto del papá).
+        return _aplicar_fallbacks_deterministicos(
+            ExtraccionTurno(), mensaje, ultimo_assistant=ultimo_assistant
+        )
 
     async def fake_extract_dt(mensaje, *, now=None):
         return AppointmentDateTime(fecha=None, hora=None, confidence=0.0, razonamiento="vacío")
@@ -1692,3 +1695,133 @@ async def test_codigo_decide_pregunta_y_cierre_con_haiku_terco() -> None:
     ]
     # Ningún campo se pidió dos veces (no hay bucle de re-pregunta).
     assert len(pedidos) == len(set(pedidos))
+
+
+# ============================================================
+# 14. REGRESIÓN: el CIERRE es determinístico (bug real de Emanuel, 2026-06-02).
+#     (a) El nombre del papá SUELTO ("Oscar Rodriguez") tras "¿tu nombre?" se
+#         captura por contexto → el gate se completa y la cita se crea + D.4.
+#     (b) Con los 6 datos completos + confirmación que el LLM marca confuso_otro
+#         ("si ya te lo dije"), el CÓDIGO cierra: crea cita + D.4, NUNCA
+#         "Lily te va a contactar".
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_nombre_papa_suelto_cierra_multiturno() -> None:
+    """Multi-turno realista: el papá responde su nombre SUELTO ('Oscar Rodriguez')
+    a la pregunta de Sofía. Antes quedaba nombre_papa=None y entraba en bucle;
+    ahora se captura por contexto y la cita cierra."""
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import FaseAgendado
+
+    repo = _nuevo_repo_explorando("web:suelto")
+    haiku = _HaikuTerco()
+    create_appt = AsyncMock(side_effect=lambda **kw: 400 + create_appt.await_count)
+    leaf = _leaf_determinista(repo, haiku, create_appt)
+
+    turnos = [
+        "quiero agendar el viernes a las 10am",  # día+hora
+        "se llama Emanuel",                      # nombre del niño
+        "tiene 4 años",                          # edad → grado
+        "Oscar Rodriguez",                       # ← nombre del papá SUELTO
+        "oscar@oscar.com, 7866035862",           # correo + cel → completa → CIERRA
+    ]
+    _enter(leaf)
+    try:
+        result = None
+        for t in turnos:
+            result = await procesar_turno(mensaje=t, session_id="web:suelto", canal=None)
+    finally:
+        _exit(leaf)
+
+    capt = repo._conv.estado_capturado
+    assert capt.nombre_papa == "Oscar Rodriguez"  # ← se capturó el nombre suelto
+    assert create_appt.await_count == 1
+    assert capt.fase_agendado == FaseAgendado.CERRADO
+    assert "https://www.google.com/maps" in result.response
+    assert "Lily te" not in result.response
+
+
+@pytest.mark.asyncio
+async def test_confirmacion_confuso_otro_con_datos_completos_cierra() -> None:
+    """El turno de confirmación sale intent=confuso_otro. Con los 6 datos + slots
+    ya completos, el CÓDIGO crea la cita + D.4 sin depender del intent. 'Lily te
+    va a contactar' NO es alcanzable con los datos completos."""
+    import types
+
+    from app.core.appointment_extractor import AppointmentDateTime
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import (
+        Canal,
+        EstadoCapturado,
+        EstadoConversacion,
+        FaseAgendado,
+        HijoInfo,
+        NivelEducativo,
+    )
+    from app.core.state_extractor import ExtraccionTurno
+
+    # Estado con los 6 datos + slots YA completos, fase AGENDANDO (aún no cerró).
+    repo = _StatefulRepo()
+    repo._conv = EstadoConversacion(
+        session_id="web:confirma", canal=Canal.WEB, identificador="confirma",
+        estado_capturado=EstadoCapturado(
+            nombre_papa="Oscar Rodriguez",
+            email_papa="oscar@oscar.com",
+            telefono="7866035862",
+            nivel_buscado_actual=NivelEducativo.KINDER,
+            hijos=[HijoInfo(nombre="Emanuel", edad=4, nivel=NivelEducativo.KINDER, grado="2° de Kinder")],
+            fase_agendado=FaseAgendado.AGENDANDO,
+            cita_fecha_slot="2026-06-05",
+            cita_hora_slot="15:00",
+        ),
+    )
+    # Sofía venía confirmando los datos en su último turno.
+    await repo.insert_message("web:confirma", "assistant", "Perfecto, Oscar. Entonces te tengo todo, ¿confirmas?")
+
+    haiku = _HaikuTerco()  # si Haiku improvisara, NO debe sobrevivir
+    create_appt = AsyncMock(return_value=321)
+
+    async def fake_classify(message, **kw):
+        return _intent(Intent.CONFUSO_OTRO)  # la confirmación NO se clasifica como agendar
+
+    async def fake_extract(mensaje, estado_actual, **kw):
+        return ExtraccionTurno()  # el papá no agrega datos nuevos, solo confirma
+
+    async def fake_extract_dt(mensaje, *, now=None):
+        return AppointmentDateTime(fecha=None, hora=None, confidence=0.0, razonamiento="vacío")
+
+    leaf = [
+        patch("app.core.orchestrator.get_repository", return_value=repo),
+        patch("app.core.orchestrator.get_anthropic", return_value=haiku),
+        patch("app.core.orchestrator.classify_intent", side_effect=fake_classify),
+        patch("app.core.orchestrator.extraer_de_mensaje", side_effect=fake_extract),
+        patch("app.core.orchestrator.get_campus_para_nivel", AsyncMock(return_value=None)),
+        patch("app.core.orchestrator.consultar_edades_de_nivel", AsyncMock(return_value=None)),
+        patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
+        patch("app.core.appointment_flow.is_slot_available",
+              AsyncMock(return_value=types.SimpleNamespace(
+                  available=True, reason="ok", alternativas=[], resumen=""))),
+        patch("app.core.appointment_flow.create_appointment", create_appt),
+        patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=_campus_test())),
+        patch("app.core.appointment_flow.get_lead_by_session", AsyncMock(return_value=None)),
+        patch("app.core.appointment_flow.create_lead", AsyncMock(return_value=88)),
+        patch("app.core.appointment_flow.update_lead", AsyncMock()),
+        patch("app.core.appointment_flow.emit_event", AsyncMock()),
+        patch("app.core.appointment_flow.send_email", AsyncMock()),
+        patch("app.core.appointment_flow.advance_stage_if_lower", AsyncMock(return_value=True)),
+    ]
+
+    _enter(leaf)
+    try:
+        result = await procesar_turno(mensaje="si ya te lo dije", session_id="web:confirma", canal=None)
+    finally:
+        _exit(leaf)
+
+    # El CÓDIGO cerró pese al intent confuso_otro y al Haiku terco.
+    create_appt.assert_awaited_once()
+    assert repo._conv.estado_capturado.fase_agendado == FaseAgendado.CERRADO
+    assert "https://www.google.com/maps" in result.response
+    assert "Lily te" not in result.response  # NO el "Lily te va a contactar" improvisado
+    assert "videollamada" not in result.response
