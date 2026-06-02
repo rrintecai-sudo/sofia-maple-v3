@@ -217,41 +217,45 @@ async def procesar_turno(
     )
     extraccion, intent_result = await asyncio.gather(extraccion_task, intent_task)
 
-    # 4. Aplicar extracción al estado
-    estado.estado_capturado = aplicar_extraccion(estado.estado_capturado, extraccion)
-
-    # 4bis. PASO 1 (2026-05-29) — máquina PEGAJOSA de agendado controlada por
-    # CÓDIGO (no por Haiku ni por el clasificador turno a turno). Se entra a
-    # AGENDANDO con la PRIMERA señal (intent QUIERE_AGENDAR o expresión temporal)
-    # y NO se reevalúa a la baja: el código colecta los 6 datos + día/hora hasta
-    # cerrar. Persiste en sofia_conversations.estado_capturado (JSONB).
-    capt = estado.estado_capturado
-
-    # FIX (2026-06-02): RE-ARMADO. Una sesión que YA cerró una cita (CERRADO) y se
-    # reusa (en WhatsApp la sesión = el teléfono, persiste para siempre) puede
+    # 4-pre. RE-ARMADO (2026-06-02). Una sesión que YA cerró una cita (CERRADO) y
+    # se reusa (en WhatsApp la sesión = el teléfono, persiste para siempre) puede
     # agendar OTRA cita. Antes quedaba clavada en CERRADO → el pipeline no corría y
-    # `cita_agendada` viejo desarmaba el validador → ghost-close (Haiku decía "ya
-    # quedó agendada" sin crear nada). Re-armamos SOLO con intent EXPLÍCITO
-    # QUIERE_AGENDAR (un temporal suelto como "nos vemos el viernes" NO reabre una
-    # cita legítima). Reseteamos el sub-estado de agendado para empezar fresco.
+    # `cita_agendada` viejo desarmaba el validador → ghost-close. Re-armamos SOLO
+    # con intent EXPLÍCITO QUIERE_AGENDAR (un temporal suelto NO reabre una cita).
+    #
+    # FIX (2026-06-02b): el reseteo va ANTES de aplicar_extraccion, para que los
+    # datos del MENSAJE DISPARADOR ("se llama Lucía, 5 años, el jueves 11am") se
+    # capturen sobre el estado limpio y NO se borren. Así no se re-pregunta lo que
+    # ya vino en ese mismo mensaje.
     if (
-        capt.fase_agendado == FaseAgendado.CERRADO
+        estado.estado_capturado.fase_agendado == FaseAgendado.CERRADO
         and intent_result.intent == Intent.QUIERE_AGENDAR
     ):
-        capt.fase_agendado = FaseAgendado.AGENDANDO
-        capt.cita_fecha_slot = None
-        capt.cita_hora_slot = None
-        capt.cita_agendada = False
-        capt.fecha_cita = None
-        capt.campus_cita = None
-        capt.hijos = []  # la nueva cita suele ser de OTRO hijo; se recaptura limpio
-        capt.nivel_buscado_actual = None
+        prev = estado.estado_capturado
+        prev.fase_agendado = FaseAgendado.AGENDANDO
+        prev.cita_fecha_slot = None
+        prev.cita_hora_slot = None
+        prev.cita_agendada = False
+        prev.fecha_cita = None
+        prev.campus_cita = None
+        prev.hijos = []  # la nueva cita suele ser de OTRO hijo; se recaptura limpio
+        prev.nivel_buscado_actual = None
         estado.agendado = False
         estado.fecha_agendado = None
         log.info(
             "agendado_fase CERRADO→AGENDANDO (re-armado nueva cita)",
             extra={"session_id": session_id},
         )
+
+    # 4. Aplicar extracción al estado (sobre el estado ya re-armado si aplicó):
+    # captura nombre/edad/etc del mensaje disparador del segundo agendado.
+    estado.estado_capturado = aplicar_extraccion(estado.estado_capturado, extraccion)
+
+    # 4bis. PASO 1 (2026-05-29) — máquina PEGAJOSA de agendado controlada por
+    # CÓDIGO. Se entra a AGENDANDO con la PRIMERA señal (intent QUIERE_AGENDAR o
+    # expresión temporal) y NO se reevalúa a la baja: el código colecta los 6 datos
+    # + día/hora hasta cerrar. Persiste en sofia_conversations.estado_capturado.
+    capt = estado.estado_capturado
 
     senal_agendado = (
         intent_result.intent == Intent.QUIERE_AGENDAR

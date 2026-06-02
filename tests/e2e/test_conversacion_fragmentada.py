@@ -1126,3 +1126,77 @@ async def test_ghost_close_bloqueado_tras_rearmar_sin_crear() -> None:
 
     # el re-armado reseteó cita_agendada → el validador vuelve a estar ARMADO
     assert "no_confirma_cita_inexistente" in result.validators_failed
+
+
+@pytest.mark.asyncio
+async def test_rearmado_captura_todo_del_mensaje_disparador() -> None:
+    """FIX 2026-06-02b: el mensaje disparador del 2º agendado trae nombre+edad+
+    día+hora → se capturan TODOS sobre el estado re-armado (no se borran), se
+    deduce el grado y cierra en UN turno, sin re-preguntar nombre/edad/grado."""
+    import types
+
+    from app.core.appointment_extractor import AppointmentDateTime
+    from app.core.state import FaseAgendado
+    from app.tools.campus import CampusResult
+
+    msg = "quiero agendar otra para mi hija Lucía, 5 años, el jueves 11am"
+
+    async def fake_classify(message, **kw):
+        return _intent(Intent.QUIERE_AGENDAR)
+
+    async def fake_extract(mensaje, estado_actual):
+        # el state-extractor captura nombre + edad del mismo mensaje
+        return ExtraccionTurno(nombre_hijo="Lucía", edad_hijo=5, quiere_agendar=True)
+
+    async def fake_extract_dt(mensaje, *, now=None):
+        # 2026-06-11 es jueves
+        return AppointmentDateTime(fecha="2026-06-11", hora="11:00", confidence=0.95, razonamiento="t")
+
+    campus1 = CampusResult(
+        id=1, nombre="Campus 1", direccion="José Figueroa Siller 156", colonia="Doctores",
+        ciudad="Saltillo", estado="Coahuila", niveles=["kinder_1", "kinder_2", "kinder_3"],
+        google_maps_url="https://www.google.com/maps/search/?api=1&query=Jose",
+    )
+    repo = _StatefulRepo()
+    repo._conv = _seed_cerrado()
+    anthropic = _fake_anthropic(["ok"])
+    create_appt = AsyncMock(return_value=1000)
+
+    leaf = [
+        patch("app.core.orchestrator.get_repository", return_value=repo),
+        patch("app.core.orchestrator.get_anthropic", return_value=anthropic),
+        patch("app.core.orchestrator.classify_intent", side_effect=fake_classify),
+        patch("app.core.orchestrator.extraer_de_mensaje", side_effect=fake_extract),
+        patch("app.core.orchestrator.get_campus_para_nivel", AsyncMock(return_value=None)),
+        patch("app.core.orchestrator.consultar_edades_de_nivel", AsyncMock(return_value=None)),
+        patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
+        patch("app.core.appointment_flow.is_slot_available",
+              AsyncMock(return_value=types.SimpleNamespace(available=True, reason="ok", alternativas=[], resumen=""))),
+        patch("app.core.appointment_flow.create_appointment", create_appt),
+        patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=campus1)),
+        patch("app.core.appointment_flow.get_lead_by_session", AsyncMock(return_value=None)),
+        patch("app.core.appointment_flow.create_lead", AsyncMock(return_value=88)),
+        patch("app.core.appointment_flow.emit_event", AsyncMock()),
+        patch("app.core.appointment_flow.send_email", AsyncMock()),
+        patch("app.core.appointment_flow.advance_stage_if_lower", AsyncMock(return_value=True)),
+    ]
+
+    from app.core.orchestrator import procesar_turno
+
+    _enter(leaf)
+    try:
+        result = await procesar_turno(mensaje=msg, session_id="web:reuse", canal=None)
+    finally:
+        _exit(leaf)
+
+    capt = repo._conv.estado_capturado
+    # TODO se capturó del mensaje disparador (no se borró al re-armar)
+    assert capt.hijos[0].nombre == "Lucía"
+    assert capt.hijos[0].edad == 5
+    assert capt.hijos[0].grado == "3° de Kinder"  # deducido de 5 años
+    assert capt.cita_fecha_slot == "2026-06-11" and capt.cita_hora_slot == "11:00"
+    # cerró en UN turno (todo venía + el papá ya estaba en el estado)
+    create_appt.assert_awaited_once()
+    assert capt.fase_agendado == FaseAgendado.CERRADO
+    assert "ya quedó agendada" in result.response
+    assert "https://www.google.com/maps" in result.response
