@@ -1458,9 +1458,12 @@ def _leaf_determinista(repo, anthropic, create_appt):
 
     async def fake_extract(mensaje, estado_actual, *, ultimo_assistant=None, **kw):
         # LLM vacío → SOLO la capa determinística (regex) captura. Incluye el
-        # contexto del último turno de Sofía (para el nombre suelto del papá).
+        # contexto del último turno de Sofía y el campo que pidió el gate.
         return _aplicar_fallbacks_deterministicos(
-            ExtraccionTurno(), mensaje, ultimo_assistant=ultimo_assistant
+            ExtraccionTurno(),
+            mensaje,
+            ultimo_assistant=ultimo_assistant,
+            ultimo_campo_pedido=estado_actual.ultimo_campo_pedido,
         )
 
     async def fake_extract_dt(mensaje, *, now=None):
@@ -1884,3 +1887,86 @@ async def test_apellido_hijo_no_se_vuelve_nombre_papa() -> None:
     assert create_appt.await_count == 1
     assert capt.fase_agendado == FaseAgendado.CERRADO
     assert "https://www.google.com/maps" in result.response
+
+
+# ============================================================
+# 16. REGRESIÓN: nombre del HIJO SUELTO tras "¿nombre de tu hijo?" (bug 2026-06-02,
+#     sesión web:b764c105). Reproduce la conversación EXACTA: el papá responde
+#     "Emanuel Rodriguez" suelto, "Oscar Rodriguez, 7866035862" juntos. Antes
+#     nombre_hijo quedaba None → ghost-close ("Lily te contacta"). Ahora se captura
+#     por contexto y cierra con D.4 cuando los 6 slots están llenos.
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_nombre_hijo_suelto_tras_pregunta_cierra() -> None:
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import FaseAgendado
+
+    repo = _nuevo_repo_explorando("web:hijosuelto")
+    haiku = _HaikuTerco()
+    create_appt = AsyncMock(side_effect=lambda **kw: 200 + create_appt.await_count)
+    leaf = _leaf_determinista(repo, haiku, create_appt)
+
+    # Conversación EXACTA de la prueba real (web:b764c105):
+    turnos = [
+        "hola quiero agendar, mi pequeño tiene 4 años",  # edad → grado; nombre niño NO
+        "jueves 11am",                                   # día+hora
+        "Emanuel Rodriguez",                             # ← nombre HIJO SUELTO (a "¿nombre de tu hijo?")
+        "Oscar Rodriguez, 7866035862",                   # ← nombre PAPÁ + tel juntos
+        "ema@ema.com",                                   # correo → 6 slots llenos → CIERRA
+    ]
+    _enter(leaf)
+    try:
+        result = None
+        for t in turnos:
+            result = await procesar_turno(mensaje=t, session_id="web:hijosuelto", canal=None)
+    finally:
+        _exit(leaf)
+
+    capt = repo._conv.estado_capturado
+    # Los 6 slots quedaron llenos por su propia vía.
+    assert capt.hijos[0].nombre == "Emanuel Rodriguez"  # ← capturado por contexto
+    assert capt.hijos[0].grado == "2° de Kinder"
+    assert capt.nombre_papa == "Oscar Rodriguez"        # papá + tel juntos
+    assert capt.email_papa == "ema@ema.com" and capt.telefono == "7866035862"
+    assert capt.cita_fecha_slot == "2026-06-04" and capt.cita_hora_slot == "11:00"
+    # Cerró con D.4, NO "Lily te va a contactar".
+    assert create_appt.await_count == 1
+    assert capt.fase_agendado == FaseAgendado.CERRADO
+    assert "https://www.google.com/maps" in result.response
+    assert "Lily te" not in result.response
+
+
+@pytest.mark.asyncio
+async def test_pide_un_solo_campo_a_la_vez_sin_bundlear() -> None:
+    """El CÓDIGO pide UN campo a la vez: nunca bundlea 'tu nombre y tu celular'
+    en una sola pregunta. (El hint controla la pregunta, no Haiku.)"""
+    from app.core.orchestrator import procesar_turno
+
+    repo = _nuevo_repo_explorando("web:unocampo")
+    haiku = _HaikuTerco()
+    create_appt = AsyncMock(side_effect=lambda **kw: 100 + create_appt.await_count)
+    leaf = _leaf_determinista(repo, haiku, create_appt)
+
+    turnos = [
+        "quiero agendar el viernes a las 10am",
+        "se llama Diego Pérez",   # nombre hijo
+        "tiene 5 años",           # edad
+        "yo soy Marta",           # nombre papá
+        "marta@x.com",            # correo
+        "8441234567",             # cel → cierra
+    ]
+    _enter(leaf)
+    try:
+        for t in turnos:
+            await procesar_turno(mensaje=t, session_id="web:unocampo", canal=None)
+    finally:
+        _exit(leaf)
+
+    # Cada hint pidió EXACTAMENTE un campo; ninguno bundleó dos.
+    pedidos = [_campo_pedido(h) for h in haiku.hints if _campo_pedido(h)]
+    assert pedidos, "el código debió pedir al menos un campo"
+    for p in pedidos:
+        assert " y " not in p, f"hint bundleó dos campos: {p!r}"
+    assert len(pedidos) == len(set(pedidos))  # sin repetir (sin bucle)

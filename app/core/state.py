@@ -118,6 +118,10 @@ class EstadoCapturado(BaseModel):
     fase_agendado: FaseAgendado = FaseAgendado.EXPLORANDO
     cita_fecha_slot: str | None = None  # 'YYYY-MM-DD' resuelto por código
     cita_hora_slot: str | None = None  # 'HH:MM' (24h) resuelto por código
+    # Último dato que el CÓDIGO pidió (gate), para capturar la respuesta SUELTA del
+    # siguiente turno por su propia vía, sin depender de cómo lo frasee Haiku.
+    # Valores: 'nombre_hijo'|'nombre_papa'|'edad'|'correo'|'telefono'|'dia'|'hora'|'grado'.
+    ultimo_campo_pedido: str | None = None
 
     handoff_a_lily: bool = False
     fuente_entrada: str | None = None  # 'dm_redes', 'anuncio_whatsapp', 'referido', 'directo'

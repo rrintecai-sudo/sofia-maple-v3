@@ -18,6 +18,7 @@ from app.core.state_extractor import (
     extraer_nombre_hijo,
     extraer_nombre_papa,
     extraer_telefono,
+    nombre_hijo_por_contexto,
     nombre_papa_por_contexto,
 )
 
@@ -134,6 +135,33 @@ def test_fallback_se_llama_no_va_a_nombre_papa() -> None:
 )
 def test_nombre_papa_por_contexto(ultimo, mensaje, esperado) -> None:
     assert nombre_papa_por_contexto(mensaje, ultimo) == esperado
+
+
+@pytest.mark.parametrize(
+    "ultimo,mensaje,esperado",
+    [
+        ("¿Me confirmas el nombre completo de tu hijo?", "Emanuel Rodriguez", "Emanuel Rodriguez"),
+        ("¿cómo se llama tu peque?", "Emanuel", "Emanuel"),
+        ("pregunta ÚNICAMENTE por: el nombre completo del niño/a.", "Ana López", "Ana López"),
+        # Sofía pidió el nombre del PAPÁ → no captura como hijo.
+        ("¿y tu nombre?", "Emanuel Rodriguez", None),
+        # Sofía pidió el día → no captura nombre.
+        ("¿Qué día te queda mejor?", "Emanuel Rodriguez", None),
+    ],
+)
+def test_nombre_hijo_por_contexto(ultimo, mensaje, esperado) -> None:
+    assert nombre_hijo_por_contexto(mensaje, ultimo) == esperado
+
+
+def test_fallback_nombre_hijo_suelto_tras_pregunta() -> None:
+    # El bug nuevo: 'Emanuel Rodriguez' SUELTO tras "¿nombre de tu hijo?".
+    res = _aplicar_fallbacks_deterministicos(
+        ExtraccionTurno(),
+        "Emanuel Rodriguez",
+        ultimo_assistant="¿Me confirmas el nombre completo de tu hijo?",
+    )
+    assert res.nombre_hijo == "Emanuel Rodriguez"
+    assert res.nombre_papa is None  # NO sangra al papá
 
 
 def test_fallback_captura_nombre_papa_suelto_tras_pregunta() -> None:

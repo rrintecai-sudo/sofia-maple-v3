@@ -242,42 +242,48 @@ def extraer_nombre_hijo(mensaje: str) -> str | None:
     return " ".join(w[:1].upper() + w[1:] for w in tokens)
 
 
-# El papá responde su nombre SUELTO ("Oscar Rodriguez") cuando Sofía se lo pidió.
-# Sin "yo soy", el extractor LLM a veces no lo captura → el gate seguía pidiendo
-# "tu nombre" en bucle (bug real de la prueba de Emanuel). Captura por CONTEXTO.
+# El papá/hijo responde un nombre SUELTO ("Oscar Rodriguez" / "Emanuel Rodriguez")
+# cuando Sofía lo pidió. Sin marcador ("yo soy" / "se llama"), el LLM a veces no
+# lo captura o lo mal-asigna → el gate seguía pidiéndolo en bucle / ghost-close.
+# Captura por CONTEXTO según QUÉ pidió Sofía en su último turno.
 _PIDE_NOMBRE_PAPA_RE = re.compile(
     r"tu\s+nombre|c[óo]mo\s+te\s+llamas|qui[eé]n\s+tengo\s+el\s+gusto|"
     r"me\s+(?:das|compartes|dices|regalas)\s+tu\s+nombre",
     re.IGNORECASE,
 )
-# Palabras función que NO son nombre (descartan "si ya te lo dije", "ok claro").
+# Sofía pidió el nombre del HIJO ("nombre completo de tu hijo", "cómo se llama").
+_PIDE_NOMBRE_HIJO_RE = re.compile(
+    r"nombre\s+(?:completo\s+)?(?:de\s+tu|del?)\s+"
+    r"(?:hijo|hija|peque\w*|niñ[oa]|nin[oa]|beb[eé]|alumn[oa])|"
+    r"c[óo]mo\s+se\s+llama|nombre\s+del?\s+(?:niñ[oa]|peque\w*)",
+    re.IGNORECASE,
+)
+# Palabras función / deflexiones que NO son nombre (descartan "si ya te lo dije",
+# "ok claro", "cuánto cuesta", "no sé", etc.).
 _PALABRAS_NO_NOMBRE = frozenset({
     "si", "sí", "no", "ya", "te", "lo", "la", "le", "les", "me", "mi", "tu", "su",
     "eso", "esa", "ese", "esta", "este", "esto", "aqui", "aquí", "alli", "allí",
     "igual", "mismo", "dije", "dijo", "dado", "gracias", "ok", "okay", "dale",
     "claro", "va", "sale", "bien", "asi", "así", "pues", "porque", "que", "cual",
     "cuando", "como", "cómo", "y", "o", "el", "ella", "ellos", "es", "son", "soy",
+    # deflexiones / preguntas frecuentes
+    "cuanto", "cuánto", "cuesta", "cuestan", "precio", "precios", "costo", "costos",
+    "colegiatura", "mensualidad", "donde", "dónde", "quiero", "quisiera", "puedo",
+    "podemos", "necesito", "hola", "buenas", "buenos", "dias", "días", "tardes",
+    "informacion", "información", "info", "ayuda", "nose", "sé", "perdon", "perdón",
+    "disculpa", "espera", "espere", "nada", "todavia", "todavía", "aun", "aún",
 })
 # Prefijos de cortesía a ignorar antes del nombre ("soy Oscar", "me llamo Ana").
 _PREFIJO_CORTESIA = frozenset({"soy", "me", "llamo", "mi", "nombre", "es", "yo"})
 
 
-def nombre_papa_por_contexto(mensaje: str, ultimo_assistant: str | None) -> str | None:
-    """'Oscar Rodriguez' como respuesta a "¿tu nombre?" → 'Oscar Rodriguez'.
-
-    Solo dispara si el ÚLTIMO turno de Sofía pidió el nombre del papá y el mensaje
-    es un nombre limpio (sin email, sin teléfono, sin palabras-función)."""
-    if not ultimo_assistant or not _PIDE_NOMBRE_PAPA_RE.search(ultimo_assistant):
+def _nombre_limpio_de_respuesta(mensaje: str) -> str | None:
+    """Extrae un nombre LIMPIO de una respuesta que puede traer correo/teléfono
+    junto ("Oscar Rodriguez, oscar@x.com, +52..." → "Oscar Rodriguez"). None si lo
+    que queda no es un nombre (pregunta, palabras-función, vacío, >4 tokens)."""
+    if "?" in (mensaje or "") or "¿" in (mensaje or ""):  # es una pregunta, no un nombre
         return None
-    txt = (mensaje or "").strip()
-    # Si es una presentación del HIJO ("se llama X", "mi hijo X", "Ana, 4 años"),
-    # NO es el nombre del papá aunque Sofía haya pedido el nombre.
-    if extraer_nombre_hijo(txt) or _nombre_junto_a_edad(txt):
-        return None
-    # El papá puede dar nombre + correo + celular JUNTOS: quita correo y teléfono
-    # y parsea el nombre que queda ("Oscar Rodriguez, oscar@x.com, +52..." → "Oscar
-    # Rodriguez").
-    txt = _EMAIL_RE.sub(" ", txt)
+    txt = _EMAIL_RE.sub(" ", mensaje or "")
     txt = _TEL_RE.sub(" ", txt)
     tokens: list[str] = []
     for raw in re.split(r"[\s,;]+", txt):
@@ -293,6 +299,29 @@ def nombre_papa_por_contexto(mensaje: str, ultimo_assistant: str | None) -> str 
         return None
     nombre = " ".join(w[:1].upper() + w[1:] for w in tokens)
     return nombre if _es_nombre_valido(nombre) else None
+
+
+def nombre_papa_por_contexto(mensaje: str, ultimo_assistant: str | None) -> str | None:
+    """'Oscar Rodriguez' como respuesta a "¿tu nombre?" → 'Oscar Rodriguez'.
+
+    Solo dispara si el ÚLTIMO turno de Sofía pidió el nombre del PAPÁ y el mensaje
+    es un nombre limpio (admite correo/teléfono junto)."""
+    if not ultimo_assistant or not _PIDE_NOMBRE_PAPA_RE.search(ultimo_assistant):
+        return None
+    txt = (mensaje or "").strip()
+    # Si es una presentación del HIJO ("se llama X", "Ana, 4 años"), NO es el papá.
+    if extraer_nombre_hijo(txt) or _nombre_junto_a_edad(txt):
+        return None
+    return _nombre_limpio_de_respuesta(txt)
+
+
+def nombre_hijo_por_contexto(mensaje: str, ultimo_assistant: str | None) -> str | None:
+    """'Emanuel Rodriguez' como respuesta a "¿nombre completo de tu hijo?" →
+    'Emanuel Rodriguez'. Simétrico de nombre_papa_por_contexto: un nombre SUELTO
+    del hijo (sin "se llama") debe capturarse igual."""
+    if not ultimo_assistant or not _PIDE_NOMBRE_HIJO_RE.search(ultimo_assistant):
+        return None
+    return _nombre_limpio_de_respuesta((mensaje or "").strip())
 
 
 # Presentación EXPLÍCITA del papá ("yo soy X", "me llamo X", "mi nombre es X").
@@ -499,11 +528,20 @@ async def extraer_de_mensaje(
         else:
             result = _parse_extraction(raw)
 
-    return _aplicar_fallbacks_deterministicos(result, mensaje, ultimo_assistant=ultimo_assistant)
+    return _aplicar_fallbacks_deterministicos(
+        result,
+        mensaje,
+        ultimo_assistant=ultimo_assistant,
+        ultimo_campo_pedido=estado_actual.ultimo_campo_pedido,
+    )
 
 
 def _aplicar_fallbacks_deterministicos(
-    result: ExtraccionTurno, mensaje: str, *, ultimo_assistant: str | None = None
+    result: ExtraccionTurno,
+    mensaje: str,
+    *,
+    ultimo_assistant: str | None = None,
+    ultimo_campo_pedido: str | None = None,
 ) -> ExtraccionTurno:
     """Capa de captura DETERMINÍSTICA consolidada (FIX 2026-06-02).
 
@@ -521,10 +559,17 @@ def _aplicar_fallbacks_deterministicos(
         result.telefono = tel_det
 
     # --- Nombre del papá: presentación explícita ("yo soy X") o respuesta SUELTA
-    # a "¿tu nombre?" ("Oscar Rodriguez") MANDAN + marcan flag. ---
+    # a "¿tu nombre?". El gate persiste qué pidió (ultimo_campo_pedido) → la
+    # captura NO depende de cómo lo frasee Haiku. MANDAN + marcan flag. ---
     nombre_papa_det = extraer_nombre_papa(mensaje) or nombre_papa_por_contexto(
         mensaje, ultimo_assistant
     )
+    if not nombre_papa_det and ultimo_campo_pedido == "nombre_papa":
+        # El CÓDIGO pidió el nombre del papá el turno anterior → la respuesta suelta
+        # ("Oscar Rodriguez", admite tel/correo junto) es su nombre, salvo que sea
+        # presentación del hijo.
+        if not (extraer_nombre_hijo(mensaje) or _nombre_junto_a_edad(mensaje)):
+            nombre_papa_det = _nombre_limpio_de_respuesta(mensaje)
     if nombre_papa_det:
         result.nombre_papa = nombre_papa_det
         result.nombre_papa_explicito = True
@@ -545,9 +590,18 @@ def _aplicar_fallbacks_deterministicos(
             if not result.nivel_buscado and nivel_det:
                 result.nivel_buscado = nivel_det
 
-    # --- Nombre del hijo: "Jose, 4 años" (pegado a edad) o "se llama Emanuel"
-    # (presentación explícita) → es el NIÑO, no el papá. ---
-    nombre_nino = _nombre_junto_a_edad(mensaje) or extraer_nombre_hijo(mensaje)
+    # --- Nombre del hijo: "Jose, 4 años" (pegado a edad), "se llama Emanuel"
+    # (marcador) o "Emanuel Rodriguez" SUELTO tras "¿nombre de tu hijo?" (contexto)
+    # → es el NIÑO, no el papá. ---
+    nombre_nino = (
+        _nombre_junto_a_edad(mensaje)
+        or extraer_nombre_hijo(mensaje)
+        or nombre_hijo_por_contexto(mensaje, ultimo_assistant)
+    )
+    if not nombre_nino and ultimo_campo_pedido == "nombre_hijo":
+        # El CÓDIGO pidió el nombre del hijo el turno anterior → la respuesta suelta
+        # ("Emanuel Rodriguez") es el nombre del niño, sin depender de Haiku.
+        nombre_nino = _nombre_limpio_de_respuesta(mensaje)
     if nombre_nino:
         if not result.nombre_hijo:
             result.nombre_hijo = nombre_nino

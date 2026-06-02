@@ -51,6 +51,7 @@ def test_estado_to_row_basic() -> None:
         "fase_agendado": "explorando",
         "cita_fecha_slot": None,
         "cita_hora_slot": None,
+        "ultimo_campo_pedido": None,
         "handoff_a_lily": False,
         "vive_fuera_saltillo": False,
         "clasificacion": "sin_clasificar",

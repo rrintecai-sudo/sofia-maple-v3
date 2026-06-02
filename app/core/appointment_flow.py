@@ -167,6 +167,16 @@ _ETIQUETA_CAMPO: dict[str, str] = {
     "correo electrónico": "tu correo electrónico",
     "número de celular": "tu número de celular",
 }
+# Mapea el faltante a una CLAVE persistida en estado (ultimo_campo_pedido), para
+# capturar la respuesta SUELTA del siguiente turno por su propia vía.
+_CLAVE_CAMPO: dict[str, str] = {
+    "nombre del hijo": "nombre_hijo",
+    "edad del hijo": "edad",
+    "grado escolar del hijo": "grado",
+    "tu nombre": "nombre_papa",
+    "correo electrónico": "correo",
+    "número de celular": "telefono",
+}
 
 
 # Grado CANÓNICO: "2° de Kinder", "1° de Primaria", etc. Un grado que NO matchea
@@ -461,6 +471,7 @@ async def handle_appointment_intent(
             else ""
         )
         resumen_cap = _resumen_capturado(estado, fecha_slot=None, hora_slot=hora_slot)
+        capt.ultimo_campo_pedido = "dia"
         return AppointmentHandlerResult(
             hint_para_prompt=_instruccion_un_campo(
                 "qué DÍA le queda mejor para la visita",
@@ -522,6 +533,7 @@ async def handle_appointment_intent(
                 f"Ofrécele esas, NO inventes otras."
             )
         resumen_cap = _resumen_capturado(estado, fecha_slot=fecha_slot, hora_slot=None)
+        capt.ultimo_campo_pedido = "hora"
         return AppointmentHandlerResult(
             hint_para_prompt=_instruccion_un_campo(
                 f"a qué HORA le queda mejor el {dia_resuelto}",
@@ -614,6 +626,7 @@ async def handle_appointment_intent(
         # El CÓDIGO elige el ÚNICO dato a pedir (el primero faltante por prioridad);
         # Haiku solo lo frasea. Nunca elige qué pedir ni re-pregunta un slot lleno.
         pedir = _ETIQUETA_CAMPO.get(faltantes[0], faltantes[0])
+        capt.ultimo_campo_pedido = _CLAVE_CAMPO.get(faltantes[0])
         resumen = _resumen_capturado(estado, fecha_slot=fecha_slot, hora_slot=hora_slot)
         return AppointmentHandlerResult(
             hint_para_prompt=_instruccion_un_campo(pedir, resumen),
