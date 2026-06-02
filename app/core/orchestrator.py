@@ -226,6 +226,33 @@ async def procesar_turno(
     # y NO se reevalúa a la baja: el código colecta los 6 datos + día/hora hasta
     # cerrar. Persiste en sofia_conversations.estado_capturado (JSONB).
     capt = estado.estado_capturado
+
+    # FIX (2026-06-02): RE-ARMADO. Una sesión que YA cerró una cita (CERRADO) y se
+    # reusa (en WhatsApp la sesión = el teléfono, persiste para siempre) puede
+    # agendar OTRA cita. Antes quedaba clavada en CERRADO → el pipeline no corría y
+    # `cita_agendada` viejo desarmaba el validador → ghost-close (Haiku decía "ya
+    # quedó agendada" sin crear nada). Re-armamos SOLO con intent EXPLÍCITO
+    # QUIERE_AGENDAR (un temporal suelto como "nos vemos el viernes" NO reabre una
+    # cita legítima). Reseteamos el sub-estado de agendado para empezar fresco.
+    if (
+        capt.fase_agendado == FaseAgendado.CERRADO
+        and intent_result.intent == Intent.QUIERE_AGENDAR
+    ):
+        capt.fase_agendado = FaseAgendado.AGENDANDO
+        capt.cita_fecha_slot = None
+        capt.cita_hora_slot = None
+        capt.cita_agendada = False
+        capt.fecha_cita = None
+        capt.campus_cita = None
+        capt.hijos = []  # la nueva cita suele ser de OTRO hijo; se recaptura limpio
+        capt.nivel_buscado_actual = None
+        estado.agendado = False
+        estado.fecha_agendado = None
+        log.info(
+            "agendado_fase CERRADO→AGENDANDO (re-armado nueva cita)",
+            extra={"session_id": session_id},
+        )
+
     senal_agendado = (
         intent_result.intent == Intent.QUIERE_AGENDAR
         or contiene_expresion_temporal(mensaje)
@@ -364,14 +391,18 @@ async def procesar_turno(
     # 8. Persistir mensaje del usuario (antes de la llamada LLM)
     await _persist_user_message(repo, estado, mensaje)
 
-    # FIX 2/3 (2026-05-29): ¿hay una cita REALMENTE registrada (este turno o en
-    # turnos previos)? Solo entonces Sofía puede confirmarla. Si no, el validator
-    # `no_confirma_cita_inexistente` (severity=error) bloquea confirmaciones
-    # fantasma ("registré tu solicitud", "Lily te comparte la dirección") y fuerza
-    # a regenerar pidiendo los datos faltantes.
+    # FIX 2/3 (2026-05-29) + FIX (2026-06-02): ¿hay una cita REALMENTE registrada?
+    # Solo entonces Sofía puede confirmarla; si no, el validator
+    # `no_confirma_cita_inexistente` bloquea el ghost-close.
+    # Por-intento: durante AGENDANDO solo cuenta la cita creada ESTE turno (el
+    # `cita_agendada` pegajoso de un cierre VIEJO ya no desarma el validador). En
+    # POST-cierre (CERRADO) sí se permite referenciar la cita real existente.
     cita_realmente_registrada = bool(
         (appointment_handler is not None and appointment_handler.appointment_id is not None)
-        or estado.estado_capturado.cita_agendada
+        or (
+            estado.estado_capturado.fase_agendado == FaseAgendado.CERRADO
+            and estado.estado_capturado.cita_agendada
+        )
     )
 
     # 9. Llamar a Anthropic con loop de validación + regeneración

@@ -944,3 +944,185 @@ async def test_estado_contaminado_cierra_con_datos_correctos() -> None:
     # la plantilla D.4 salió en el turno del cierre
     assert any("ya quedó agendada" in r for r in respuestas)
     assert any("5 de junio" in r for r in respuestas)
+
+
+# ============================================================
+# 9. RE-ARMADO (2026-06-02): sesión que YA cerró una cita + "quiero agendar"
+#    nuevo (otro hijo) → crea un SEGUNDO appointment real (grado deducido + D.4),
+#    NO ghost-close. Y un temporal suelto NO reabre una cita legítima.
+# ============================================================
+
+
+def _seed_cerrado() -> EstadoConversacion:  # noqa: F821
+    """Sesión ya CERRADA (cita de Emanuel) reusada — como WhatsApp por teléfono."""
+    from app.core.state import (
+        Canal,
+        EstadoCapturado,
+        EstadoConversacion,
+        FaseAgendado,
+        FaseJourney,
+        HijoInfo,
+        NivelEducativo,
+    )
+
+    return EstadoConversacion(
+        session_id="web:reuse", canal=Canal.WEB, identificador="reuse",
+        fase_journey=FaseJourney.POST_AGENDADO, agendado=True,
+        estado_capturado=EstadoCapturado(
+            nombre_papa="Oscar Rodriguez", email_papa="ing2oscar@gmail.com",
+            telefono="+17866035862",
+            hijos=[HijoInfo(nombre="Emanuel", edad=4, nivel=NivelEducativo.KINDER, grado="2° de Kinder")],
+            fase_agendado=FaseAgendado.CERRADO, cita_agendada=True,
+            cita_fecha_slot="2026-06-05", cita_hora_slot="11:00",
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_rearmado_segunda_cita_se_crea_real() -> None:
+    import types
+
+    from app.core.appointment_extractor import AppointmentDateTime
+    from app.core.state import FaseAgendado
+    from app.tools.campus import CampusResult
+
+    SCRIPT = {
+        # intent explícito QUIERE_AGENDAR → re-arma (resetea Emanuel + cita vieja)
+        "quiero agendar otra visita para mi otro hijo":
+            (Intent.QUIERE_AGENDAR, ExtraccionTurno(quiere_agendar=True), (None, None, 0.0)),
+        # niño NUEVO (Pablo, 4) → grado se DEDUCE (4 → 2° de Kinder)
+        "Pablo, 4 años":
+            (Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO, ExtraccionTurno(nombre_hijo="Pablo", edad_hijo=4), (None, None, 0.0)),
+        "el viernes":
+            (Intent.CONFUSO_OTRO, ExtraccionTurno(), ("2026-06-12", None, 0.95)),
+        "a las 10am":
+            (Intent.CONFUSO_OTRO, ExtraccionTurno(), (None, "10:00", 0.95)),
+    }
+
+    async def fake_classify(message, **kw):
+        return _intent(SCRIPT[message][0])
+
+    async def fake_extract(mensaje, estado_actual):
+        return SCRIPT[mensaje][1]
+
+    async def fake_extract_dt(mensaje, *, now=None):
+        f, h, c = SCRIPT[mensaje][2]
+        return AppointmentDateTime(fecha=f, hora=h, confidence=c, razonamiento="t")
+
+    async def fake_evaluar_dia(fecha_dia, *, duracion_min=60, settings=None, now=None):
+        return types.SimpleNamespace(available=True, reason="ok", alternativas=[], resumen="")
+
+    campus1 = CampusResult(
+        id=1, nombre="Campus 1", direccion="José Figueroa Siller 156", colonia="Doctores",
+        ciudad="Saltillo", estado="Coahuila", niveles=["kinder_1", "kinder_2", "kinder_3"],
+        google_maps_url="https://www.google.com/maps/search/?api=1&query=Jose",
+    )
+    repo = _StatefulRepo()
+    repo._conv = _seed_cerrado()
+    anthropic = _fake_anthropic(["ok"])
+    create_appt = AsyncMock(return_value=999)
+
+    leaf = [
+        patch("app.core.orchestrator.get_repository", return_value=repo),
+        patch("app.core.orchestrator.get_anthropic", return_value=anthropic),
+        patch("app.core.orchestrator.classify_intent", side_effect=fake_classify),
+        patch("app.core.orchestrator.extraer_de_mensaje", side_effect=fake_extract),
+        patch("app.core.orchestrator.get_campus_para_nivel", AsyncMock(return_value=None)),
+        patch("app.core.orchestrator.consultar_edades_de_nivel", AsyncMock(return_value=None)),
+        patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
+        patch("app.core.appointment_flow.evaluar_dia", side_effect=fake_evaluar_dia),
+        patch("app.core.appointment_flow.is_slot_available",
+              AsyncMock(return_value=types.SimpleNamespace(available=True, reason="ok", alternativas=[], resumen=""))),
+        patch("app.core.appointment_flow.create_appointment", create_appt),
+        patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=campus1)),
+        patch("app.core.appointment_flow.get_lead_by_session", AsyncMock(return_value=None)),
+        patch("app.core.appointment_flow.create_lead", AsyncMock(return_value=88)),
+        patch("app.core.appointment_flow.emit_event", AsyncMock()),
+        patch("app.core.appointment_flow.send_email", AsyncMock()),
+        patch("app.core.appointment_flow.advance_stage_if_lower", AsyncMock(return_value=True)),
+    ]
+
+    from app.core.orchestrator import procesar_turno
+
+    _enter(leaf)
+    try:
+        respuestas = []
+        for i, mensaje in enumerate(SCRIPT):
+            r = await procesar_turno(mensaje=mensaje, session_id="web:reuse", canal=None)
+            respuestas.append(r.response)
+            if i == 0:
+                # tras el re-armado: AGENDANDO + estado viejo reseteado
+                c = repo._conv.estado_capturado
+                assert c.fase_agendado == FaseAgendado.AGENDANDO
+                assert c.hijos == [] and c.cita_agendada is False
+                assert c.cita_fecha_slot is None and c.cita_hora_slot is None
+    finally:
+        _exit(leaf)
+
+    capt = repo._conv.estado_capturado
+    # se creó un SEGUNDO appointment real (no ghost-close)
+    create_appt.assert_awaited_once()
+    assert capt.fase_agendado == FaseAgendado.CERRADO
+    # el niño nuevo, con grado DEDUCIDO de la edad (4 → 2° de Kinder)
+    assert capt.hijos[0].nombre == "Pablo"
+    assert capt.hijos[0].grado == "2° de Kinder"
+    # la plantilla D.4 (Maps) volvió sola al correr el pipeline
+    assert any("ya quedó agendada" in r for r in respuestas)
+    assert any("https://www.google.com/maps" in r for r in respuestas)
+
+
+@pytest.mark.asyncio
+async def test_temporal_suelto_no_reabre_cita_cerrada() -> None:
+    """'nos vemos el viernes' (temporal, NO QUIERE_AGENDAR) NO reabre la cita."""
+    from app.core.state import FaseAgendado
+
+    repo = _StatefulRepo()
+    repo._conv = _seed_cerrado()
+    anthropic = _fake_anthropic(["¡Claro, ahí nos vemos!"])
+    handler = AsyncMock()
+
+    from app.core.orchestrator import procesar_turno
+
+    ctx = _patches(
+        repo, anthropic,
+        classify=AsyncMock(return_value=_intent(Intent.CONFUSO_OTRO)),
+        extract=AsyncMock(return_value=ExtraccionTurno()), handler=handler,
+    )
+    _enter(ctx)
+    try:
+        await procesar_turno(mensaje="nos vemos el viernes", session_id="web:reuse")
+    finally:
+        _exit(ctx)
+
+    # NO se re-armó: sigue CERRADO y el pipeline NO corrió
+    assert repo._conv.estado_capturado.fase_agendado == FaseAgendado.CERRADO
+    handler.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ghost_close_bloqueado_tras_rearmar_sin_crear() -> None:
+    """Tras re-armar, si el pipeline NO crea cita y Haiku dice 'quedó agendada',
+    el validador (re-armado) lo bloquea."""
+    repo = _StatefulRepo()
+    repo._conv = _seed_cerrado()
+    # Haiku terco: ghost-close
+    anthropic = _fake_anthropic(["Listo, ya quedó agendada tu cita."])
+    handler = AsyncMock(
+        return_value=AppointmentHandlerResult(hint_para_prompt="[FLUJO AGENDADO — pide datos]", appointment_id=None)
+    )
+
+    from app.core.orchestrator import procesar_turno
+
+    ctx = _patches(
+        repo, anthropic,
+        classify=AsyncMock(return_value=_intent(Intent.QUIERE_AGENDAR)),
+        extract=AsyncMock(return_value=ExtraccionTurno(quiere_agendar=True)), handler=handler,
+    )
+    _enter(ctx)
+    try:
+        result = await procesar_turno(mensaje="quiero agendar otra cita", session_id="web:reuse")
+    finally:
+        _exit(ctx)
+
+    # el re-armado reseteó cita_agendada → el validador vuelve a estar ARMADO
+    assert "no_confirma_cita_inexistente" in result.validators_failed
