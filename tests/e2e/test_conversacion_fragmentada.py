@@ -1598,3 +1598,97 @@ async def test_captura_determinista_integral_5_escenarios() -> None:
         ("Lucía", "3° de Kinder"),     # 5 años
         ("Anabela", "1° de Primaria"), # 6 años
     ]
+
+
+# ============================================================
+# 13. REGRESIÓN: el CIERRE y la PREGUNTA los decide el CÓDIGO, no Haiku.
+#     Aquí Haiku está ACTIVO y es TERCO: en cada turno intenta re-pedir datos ya
+#     dados e inventar "¿presencial o videollamada?". El test prueba que:
+#       (a) el código cierra (crea cita + D.4) pese a que Haiku quiere seguir el
+#           bucle — la respuesta final es la plantilla, no el texto de Haiku.
+#       (b) durante la colección, el hint pide UN solo campo (el que falta) y
+#           NUNCA re-pide un campo ya capturado.
+#     Cubre el bug LIVE del multi-turno (el test 12 stubbeaba el LLM a cero y no
+#     ejercía la generación de respuesta).
+# ============================================================
+
+
+class _HaikuTerco:
+    """Anthropic falso que SIEMPRE intenta repreguntar e inventar modalidades
+    (simula el bucle real). Graba el último mensaje de usuario (con el hint del
+    flujo) de cada llamada para inspeccionar qué pidió el CÓDIGO."""
+
+    _RESPUESTA = (
+        "Para agendar necesito tu nombre completo y tu correo otra vez, por favor. "
+        "¿Prefieres que la visita sea presencial o por videollamada?"
+    )
+
+    def __init__(self) -> None:
+        self.hints: list[str] = []
+
+    async def chat(self, *, system_blocks, messages, **kw):
+        last_user = next(
+            (m["content"] for m in reversed(messages) if m["role"] == "user"), ""
+        )
+        self.hints.append(last_user)
+        return _FakeMessage(self._RESPUESTA)
+
+
+def _campo_pedido(hint: str) -> str | None:
+    import re
+
+    m = re.search(r"pregunta ÚNICAMENTE por: (.+?)\.", hint)
+    return m.group(1).strip() if m else None
+
+
+@pytest.mark.asyncio
+async def test_codigo_decide_pregunta_y_cierre_con_haiku_terco() -> None:
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import FaseAgendado
+
+    repo = _nuevo_repo_explorando("web:terco")
+    haiku = _HaikuTerco()
+    create_appt = AsyncMock(side_effect=lambda **kw: 500 + create_appt.await_count)
+    leaf = _leaf_determinista(repo, haiku, create_appt)
+
+    # Día+hora PRIMERO; luego los 6 datos llegan de a uno por turno.
+    turnos = [
+        "quiero agendar el viernes a las 10am",  # fija día+hora → AGENDANDO
+        "se llama Emanuel",                      # nombre del niño
+        "tiene 4 años",                          # edad → deduce grado
+        "yo soy Oscar",                          # nombre del papá
+        "oscar@oscar.com",                       # correo
+        "8441234567",                            # celular → completa → CIERRA
+    ]
+
+    _enter(leaf)
+    try:
+        result = None
+        for t in turnos:
+            result = await procesar_turno(mensaje=t, session_id="web:terco", canal=None)
+    finally:
+        _exit(leaf)
+
+    capt = repo._conv.estado_capturado
+    # (a) El CÓDIGO cerró pese al Haiku terco: 1 cita real + D.4 (no el texto de Haiku).
+    assert create_appt.await_count == 1
+    assert capt.fase_agendado == FaseAgendado.CERRADO
+    assert "https://www.google.com/maps" in result.response
+    assert "videollamada" not in result.response  # el invento de Haiku NO sobrevive
+    # Todos los datos quedaron capturados (sin perderse entre turnos).
+    assert capt.hijos[0].nombre == "Emanuel" and capt.hijos[0].grado == "2° de Kinder"
+    assert capt.nombre_papa == "Oscar"
+    assert capt.email_papa == "oscar@oscar.com" and capt.telefono == "8441234567"
+
+    # (b) Cada hint pidió UN solo campo, en orden, SIN repetir uno ya capturado.
+    # (T1 fija día+hora juntos → no se pide ninguno; se piden los 6 datos uno a uno.)
+    pedidos = [_campo_pedido(h) for h in haiku.hints if _campo_pedido(h)]
+    assert pedidos == [
+        "el nombre completo del niño/a",
+        "la edad del niño/a",
+        "tu nombre",
+        "tu correo electrónico",
+        "tu número de celular",
+    ]
+    # Ningún campo se pidió dos veces (no hay bucle de re-pregunta).
+    assert len(pedidos) == len(set(pedidos))

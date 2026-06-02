@@ -207,6 +207,29 @@ def extraer_nombre_papa(mensaje: str) -> str | None:
     return nombre if _es_nombre_valido(nombre) else None
 
 
+# Nombre del HIJO presentado explícitamente, SIN edad adyacente: "se llama X",
+# "mi hijo X", "mi hija se llama X", "el niño X". Cubre el gap del bucle real
+# (el papá dijo "se llama Emanuel" y el LLM lo metía como nombre del papá).
+_NOMBRE_HIJO_RE = re.compile(
+    r"\b(?:"
+    r"se\s+llama|"
+    r"mi\s+(?:hijo|hija|peque\w*|niñ[oa]|nin[oa]|beb[eé])\s+(?:se\s+llama\s+|es\s+)?|"
+    r"el\s+niñ[oa]\s+(?:se\s+llama\s+)?|la\s+niñ[oa]\s+(?:se\s+llama\s+)?"
+    r")\s*([a-záéíóúñ]{2,16})\b",
+    re.IGNORECASE,
+)
+
+
+def extraer_nombre_hijo(mensaje: str) -> str | None:
+    """'se llama Emanuel' / 'mi hijo Emanuel' → 'Emanuel'. None si no hay nombre
+    válido (descarta 'tiene', 'pequeño', etc.)."""
+    for m in _NOMBRE_HIJO_RE.finditer(mensaje or ""):
+        cand = m.group(1)
+        if _es_nombre_valido(cand):
+            return cand[:1].upper() + cand[1:].lower()
+    return None
+
+
 # Presentación EXPLÍCITA del papá ("yo soy X", "me llamo X", "mi nombre es X").
 # FIX (e): habilita corregir un nombre_papa clavado de una sesión contaminada.
 _PRESENTACION_RE = re.compile(
@@ -447,13 +470,19 @@ def _aplicar_fallbacks_deterministicos(result: ExtraccionTurno, mensaje: str) ->
             if not result.nivel_buscado and nivel_det:
                 result.nivel_buscado = nivel_det
 
-    # --- Nombre del hijo: "Jose, 4 años" → Jose es el NIÑO, no el papá. ---
-    nombre_nino = _nombre_junto_a_edad(mensaje)
+    # --- Nombre del hijo: "Jose, 4 años" (pegado a edad) o "se llama Emanuel"
+    # (presentación explícita) → es el NIÑO, no el papá. ---
+    nombre_nino = _nombre_junto_a_edad(mensaje) or extraer_nombre_hijo(mensaje)
     if nombre_nino:
         if not result.nombre_hijo:
             result.nombre_hijo = nombre_nino
-        # Si el LLM lo asignó como nombre del papá, corrígelo (era el niño).
-        if result.nombre_papa and result.nombre_papa.strip().lower() == nombre_nino.lower():
+        # Si el LLM lo asignó como nombre del papá, corrígelo (era el niño) —
+        # salvo que el papá se haya presentado explícitamente en ESTE mensaje.
+        if (
+            result.nombre_papa
+            and result.nombre_papa.strip().lower() == nombre_nino.lower()
+            and not extraer_nombre_papa(mensaje)
+        ):
             result.nombre_papa = None
 
     # --- Saneo de nombres: descarta palabras comunes ('pequeño', 'tiene', 'bebé')

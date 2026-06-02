@@ -15,6 +15,7 @@ from app.core.state_extractor import (
     extraer_edad_simple,
     extraer_email,
     extraer_grado_simple,
+    extraer_nombre_hijo,
     extraer_nombre_papa,
     extraer_telefono,
 )
@@ -85,6 +86,29 @@ def test_extraer_edad_simple(texto, esperado) -> None:
 )
 def test_extraer_nombre_papa(texto, esperado) -> None:
     assert extraer_nombre_papa(texto) == esperado
+
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        ("se llama Emanuel", "Emanuel"),
+        ("mi hijo Emanuel", "Emanuel"),
+        ("mi hija se llama Lucía", "Lucía"),
+        ("el niño se llama Diego", "Diego"),
+        ("mi hijo tiene 4 años", None),  # 'tiene' NO es nombre
+        ("mi pequeño", None),  # no hay nombre real
+        ("hola quiero info", None),
+    ],
+)
+def test_extraer_nombre_hijo(texto, esperado) -> None:
+    assert extraer_nombre_hijo(texto) == esperado
+
+
+def test_fallback_se_llama_no_va_a_nombre_papa() -> None:
+    # 'se llama Emanuel' (sin edad) → es el NIÑO, no el papá.
+    res = _aplicar_fallbacks_deterministicos(ExtraccionTurno(), "se llama Emanuel")
+    assert res.nombre_hijo == "Emanuel"
+    assert res.nombre_papa is None
 
 
 @pytest.mark.parametrize(

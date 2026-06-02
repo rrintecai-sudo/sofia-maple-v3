@@ -108,6 +108,67 @@ def _formatear_horas(slots: list[datetime]) -> str:
     return ", ".join(f"{s.hour}:{s.minute:02d}" for s in slots) or "(por confirmar)"
 
 
+# ============================================================
+# Pregunta dirigida por CÓDIGO (FIX 2026-06-02): el gate decide QUÉ pedir; Haiku
+# solo FRASEA el único campo faltante. Nunca elige ni re-pregunta un slot lleno.
+# ============================================================
+
+
+def _resumen_capturado(
+    estado: EstadoConversacion, *, fecha_slot: str | None, hora_slot: str | None
+) -> str:
+    """Lista legible de los datos YA capturados, para que Haiku NO los re-pida
+    y, al confirmar, los ECHE en vez de pedirlos en blanco."""
+    capt = estado.estado_capturado
+    h = capt.hijo_efectivo()
+    partes: list[str] = []
+    if h and h.nombre:
+        partes.append(f"nombre del niño/a: {h.nombre}")
+    if h and h.edad is not None:
+        partes.append(f"edad: {h.edad} años")
+    if h and h.grado:
+        partes.append(f"grado: {h.grado}")
+    if capt.nombre_papa:
+        partes.append(f"tu nombre: {capt.nombre_papa}")
+    if capt.email_papa:
+        partes.append(f"correo: {capt.email_papa}")
+    if capt.telefono:
+        partes.append(f"teléfono: {capt.telefono}")
+    if fecha_slot:
+        partes.append(f"día: {fecha_humana_solo_dia(fecha_slot) or fecha_slot}")
+    if hora_slot:
+        partes.append(f"hora: {hora_slot}")
+    return "; ".join(partes)
+
+
+def _instruccion_un_campo(pedir: str, resumen: str, *, extra: str = "") -> str:
+    """Hint estándar: Haiku pregunta SOLO `pedir`, enumera lo ya capturado y tiene
+    PROHIBIDO inventar opciones o re-pedir datos llenos."""
+    ya = (
+        f" Datos que YA tienes (NO los vuelvas a pedir; si el papá confirma, "
+        f"menciónalos en vez de pedirlos en blanco): {resumen}."
+        if resumen
+        else ""
+    )
+    return (
+        f"[FLUJO AGENDADO — pregunta ÚNICAMENTE por: {pedir}. UNA sola pregunta, "
+        f"breve y cálida.{extra}{ya} NO pidas ningún otro dato, NO ofrezcas "
+        f"modalidades (presencial / videollamada / por teléfono) NI inventes "
+        f"opciones que el sistema no te dio. NO confirmes la cita todavía.]"
+    )
+
+
+# Orden de prioridad para pedir el ÚNICO dato del lead que falte.
+_ETIQUETA_CAMPO: dict[str, str] = {
+    "nombre del hijo": "el nombre completo del niño/a",
+    "edad del hijo": "la edad del niño/a",
+    "grado escolar del hijo": "el grado escolar del niño/a",
+    "tu nombre": "tu nombre",
+    "correo electrónico": "tu correo electrónico",
+    "número de celular": "tu número de celular",
+}
+
+
 # Grado CANÓNICO: "2° de Kinder", "1° de Primaria", etc. Un grado que NO matchea
 # (ej. "kinder", "primaria", "3 de kinder") se considera parcial → la deducción
 # por edad lo sobreescribe (FIX (2) 2026-06-02).
@@ -352,8 +413,9 @@ async def handle_appointment_intent(
             log.info("rescate_por_confirmacion", extra={"campos": rescatados})
 
     # FIX 1 (2026-06-01): consolida el/los hijos y DEDUCE nivel/grado de la edad
-    # (no se pregunta). `nivel_derivado` se usa para que Sofía lo declare.
-    nivel_derivado = await _consolidar_y_derivar_hijo(capt, settings=settings)
+    # (no se pregunta). El grado deducido queda en el hijo; el gate ya no pregunta
+    # el grado, así que no se usa el valor de retorno aquí.
+    await _consolidar_y_derivar_hijo(capt, settings=settings)
 
     # 1. Extraer fecha/hora del mensaje y FUNDIRLA en los slots persistentes.
     # PASO 1 (2026-05-29): en conversación fragmentada el papá da el día en un
@@ -398,11 +460,12 @@ async def handle_appointment_intent(
             if resumen
             else ""
         )
+        resumen_cap = _resumen_capturado(estado, fecha_slot=None, hora_slot=hora_slot)
         return AppointmentHandlerResult(
-            hint_para_prompt=(
-                "[FLUJO AGENDADO — el papá quiere visitar pero NO especificó fecha "
-                "y hora claras. Pregúntale en UNA oración breve qué día y hora le "
-                f"queda mejor. NO inventes una fecha.{horario_linea}]"
+            hint_para_prompt=_instruccion_un_campo(
+                "qué DÍA le queda mejor para la visita",
+                resumen_cap,
+                extra=f" NO inventes una fecha.{horario_linea}",
             ),
             acciones=["extract_failed"],
             appointment_datetime=appt_dt,
@@ -458,12 +521,15 @@ async def handle_appointment_intent(
                 f" Ese día Lily tiene libre: {_formatear_horas(eval_dia.alternativas[:6])}. "
                 f"Ofrécele esas, NO inventes otras."
             )
+        resumen_cap = _resumen_capturado(estado, fecha_slot=fecha_slot, hora_slot=None)
         return AppointmentHandlerResult(
-            hint_para_prompt=(
-                f"[FLUJO AGENDADO — el papá indicó el día ({dia_resuelto}) pero NO la "
-                f"hora. Usa EXACTAMENTE esa fecha ({dia_resuelto}); NO la recalcules ni "
-                f"inventes otra.{horas_linea} Pregúntale a qué hora le queda mejor, en "
-                f"UNA oración breve. NO confirmes la cita todavía.]"
+            hint_para_prompt=_instruccion_un_campo(
+                f"a qué HORA le queda mejor el {dia_resuelto}",
+                resumen_cap,
+                extra=(
+                    f" Usa EXACTAMENTE ese día ({dia_resuelto}); NO lo recalcules ni "
+                    f"inventes otro.{horas_linea}"
+                ),
             ),
             acciones=["missing_time"],
             appointment_datetime=appt_dt,
@@ -545,33 +611,12 @@ async def handle_appointment_intent(
     # los que faltan de forma conversacional.
     faltantes = datos_lead_faltantes(estado)
     if faltantes:
-        falt_str = ", ".join(faltantes)
-        # FIX 1: si dedujimos el nivel por la edad, instruir a Sofía a DECLARARLO
-        # (no preguntar el grado).
-        nivel_linea = ""
-        if nivel_derivado:
-            _cat, _grado, _display = nivel_derivado
-            nivel_linea = (
-                f"\nNOTA: el nivel del hijo ya se DEDUJO de su edad → **{_display}**. "
-                f"DECLÁRALO con naturalidad (ej. 'por su edad va en {_display}'); "
-                f"NUNCA preguntes el grado escolar.\n"
-            )
+        # El CÓDIGO elige el ÚNICO dato a pedir (el primero faltante por prioridad);
+        # Haiku solo lo frasea. Nunca elige qué pedir ni re-pregunta un slot lleno.
+        pedir = _ETIQUETA_CAMPO.get(faltantes[0], faltantes[0])
+        resumen = _resumen_capturado(estado, fecha_slot=fecha_slot, hora_slot=hora_slot)
         return AppointmentHandlerResult(
-            hint_para_prompt=(
-                f"[FLUJO AGENDADO — la fecha ({fecha_humana}) está disponible, "
-                f"pero ANTES de registrar la cita necesitamos estos datos del lead: "
-                f"**{falt_str}**.\n"
-                f"{nivel_linea}"
-                f"\n"
-                f"Pídelos de forma natural y cálida, NO como formulario. Puedes agruparlos "
-                f"en 1-2 mensajes. Ejemplos de formato:\n"
-                f"  - Si faltan datos del hijo: '¿Me confirmas el nombre completo de tu "
-                f"hijo/a y su edad?'\n"
-                f"  - Si faltan datos de contacto: 'Y para enviarte la confirmación de la "
-                f"cita, ¿me compartes tu nombre, correo y número de celular?'\n"
-                f"NO crees la cita todavía — Lily nos pidió tener TODO el lead antes de "
-                f"agendar (reunión 27-may).]"
-            ),
+            hint_para_prompt=_instruccion_un_campo(pedir, resumen),
             acciones=[f"missing_lead_data:{','.join(faltantes)}"],
             appointment_datetime=appt_dt,
             availability=avail,

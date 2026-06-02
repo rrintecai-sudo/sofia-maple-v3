@@ -145,7 +145,8 @@ async def test_handler_sin_fecha_pide_aclaracion(monkeypatch) -> None:
     result = await handle_appointment_intent("quiero agendar", estado, settings=_settings())
     assert isinstance(result, AppointmentHandlerResult)
     assert "extract_failed" in result.acciones
-    assert "NO especificó fecha" in result.hint_para_prompt
+    # El código pide UN solo campo: el día (Haiku solo lo frasea).
+    assert "día" in result.hint_para_prompt.lower()
     assert result.appointment_id is None
 
 
@@ -755,7 +756,9 @@ async def test_campus_primaria_sin_grado_pide_grado(monkeypatch) -> None:
     assert any(a.startswith("missing_lead_data") for a in result.acciones)
     assert "grado escolar del hijo" in result.acciones[0]
     assert result.appointment_id is None
-    assert "grado" in result.hint_para_prompt.lower()
+    # Sin edad NI grado, el código pide la EDAD primero (el grado se DEDUCE de
+    # ella); Haiku no elige preguntar el grado.
+    assert "edad" in result.hint_para_prompt.lower()
 
 
 # ============================================================
@@ -1044,8 +1047,10 @@ async def test_handler_missing_lead_data_corta_antes_de_crear_cita(monkeypatch) 
     )
     assert any(a.startswith("missing_lead_data") for a in result.acciones)
     assert result.appointment_id is None
+    # El código pide UN solo dato (el correo, primero faltante por prioridad);
+    # NO pide el celular en el mismo turno y enumera lo ya capturado (Ana).
     assert "correo" in result.hint_para_prompt.lower()
-    assert "celular" in result.hint_para_prompt.lower()
+    assert "ana" in result.hint_para_prompt.lower()
 
 
 # ============================================================
