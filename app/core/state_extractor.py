@@ -210,24 +210,36 @@ def extraer_nombre_papa(mensaje: str) -> str | None:
 # Nombre del HIJO presentado explícitamente, SIN edad adyacente: "se llama X",
 # "mi hijo X", "mi hija se llama X", "el niño X". Cubre el gap del bucle real
 # (el papá dijo "se llama Emanuel" y el LLM lo metía como nombre del papá).
-_NOMBRE_HIJO_RE = re.compile(
+_NOMBRE_HIJO_MARCADOR_RE = re.compile(
     r"\b(?:"
     r"se\s+llama|"
     r"mi\s+(?:hijo|hija|peque\w*|niñ[oa]|nin[oa]|beb[eé])\s+(?:se\s+llama\s+|es\s+)?|"
     r"el\s+niñ[oa]\s+(?:se\s+llama\s+)?|la\s+niñ[oa]\s+(?:se\s+llama\s+)?"
-    r")\s*([a-záéíóúñ]{2,16})\b",
+    r")\s*",
     re.IGNORECASE,
 )
 
 
 def extraer_nombre_hijo(mensaje: str) -> str | None:
-    """'se llama Emanuel' / 'mi hijo Emanuel' → 'Emanuel'. None si no hay nombre
-    válido (descarta 'tiene', 'pequeño', etc.)."""
-    for m in _NOMBRE_HIJO_RE.finditer(mensaje or ""):
-        cand = m.group(1)
-        if _es_nombre_valido(cand):
-            return cand[:1].upper() + cand[1:].lower()
-    return None
+    """'se llama Emanuel Rodriguez' → 'Emanuel Rodriguez'; 'mi hijo Emanuel' →
+    'Emanuel'. Captura nombre + apellido (hasta 2 tokens), parando en palabras
+    función. None si no hay nombre válido (descarta 'tiene', 'pequeño', etc.)."""
+    m = _NOMBRE_HIJO_MARCADOR_RE.search(mensaje or "")
+    if not m:
+        return None
+    tokens: list[str] = []
+    for raw in (mensaje or "")[m.end():].split():
+        t = raw.lower().strip(",.;¿?¡!()")
+        if not t:
+            continue
+        if not re.match(r"^[a-záéíóúñ]+$", t) or t in _PALABRAS_NO_NOMBRE or not _es_nombre_valido(t):
+            break
+        tokens.append(t)
+        if len(tokens) >= 2:  # nombre + apellido
+            break
+    if not tokens:
+        return None
+    return " ".join(w[:1].upper() + w[1:] for w in tokens)
 
 
 # El papá responde su nombre SUELTO ("Oscar Rodriguez") cuando Sofía se lo pidió.
@@ -258,14 +270,17 @@ def nombre_papa_por_contexto(mensaje: str, ultimo_assistant: str | None) -> str 
     if not ultimo_assistant or not _PIDE_NOMBRE_PAPA_RE.search(ultimo_assistant):
         return None
     txt = (mensaje or "").strip()
-    if "@" in txt or re.search(r"\d{3,}", txt):  # trae correo o teléfono → no es nombre
-        return None
     # Si es una presentación del HIJO ("se llama X", "mi hijo X", "Ana, 4 años"),
     # NO es el nombre del papá aunque Sofía haya pedido el nombre.
     if extraer_nombre_hijo(txt) or _nombre_junto_a_edad(txt):
         return None
+    # El papá puede dar nombre + correo + celular JUNTOS: quita correo y teléfono
+    # y parsea el nombre que queda ("Oscar Rodriguez, oscar@x.com, +52..." → "Oscar
+    # Rodriguez").
+    txt = _EMAIL_RE.sub(" ", txt)
+    txt = _TEL_RE.sub(" ", txt)
     tokens: list[str] = []
-    for raw in re.split(r"\s+", txt):
+    for raw in re.split(r"[\s,;]+", txt):
         t = raw.lower().strip(",.;¿?¡!()")
         if not t:
             continue
@@ -550,6 +565,13 @@ def _aplicar_fallbacks_deterministicos(
     if result.nombre_hijo and not _es_nombre_valido(result.nombre_hijo):
         result.nombre_hijo = None
     if result.nombre_papa and not _es_nombre_valido(result.nombre_papa):
+        result.nombre_papa = None
+
+    # --- El nombre del papá SOLO entra por su propia vía: presentación explícita
+    # ("yo soy/me llamo X") o respuesta a "¿tu nombre?". Una conjetura del LLM (no
+    # explícita) se DESCARTA: así el apellido/nombre del hijo ("Emanuel Rodriguez")
+    # NUNCA sangra al slot del papá y el gate SIEMPRE pregunta "¿y tu nombre?". ---
+    if result.nombre_papa and not result.nombre_papa_explicito:
         result.nombre_papa = None
 
     return result

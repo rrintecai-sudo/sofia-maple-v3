@@ -125,6 +125,11 @@ def test_fallback_se_llama_no_va_a_nombre_papa() -> None:
         # Confirmación / palabras-función → no es nombre.
         ("¿tu nombre?", "si ya te lo dije", None),
         ("¿tu nombre?", "no gracias", None),
+        # Nombre + correo + teléfono JUNTOS → extrae solo el nombre.
+        ("¿Me compartes tu nombre, correo y celular?",
+         "Oscar Rodriguez, ing2oscar@gmail.com, +17866035862", "Oscar Rodriguez"),
+        # Presentación del HIJO con apellido tras "¿tu nombre?" → NO es el papá.
+        ("¿y tu nombre?", "se llama Emanuel Rodriguez", None),
     ],
 )
 def test_nombre_papa_por_contexto(ultimo, mensaje, esperado) -> None:
@@ -251,12 +256,22 @@ def test_fallback_corrige_nombre_papa_a_hijo() -> None:
     assert fixed.nombre_papa is None
 
 
-def test_fallback_no_toca_nombre_papa_legitimo() -> None:
-    """'Soy Oscar' sin edad pegada → no se toca el nombre del papá."""
+def test_fallback_conserva_nombre_papa_explicito() -> None:
+    """'yo soy Oscar Rodriguez' (presentación explícita) → se conserva el nombre."""
     extr = ExtraccionTurno(nombre_papa="Oscar Rodriguez")
-    fixed = _aplicar_fallbacks_deterministicos(extr, "Oscar Rodriguez, oscar@x.com")
+    fixed = _aplicar_fallbacks_deterministicos(extr, "yo soy Oscar Rodriguez, oscar@x.com")
     assert fixed.nombre_papa == "Oscar Rodriguez"
+    assert fixed.nombre_papa_explicito is True
     assert fixed.nombre_hijo is None
+
+
+def test_fallback_descarta_nombre_papa_no_explicito() -> None:
+    """FIX (2026-06-02): un nombre_papa del LLM SIN señal explícita se descarta
+    (evita que el nombre/apellido del hijo sangre al slot del papá)."""
+    extr = ExtraccionTurno(nombre_papa="Emanuel Rodriguez")
+    fixed = _aplicar_fallbacks_deterministicos(extr, "se llama Emanuel Rodriguez")
+    assert fixed.nombre_papa is None  # ← NO se acepta como papá
+    assert fixed.nombre_hijo == "Emanuel Rodriguez"  # ← es el hijo (nombre+apellido)
 
 
 def test_aplicar_extraccion_libera_nombre_papa_mal_asignado() -> None:

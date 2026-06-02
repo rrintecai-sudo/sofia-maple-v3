@@ -1825,3 +1825,62 @@ async def test_confirmacion_confuso_otro_con_datos_completos_cierra() -> None:
     assert "https://www.google.com/maps" in result.response
     assert "Lily te" not in result.response  # NO el "Lily te va a contactar" improvisado
     assert "videollamada" not in result.response
+
+
+# ============================================================
+# 15. REGRESIÓN: el apellido del HIJO NO se vuelve nombre del papá (bug Emanuel
+#     Rodriguez, 2026-06-02). El papá da SOLO el nombre completo del hijo ("se
+#     llama Emanuel Rodriguez") y nunca el suyo hasta que se lo preguntan →
+#     Sofía DEBE preguntar "¿y tu nombre?"; nombre_papa != "Emanuel"/"Rodriguez".
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_apellido_hijo_no_se_vuelve_nombre_papa() -> None:
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import FaseAgendado
+
+    repo = _nuevo_repo_explorando("web:apellido")
+    haiku = _HaikuTerco()  # Haiku terco: si pudiera, re-preguntaría/inventaría
+    create_appt = AsyncMock(side_effect=lambda **kw: 300 + create_appt.await_count)
+    leaf = _leaf_determinista(repo, haiku, create_appt)
+
+    # El papá da el nombre COMPLETO del hijo, su edad, día, hora, correo y cel —
+    # pero NUNCA su propio nombre, hasta el último turno cuando se lo preguntan.
+    turnos_sin_nombre_papa = [
+        "quiero agendar el viernes a las 10am",
+        "se llama Emanuel Rodriguez",          # nombre+apellido del HIJO
+        "tiene 4 años",
+        "ema@ema.com, 7866035862",             # correo + cel (NO su nombre)
+    ]
+    _enter(leaf)
+    try:
+        for t in turnos_sin_nombre_papa:
+            await procesar_turno(mensaje=t, session_id="web:apellido", canal=None)
+    finally:
+        _exit(leaf)
+
+    capt = repo._conv.estado_capturado
+    # El hijo conserva su nombre COMPLETO; el papá sigue SIN nombre → NO cerró.
+    assert capt.hijos[0].nombre == "Emanuel Rodriguez"
+    assert capt.nombre_papa is None  # ← jamás "Emanuel" ni "Rodriguez"
+    assert create_appt.await_count == 0
+    assert capt.fase_agendado == FaseAgendado.AGENDANDO  # sigue esperando el nombre
+
+    # El último hint pidió EXACTAMENTE el nombre del papá (no cerró sin él).
+    pedidos = [_campo_pedido(h) for h in haiku.hints if _campo_pedido(h)]
+    assert pedidos and pedidos[-1] == "tu nombre"
+
+    # Ahora el papá SÍ da su nombre ("yo soy Oscar") → se captura y cierra.
+    haiku2 = _HaikuTerco()
+    leaf2 = _leaf_determinista(repo, haiku2, create_appt)
+    _enter(leaf2)
+    try:
+        result = await procesar_turno(mensaje="yo soy Oscar", session_id="web:apellido", canal=None)
+    finally:
+        _exit(leaf2)
+    capt = repo._conv.estado_capturado
+    assert capt.nombre_papa == "Oscar"
+    assert create_appt.await_count == 1
+    assert capt.fase_agendado == FaseAgendado.CERRADO
+    assert "https://www.google.com/maps" in result.response
