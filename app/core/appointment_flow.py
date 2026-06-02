@@ -190,18 +190,25 @@ async def _ensure_lead_para_cita(estado: EstadoConversacion, *, settings: Settin
 
     existing = await get_lead_by_session(estado.session_id, settings=settings)
     if existing:
+        # FIX (2026-06-02): al REUSAR un lead (misma sesión/teléfono persistente),
+        # la conversación NUEVA es la fuente de verdad. Antes solo se rellenaban
+        # campos None, así que una edad/nivel viejos (ej. 3/maternal) NO se
+        # actualizaban aunque el papá ahora dijera "4 años" → quedaba desfasado.
+        # Ahora actualizamos cuando el dato nuevo EXISTE y DIFIERE del viejo.
         updates: dict = {}
-        if existing.child_name is None and nombre_hijo:
+        if nombre_hijo and existing.child_name != nombre_hijo:
             updates["child_name"] = nombre_hijo
-        if existing.child_age is None and edad_hijo is not None:
+        if edad_hijo is not None and existing.child_age != edad_hijo:
             updates["child_age"] = edad_hijo
-        if existing.child_grade is None and grado_hijo:
+        if grado_hijo and existing.child_grade != grado_hijo:
             updates["child_grade"] = grado_hijo
-        if existing.nivel is None and nivel:
+        if nivel and existing.nivel != nivel:
             updates["nivel"] = nivel
-        if existing.parent_phone is None and capt.telefono:
+        if capt.nombre_papa and existing.parent_name != capt.nombre_papa:
+            updates["parent_name"] = capt.nombre_papa
+        if capt.telefono and existing.parent_phone != capt.telefono:
             updates["parent_phone"] = capt.telefono
-        if existing.parent_email is None and capt.email_papa:
+        if capt.email_papa and existing.parent_email != capt.email_papa:
             updates["parent_email"] = capt.email_papa
         if updates:
             await update_lead(existing.id, updates, settings=settings)

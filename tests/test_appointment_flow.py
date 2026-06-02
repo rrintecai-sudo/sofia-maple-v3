@@ -799,6 +799,92 @@ def test_datos_faltantes_no_pide_grado_si_hay_edad() -> None:
 
 
 # ============================================================
+# FIX (2026-06-02) — al REUSAR lead, actualizar edad/nivel con lo nuevo
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_ensure_lead_actualiza_edad_y_nivel_al_reusar(monkeypatch) -> None:
+    """Lead existente edad 3/maternal + conversación nueva '4 años'/kinder →
+    el lead se ACTUALIZA a 4 / Kinder 2° (no se queda con lo viejo)."""
+    import types
+
+    from app.core.appointment_flow import _ensure_lead_para_cita
+
+    existing = types.SimpleNamespace(
+        id=17, child_name="Emanuel", child_age=3, child_grade=None,
+        nivel="maternal", parent_name="Oscar Rodriguez",
+        parent_phone="+17866035862", parent_email="ing2oscar@gmail.com",
+    )
+    captured: dict = {}
+
+    async def fake_get_lead(session_id, *, settings=None):
+        return existing
+
+    async def fake_update(lead_id, updates, *, settings=None):
+        captured["_id"] = lead_id
+        captured.update(updates)
+
+    monkeypatch.setattr("app.core.appointment_flow.get_lead_by_session", fake_get_lead)
+    monkeypatch.setattr("app.core.appointment_flow.update_lead", fake_update)
+
+    estado = EstadoConversacion(
+        session_id="web:x", canal=Canal.WEB, identificador="x",
+        estado_capturado=EstadoCapturado(
+            nombre_papa="Oscar Rodriguez",
+            email_papa="ing2oscar@gmail.com",
+            telefono="+17866035862",
+            hijos=[
+                HijoInfo(
+                    nombre="Emanuel", edad=4, nivel=NivelEducativo.KINDER, grado="2° de Kinder"
+                )
+            ],
+        ),
+    )
+    lead_id = await _ensure_lead_para_cita(estado, settings=_settings())
+    assert lead_id == 17
+    assert captured.get("_id") == 17
+    assert captured.get("child_age") == 4          # 3 → 4
+    assert captured.get("nivel") == "kinder"       # maternal → kinder
+    assert captured.get("child_grade") == "2° de Kinder"
+
+
+@pytest.mark.asyncio
+async def test_ensure_lead_no_actualiza_si_no_cambia(monkeypatch) -> None:
+    """Si los datos nuevos coinciden con el lead, no hay update innecesario."""
+    import types
+
+    from app.core.appointment_flow import _ensure_lead_para_cita
+
+    existing = types.SimpleNamespace(
+        id=17, child_name="Emanuel", child_age=4, child_grade="2° de Kinder",
+        nivel="kinder", parent_name="Oscar Rodriguez",
+        parent_phone="+17866035862", parent_email="ing2oscar@gmail.com",
+    )
+    llamado = {"update": False}
+
+    async def fake_get_lead(session_id, *, settings=None):
+        return existing
+
+    async def fake_update(lead_id, updates, *, settings=None):
+        llamado["update"] = True
+
+    monkeypatch.setattr("app.core.appointment_flow.get_lead_by_session", fake_get_lead)
+    monkeypatch.setattr("app.core.appointment_flow.update_lead", fake_update)
+
+    estado = EstadoConversacion(
+        session_id="web:x", canal=Canal.WEB, identificador="x",
+        estado_capturado=EstadoCapturado(
+            nombre_papa="Oscar Rodriguez", email_papa="ing2oscar@gmail.com",
+            telefono="+17866035862",
+            hijos=[HijoInfo(nombre="Emanuel", edad=4, nivel=NivelEducativo.KINDER, grado="2° de Kinder")],
+        ),
+    )
+    await _ensure_lead_para_cita(estado, settings=_settings())
+    assert llamado["update"] is False
+
+
+# ============================================================
 # FIX 1 (2026-06-01) — derivar nivel/grado de la edad
 # ============================================================
 
