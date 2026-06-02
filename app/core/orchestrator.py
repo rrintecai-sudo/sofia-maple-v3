@@ -38,6 +38,7 @@ from app.core.intent_classifier import (
     IntentResult,
     classify_intent,
     es_respuesta_corta_al_turno_previo,
+    quiere_agendar_explicito,
 )
 from app.core.learning_mode import guardar_feedback
 from app.core.prompt_builder import build_system_blocks
@@ -227,9 +228,16 @@ async def procesar_turno(
     # datos del MENSAJE DISPARADOR ("se llama Lucía, 5 años, el jueves 11am") se
     # capturen sobre el estado limpio y NO se borren. Así no se re-pregunta lo que
     # ya vino en ese mismo mensaje.
+    # FIX (2026-06-02c): el trigger del re-armado NO depende solo del clasificador
+    # LLM (que falla "quiero agendar otra" → confuso_otro). Respaldo determinístico
+    # con regex. El clasificador no debe ser load-bearing.
+    quiere_reagendar = (
+        intent_result.intent == Intent.QUIERE_AGENDAR
+        or quiere_agendar_explicito(mensaje)
+    )
     if (
         estado.estado_capturado.fase_agendado == FaseAgendado.CERRADO
-        and intent_result.intent == Intent.QUIERE_AGENDAR
+        and quiere_reagendar
     ):
         prev = estado.estado_capturado
         prev.fase_agendado = FaseAgendado.AGENDANDO
@@ -259,6 +267,7 @@ async def procesar_turno(
 
     senal_agendado = (
         intent_result.intent == Intent.QUIERE_AGENDAR
+        or quiere_agendar_explicito(mensaje)
         or contiene_expresion_temporal(mensaje)
     )
     if capt.fase_agendado == FaseAgendado.EXPLORANDO and senal_agendado:

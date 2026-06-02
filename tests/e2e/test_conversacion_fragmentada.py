@@ -1200,3 +1200,110 @@ async def test_rearmado_captura_todo_del_mensaje_disparador() -> None:
     assert capt.fase_agendado == FaseAgendado.CERRADO
     assert "ya quedó agendada" in result.response
     assert "https://www.google.com/maps" in result.response
+
+
+# ============================================================
+# 10. REGRESIÓN PERMANENTE (2026-06-02): N agendados en UNA sesión →
+#     N filas reales + grado correcto por edad. Incluye un turno forzado a
+#     CONFUSO_OTRO (el clasificador LLM falla "quiero agendar otra") para
+#     verificar que el trigger DETERMINÍSTICO re-arma igual. Y un grado parcial
+#     ("kinder") que la deducción por edad debe sobreescribir.
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_tres_agendados_una_sesion_n_filas_y_grado_por_edad() -> None:
+    import types
+
+    from app.core.appointment_extractor import AppointmentDateTime
+    from app.core.state import (
+        Canal,
+        EstadoCapturado,
+        EstadoConversacion,
+        FaseAgendado,
+        HijoInfo,  # noqa: F401  (importado por claridad del escenario)
+    )
+    from app.tools.campus import CampusResult
+
+    # (intent del LLM, extracción, (fecha,hora)). Los agendados 2 y 3 los fuerzo a
+    # CONFUSO_OTRO: el trigger determinístico ("quiero agendar otra") debe re-armar.
+    SCRIPT = {
+        "quiero agendar para Mateo, 4 años, el lunes 10am":
+            (Intent.QUIERE_AGENDAR, ExtraccionTurno(nombre_hijo="Mateo", edad_hijo=4),
+             ("2026-06-08", "10:00")),
+        # ↓ CONFUSO_OTRO forzado + grado PARCIAL "kinder" (debe deducir 5→3° Kinder)
+        "ahora quiero agendar otra para Lucía, 5 años, el martes 11am":
+            (Intent.CONFUSO_OTRO,
+             ExtraccionTurno(nombre_hijo="Lucía", edad_hijo=5, nivel_buscado="kinder", grado_hijo="kinder"),
+             ("2026-06-09", "11:00")),
+        "quiero agendar otra para Anabela, 6 años, el miércoles 9am":
+            (Intent.CONFUSO_OTRO, ExtraccionTurno(nombre_hijo="Anabela", edad_hijo=6),
+             ("2026-06-10", "09:00")),
+    }
+
+    async def fake_classify(message, **kw):
+        return _intent(SCRIPT[message][0])
+
+    async def fake_extract(mensaje, estado_actual):
+        return SCRIPT[mensaje][1]
+
+    async def fake_extract_dt(mensaje, *, now=None):
+        f, h = SCRIPT[mensaje][2]
+        return AppointmentDateTime(fecha=f, hora=h, confidence=0.95, razonamiento="t")
+
+    campus1 = CampusResult(
+        id=1, nombre="Campus 1", direccion="José Figueroa Siller 156", colonia="Doctores",
+        ciudad="Saltillo", estado="Coahuila", niveles=["kinder_1", "kinder_2", "kinder_3", "primaria_1"],
+        google_maps_url="https://www.google.com/maps/search/?api=1&query=Jose",
+    )
+
+    repo = _StatefulRepo()
+    repo._conv = EstadoConversacion(
+        session_id="web:multi", canal=Canal.WEB, identificador="multi",
+        estado_capturado=EstadoCapturado(
+            nombre_papa="Oscar Rodriguez", email_papa="ing2oscar@gmail.com",
+            telefono="+17866035862", fase_agendado=FaseAgendado.EXPLORANDO,
+        ),
+    )
+    anthropic = _fake_anthropic(["ok"])
+    create_appt = AsyncMock(side_effect=lambda **kw: 900 + create_appt.await_count)
+
+    leaf = [
+        patch("app.core.orchestrator.get_repository", return_value=repo),
+        patch("app.core.orchestrator.get_anthropic", return_value=anthropic),
+        patch("app.core.orchestrator.classify_intent", side_effect=fake_classify),
+        patch("app.core.orchestrator.extraer_de_mensaje", side_effect=fake_extract),
+        patch("app.core.orchestrator.get_campus_para_nivel", AsyncMock(return_value=None)),
+        patch("app.core.orchestrator.consultar_edades_de_nivel", AsyncMock(return_value=None)),
+        patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
+        patch("app.core.appointment_flow.is_slot_available",
+              AsyncMock(return_value=types.SimpleNamespace(available=True, reason="ok", alternativas=[], resumen=""))),
+        patch("app.core.appointment_flow.create_appointment", create_appt),
+        patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=campus1)),
+        patch("app.core.appointment_flow.get_lead_by_session", AsyncMock(return_value=None)),
+        patch("app.core.appointment_flow.create_lead", AsyncMock(return_value=88)),
+        patch("app.core.appointment_flow.emit_event", AsyncMock()),
+        patch("app.core.appointment_flow.send_email", AsyncMock()),
+        patch("app.core.appointment_flow.advance_stage_if_lower", AsyncMock(return_value=True)),
+    ]
+
+    from app.core.orchestrator import procesar_turno
+
+    grados_por_turno = []
+    _enter(leaf)
+    try:
+        for mensaje in SCRIPT:
+            await procesar_turno(mensaje=mensaje, session_id="web:multi", canal=None)
+            h = repo._conv.estado_capturado.hijos
+            grados_por_turno.append((h[0].nombre, h[0].grado) if h else (None, None))
+    finally:
+        _exit(leaf)
+
+    # N agendados → N filas reales (no ghost-close en ninguno)
+    assert create_appt.await_count == 3
+    # grado DEDUCIDO por edad en cada uno (no el de Haiku ni el parcial "kinder")
+    assert grados_por_turno == [
+        ("Mateo", "2° de Kinder"),     # 4 años
+        ("Lucía", "3° de Kinder"),     # 5 años — sobreescribió el parcial "kinder"
+        ("Anabela", "1° de Primaria"), # 6 años — NO se salta Kinder 3°/Primaria 1°
+    ]

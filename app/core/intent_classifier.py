@@ -168,6 +168,26 @@ _RESPUESTA_CORTA_KEYWORDS = re.compile(
 )
 
 
+# FIX (2026-06-02): trigger DETERMINÍSTICO de "quiere agendar". El clasificador
+# LLM no debe ser load-bearing: clasificaba "ahora quiero agendar otra para mi
+# hija" como confuso_otro → el re-armado no disparaba → ghost-close. Esta regex
+# de respaldo detecta la intención de agendar aunque el LLM falle.
+_QUIERE_AGENDAR_RE = re.compile(
+    r"\b(?:quiero|quisiera|queremos|quer[íi]a|puedo|podemos|me\s+gustar[íi]a)\s+agendar\b"
+    r"|\bagendar\s+(?:una|otra)\b"
+    r"|\bag[ée]nda(?:me|nos)?\b"
+    r"|\bquiero\s+(?:otra|una)\s+(?:cita|visita)\b"
+    r"|\b(?:agendar|reagendar)\s+(?:una\s+)?(?:cita|visita)\b",
+    re.IGNORECASE,
+)
+
+
+def quiere_agendar_explicito(mensaje: str) -> bool:
+    """True si el mensaje EXPRESA agendar de forma explícita ('quiero agendar',
+    'agendar otra', 'agéndame'). Respaldo determinístico del clasificador LLM."""
+    return bool(_QUIERE_AGENDAR_RE.search(mensaje or ""))
+
+
 def es_respuesta_corta_al_turno_previo(mensaje: str, hay_turno_previo_assistant: bool) -> bool:
     """Heurística determinística (Bloque 5.7 ATAQUE 2).
 

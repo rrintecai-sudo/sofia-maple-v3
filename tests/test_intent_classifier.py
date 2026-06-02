@@ -10,7 +10,36 @@ from app.core.intent_classifier import (
     _parse_result,
     classify_intent,
     es_respuesta_corta_al_turno_previo,
+    quiere_agendar_explicito,
 )
+
+# ============================================================
+# quiere_agendar_explicito (FIX 2026-06-02 — trigger determinístico)
+# ============================================================
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "quiero agendar",
+        "ahora quiero agendar otra para mi hija Lucía",
+        "quiero agendar otra cita",
+        "agéndame otra",
+        "podemos agendar una visita",
+        "quiero otra cita",
+        "me gustaría agendar",
+    ],
+)
+def test_quiere_agendar_explicito_positivos(texto) -> None:
+    assert quiere_agendar_explicito(texto) is True
+
+
+@pytest.mark.parametrize(
+    "texto",
+    ["nos vemos el viernes", "gracias", "hola", "cuánto cuesta", "ya quedó", ""],
+)
+def test_quiere_agendar_explicito_negativos(texto) -> None:
+    assert quiere_agendar_explicito(texto) is False
 
 
 def test_parse_valid_json() -> None:

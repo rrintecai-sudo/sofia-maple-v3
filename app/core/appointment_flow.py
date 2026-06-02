@@ -19,6 +19,7 @@ Devuelve un AppointmentHandlerResult con:
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -104,6 +105,12 @@ def _formatear_alternativas(alts: list[datetime]) -> str:
 def _formatear_horas(slots: list[datetime]) -> str:
     """'8:00, 9:00, 10:00' — solo las horas (mismo día)."""
     return ", ".join(f"{s.hour}:{s.minute:02d}" for s in slots) or "(por confirmar)"
+
+
+# Grado CANÓNICO: "2° de Kinder", "1° de Primaria", etc. Un grado que NO matchea
+# (ej. "kinder", "primaria", "3 de kinder") se considera parcial → la deducción
+# por edad lo sobreescribe (FIX (2) 2026-06-02).
+_GRADO_CANONICO_RE = re.compile(r"^[1-6]°\s+de\s+\w", re.IGNORECASE)
 
 
 def datos_lead_faltantes(estado: EstadoConversacion) -> list[str]:
@@ -287,7 +294,11 @@ async def _consolidar_y_derivar_hijo(
     if hijo is None:
         return None
     derivado: tuple[str, str | None, str] | None = None
-    if hijo.edad is not None and (hijo.nivel is None or not hijo.grado):
+    # FIX (2) (2026-06-02): la deducción por edad MANDA sobre un grado parcial o
+    # malformado (ej. "kinder" sin año, que el extractor LLM dejó truthy y
+    # bloqueaba la deducción). Solo se respeta un grado CANÓNICO ("3° de Kinder").
+    grado_canonico = bool(hijo.grado) and bool(_GRADO_CANONICO_RE.match(hijo.grado.strip()))
+    if hijo.edad is not None and (hijo.nivel is None or not grado_canonico):
         nivel_pref = hijo.nivel.value if hijo.nivel else (
             capt.nivel_buscado_actual.value if capt.nivel_buscado_actual else None
         )
@@ -301,7 +312,7 @@ async def _consolidar_y_derivar_hijo(
                     hijo.nivel = NivelEducativo(categoria)
                 except ValueError:
                     pass
-            if grado and not hijo.grado:
+            if grado and not grado_canonico:  # sobreescribe el parcial/malformado
                 hijo.grado = grado
     # Consolida: colapsa huérfanos/fragmentos en un solo hijo enriquecido.
     capt.hijos = [hijo]
