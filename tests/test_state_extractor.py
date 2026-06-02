@@ -7,12 +7,126 @@ from app.core.state import EstadoCapturado, HijoInfo, NivelEducativo
 from app.core.state_extractor import (
     ExtraccionTurno,
     _aplicar_fallbacks_deterministicos,
+    _es_nombre_valido,
     _es_presentacion_explicita,
     _nombre_junto_a_edad,
     _parse_extraction,
     aplicar_extraccion,
+    extraer_edad_simple,
+    extraer_email,
     extraer_grado_simple,
+    extraer_nombre_papa,
+    extraer_telefono,
 )
+
+# ============================================================
+# FIX (2026-06-02) — capa de captura DETERMINÍSTICA consolidada
+# ============================================================
+
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        ("mi correo es oscar@example.com", "oscar@example.com"),
+        ("ing2oscar@gmail.com, +17866035862", "ing2oscar@gmail.com"),
+        ("ana.perez@correo.mx y mi cel", "ana.perez@correo.mx"),
+        ("sin correo aquí", None),
+    ],
+)
+def test_extraer_email(texto, esperado) -> None:
+    assert extraer_email(texto) == esperado
+
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        ("+17866035862", "+17866035862"),
+        ("mi cel 8441234567", "8441234567"),
+        ("844 123 4567", "8441234567"),
+        ("844-123-45-67", "8441234567"),
+        ("+52 844 123 4567", "+528441234567"),
+        ("tengo 4 años", None),  # no es teléfono
+    ],
+)
+def test_extraer_telefono(texto, esperado) -> None:
+    assert extraer_telefono(texto) == esperado
+
+
+def test_extraer_telefono_no_confunde_digitos_del_email() -> None:
+    # El email tiene dígitos; al excluirlo, el único teléfono es el celular.
+    msg = "ing2oscar@gmail.com, +17866035862"
+    email = extraer_email(msg)
+    assert extraer_telefono(msg, excluir=email) == "+17866035862"
+
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        ("tiene 4 años", 4),
+        ("Mateo, 5 añitos", 5),
+        ("de 6 años", 6),
+        ("tengo 4 hijos", None),  # NO es edad (no dice 'años')
+        ("kinder 2", None),
+    ],
+)
+def test_extraer_edad_simple(texto, esperado) -> None:
+    assert extraer_edad_simple(texto) == esperado
+
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        ("yo soy Pedro Rojas, ing2oscar@gmail.com", "Pedro Rojas"),
+        ("me llamo Ana", "Ana"),
+        ("mi nombre es Juan Carlos Pérez", "Juan Carlos Pérez"),
+        ("soy la mamá de Lucía", None),  # 'la' corta → no es nombre
+        ("hola, quiero info", None),
+    ],
+)
+def test_extraer_nombre_papa(texto, esperado) -> None:
+    assert extraer_nombre_papa(texto) == esperado
+
+
+@pytest.mark.parametrize(
+    "nombre,valido",
+    [
+        ("Mateo", True),
+        ("Pedro Rojas", True),
+        ("pequeño", False),
+        ("bebé", False),
+        ("niño", False),
+        ("tiene", False),
+        ("es", False),
+        ("", False),
+        (None, False),
+    ],
+)
+def test_es_nombre_valido(nombre, valido) -> None:
+    assert _es_nombre_valido(nombre) is valido
+
+
+def test_fallback_descarta_nombre_hijo_invento() -> None:
+    # El LLM devolvió 'pequeño' como nombre del hijo → se descarta (no se inventa).
+    res = _aplicar_fallbacks_deterministicos(
+        ExtraccionTurno(nombre_hijo="pequeño", edad_hijo=4), "mi pequeño tiene 4 años"
+    )
+    assert res.nombre_hijo is None
+    assert res.edad_hijo == 4  # la edad sí se conserva
+
+
+def test_fallback_captura_todo_en_un_mensaje_corrido() -> None:
+    # Mensaje real de la prueba de Pedro: TODO en un mensaje, SIN LLM.
+    msg = (
+        "hola quiero agendar mi hijo Mateo tiene 4 años yo soy Pedro Rojas, "
+        "ing2oscar@gmail.com, +17866035862 el viernes 10am"
+    )
+    res = _aplicar_fallbacks_deterministicos(ExtraccionTurno(), msg)
+    assert res.nombre_papa == "Pedro Rojas"
+    assert res.nombre_papa_explicito is True
+    assert res.nombre_hijo == "Mateo"
+    assert res.edad_hijo == 4
+    assert res.email_papa == "ing2oscar@gmail.com"
+    assert res.telefono == "+17866035862"
 
 # ============================================================
 # FIX (e) 2026-06-01 — "yo soy Oscar" corrige nombre_papa clavado

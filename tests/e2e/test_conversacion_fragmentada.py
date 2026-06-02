@@ -1419,3 +1419,182 @@ async def test_primer_agendado_dia_cercano_resuelve_determinista_y_cierra() -> N
     assert capt.fase_agendado == FaseAgendado.CERRADO
     assert "https://www.google.com/maps" in result.response
     assert "Lily" not in result.response
+
+
+# ============================================================
+# 12. REGRESIÓN INTEGRAL PERMANENTE (2026-06-02): toda la capa de captura es
+#     DETERMINÍSTICA. El LLM aporta CERO (extraer_de_mensaje = solo reglas;
+#     classify = CONFUSO_OTRO siempre; extract_datetime = vacío). Cubre los 5
+#     escenarios que pidió el usuario en una sola suite permanente.
+# ============================================================
+
+
+def _campus_test():
+    from app.tools.campus import CampusResult
+
+    return CampusResult(
+        id=1, nombre="Campus 1", direccion="José Figueroa Siller 156", colonia="Doctores",
+        ciudad="Saltillo", estado="Coahuila",
+        niveles=["kinder_1", "kinder_2", "kinder_3", "primaria_1"],
+        google_maps_url="https://www.google.com/maps/search/?api=1&query=Jose",
+    )
+
+
+def _leaf_determinista(repo, anthropic, create_appt):
+    """Patches donde el LLM NO aporta nada: el extractor de estado corre SOLO la
+    capa determinística (ExtraccionTurno vacío + reglas), el intent es siempre
+    CONFUSO_OTRO y el extractor de fecha LLM devuelve vacío. Así, si la cita se
+    crea, es 100% por la capa determinística."""
+    import types
+
+    from app.core.appointment_extractor import AppointmentDateTime
+    from app.core.state_extractor import (
+        ExtraccionTurno,
+        _aplicar_fallbacks_deterministicos,
+    )
+
+    async def fake_classify(message, **kw):
+        return _intent(Intent.CONFUSO_OTRO)  # el LLM de intent SIEMPRE falla
+
+    async def fake_extract(mensaje, estado_actual):
+        # LLM vacío → SOLO la capa determinística (regex) captura.
+        return _aplicar_fallbacks_deterministicos(ExtraccionTurno(), mensaje)
+
+    async def fake_extract_dt(mensaje, *, now=None):
+        return AppointmentDateTime(fecha=None, hora=None, confidence=0.0, razonamiento="vacío")
+
+    return [
+        patch("app.core.orchestrator.get_repository", return_value=repo),
+        patch("app.core.orchestrator.get_anthropic", return_value=anthropic),
+        patch("app.core.orchestrator.classify_intent", side_effect=fake_classify),
+        patch("app.core.orchestrator.extraer_de_mensaje", side_effect=fake_extract),
+        patch("app.core.orchestrator.get_campus_para_nivel", AsyncMock(return_value=None)),
+        patch("app.core.orchestrator.consultar_edades_de_nivel", AsyncMock(return_value=None)),
+        patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
+        patch("app.core.appointment_flow.is_slot_available",
+              AsyncMock(return_value=types.SimpleNamespace(
+                  available=True, reason="ok", alternativas=[], resumen=""))),
+        patch("app.core.appointment_flow.create_appointment", create_appt),
+        patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=_campus_test())),
+        patch("app.core.appointment_flow.get_lead_by_session", AsyncMock(return_value=None)),
+        patch("app.core.appointment_flow.create_lead", AsyncMock(return_value=88)),
+        patch("app.core.appointment_flow.update_lead", AsyncMock()),
+        patch("app.core.appointment_flow.emit_event", AsyncMock()),
+        patch("app.core.appointment_flow.send_email", AsyncMock()),
+        patch("app.core.appointment_flow.advance_stage_if_lower", AsyncMock(return_value=True)),
+    ]
+
+
+def _nuevo_repo_explorando(session_id: str):
+    from app.core.state import Canal, EstadoCapturado, EstadoConversacion, FaseAgendado
+
+    repo = _StatefulRepo()
+    repo._conv = EstadoConversacion(
+        session_id=session_id, canal=Canal.WEB, identificador=session_id.split(":")[-1],
+        estado_capturado=EstadoCapturado(fase_agendado=FaseAgendado.EXPLORANDO),
+    )
+    return repo
+
+
+@pytest.mark.asyncio
+async def test_captura_determinista_integral_5_escenarios() -> None:
+    from datetime import datetime
+
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import FaseAgendado
+
+    # ---- Escenario 1: TODO en un mensaje corrido → 1 turno, grado deducido, D.4 ----
+    repo = _nuevo_repo_explorando("web:s1")
+    create_appt = AsyncMock(side_effect=lambda **kw: 900 + create_appt.await_count)
+    leaf = _leaf_determinista(repo, _fake_anthropic(["x"]), create_appt)
+    msg1 = (
+        "hola quiero agendar para mi hijo Mateo de 4 años, yo soy Pedro Rojas, "
+        "ing2oscar@gmail.com, +17866035862, el viernes 10am"
+    )
+    _enter(leaf)
+    try:
+        r1 = await procesar_turno(mensaje=msg1, session_id="web:s1", canal=None)
+    finally:
+        _exit(leaf)
+    c1 = repo._conv.estado_capturado
+    assert create_appt.await_count == 1  # cerró en UN turno
+    assert c1.fase_agendado == FaseAgendado.CERRADO
+    assert c1.hijos[0].nombre == "Mateo" and c1.hijos[0].grado == "2° de Kinder"
+    assert c1.email_papa == "ing2oscar@gmail.com" and c1.telefono == "+17866035862"
+    assert c1.nombre_papa == "Pedro Rojas"
+    # Escenario 5: día cercano "el viernes" → próximo VIERNES (no "¿5 o 12?")
+    assert datetime.strptime(c1.cita_fecha_slot, "%Y-%m-%d").weekday() == 4
+    assert c1.cita_hora_slot == "10:00"
+    assert "https://www.google.com/maps" in r1.response and "Lily" not in r1.response
+
+    # ---- Escenario 2: datos FRAGMENTADOS en varios mensajes → mismo resultado ----
+    repo = _nuevo_repo_explorando("web:s2")
+    create_appt2 = AsyncMock(side_effect=lambda **kw: 800 + create_appt2.await_count)
+    leaf = _leaf_determinista(repo, _fake_anthropic(["x"]), create_appt2)
+    fragmentos = [
+        "quiero agendar una visita",
+        "es para mi hijo Diego de 5 años",
+        "yo soy Ana López",
+        "mi correo ana@correo.mx y mi cel 8441234567",
+        "el viernes a las 11am",
+    ]
+    _enter(leaf)
+    try:
+        rf = None
+        for m in fragmentos:
+            rf = await procesar_turno(mensaje=m, session_id="web:s2", canal=None)
+    finally:
+        _exit(leaf)
+    c2 = repo._conv.estado_capturado
+    assert create_appt2.await_count == 1
+    assert c2.fase_agendado == FaseAgendado.CERRADO
+    assert c2.hijos[0].nombre == "Diego" and c2.hijos[0].grado == "3° de Kinder"
+    assert c2.nombre_papa == "Ana López"
+    assert c2.email_papa == "ana@correo.mx" and c2.telefono == "8441234567"
+    assert "https://www.google.com/maps" in rf.response
+
+    # ---- Escenario 3: "pequeño"/"tiene" como nombre → PREGUNTA, no inventa ----
+    repo = _nuevo_repo_explorando("web:s3")
+    create_appt3 = AsyncMock(side_effect=lambda **kw: 700 + create_appt3.await_count)
+    leaf = _leaf_determinista(repo, _fake_anthropic(["¿Cómo se llama tu peque?"]), create_appt3)
+    _enter(leaf)
+    try:
+        await procesar_turno(mensaje="quiero agendar el viernes 10am", session_id="web:s3", canal=None)
+        # parte el nombre real: solo dice "mi pequeño tiene 4 años"
+        await procesar_turno(mensaje="es para mi pequeño, tiene 4 años", session_id="web:s3", canal=None)
+    finally:
+        _exit(leaf)
+    c3 = repo._conv.estado_capturado
+    assert create_appt3.await_count == 0  # NO creó (falta el nombre real)
+    # NO inventó 'Pequeño' como nombre; quedó sin nombre → el gate lo pedirá.
+    nombre_capt = c3.hijos[0].nombre if c3.hijos else None
+    assert nombre_capt is None
+    assert c3.fase_agendado == FaseAgendado.AGENDANDO  # sigue agendando, no cerró
+    assert (c3.hijos[0].edad if c3.hijos else None) == 4  # la edad sí se capturó
+
+    # ---- Escenario 4: 2º y 3º agendado en la MISMA sesión → N filas + grado ok ----
+    # (continúa la sesión del escenario 1, que ya cerró el 1º con Mateo)
+    repo = _nuevo_repo_explorando("web:s4")
+    create_appt4 = AsyncMock(side_effect=lambda **kw: 600 + create_appt4.await_count)
+    leaf = _leaf_determinista(repo, _fake_anthropic(["x"]), create_appt4)
+    agendados = [
+        "quiero agendar para mi hijo Mateo de 4 años, yo soy Pedro Rojas, "
+        "ing2oscar@gmail.com, +17866035862, el viernes 10am",
+        "quiero agendar otra para Lucía de 5 años el lunes 11am",
+        "quiero agendar otra para Anabela de 6 años el martes 9am",
+    ]
+    grados = []
+    _enter(leaf)
+    try:
+        for m in agendados:
+            await procesar_turno(mensaje=m, session_id="web:s4", canal=None)
+            h = repo._conv.estado_capturado.hijos
+            grados.append((h[0].nombre, h[0].grado) if h else (None, None))
+    finally:
+        _exit(leaf)
+    assert create_appt4.await_count == 3  # 3 filas reales
+    assert grados == [
+        ("Mateo", "2° de Kinder"),     # 4 años
+        ("Lucía", "3° de Kinder"),     # 5 años
+        ("Anabela", "1° de Primaria"), # 6 años
+    ]

@@ -106,6 +106,107 @@ def _nombre_junto_a_edad(mensaje: str) -> str | None:
     return None
 
 
+# ============================================================
+# Capa de captura DETERMINÍSTICA consolidada (FIX 2026-06-02)
+# ============================================================
+#
+# Principio del proyecto: el LLM NO es load-bearing para datos estructurados.
+# Estos extractores corren SIEMPRE; los de alta confianza (email, teléfono,
+# "yo soy X") MANDAN sobre el LLM; los demás rellenan lo que el LLM dejó vacío.
+
+# Palabras que NO son nombre propio (de hijo ni de papá). Si el LLM devuelve una
+# de éstas como nombre, se descarta → el gate la pedirá (NO se inventa).
+_NO_ES_NOMBRE = _NO_NOMBRE_EDAD | frozenset({
+    "pequeño", "pequeña", "pequeno", "pequena", "peque", "pequeñito", "pequenito",
+    "bebe", "bebé", "bb", "chiquito", "chiquita", "hijo", "hija", "niño", "niña",
+    "nino", "nina", "nene", "nena", "hermano", "hermana", "mamá", "papá", "mama",
+    "papa", "señor", "señora", "senor", "senora",
+})
+
+
+def _es_nombre_valido(nombre: str | None) -> bool:
+    """True si `nombre` parece un nombre propio real (no 'pequeño', 'tiene', etc.)."""
+    if not nombre:
+        return False
+    n = nombre.strip().lower()
+    if not n or n in _NO_ES_NOMBRE:
+        return False
+    # Debe empezar por letra y no ser solo símbolos/números.
+    return bool(re.match(r"^[a-záéíóúñ]", n))
+
+
+_EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
+# Teléfono: 10-15 dígitos, admite +, espacios, guiones y paréntesis entre medias.
+_TEL_RE = re.compile(r"\+?\d[\d\s\-().]{8,}\d")
+# Edad: requiere la palabra años/añitos (evita 'tengo 4 hijos' → edad 4).
+_EDAD_RE = re.compile(r"\b(\d{1,2})\s*a[ñn](?:o|os|ito|itos)?\b", re.IGNORECASE)
+# Nombre del papá por presentación explícita ("yo soy X", "me llamo X", "soy X").
+_NOMBRE_PAPA_CAP_RE = re.compile(
+    r"(?:^|[\s,.;])(?:yo\s+soy|me\s+llamo|mi\s+nombre\s+es|soy)\s+"
+    r"([a-záéíóúñ]+(?:\s+[a-záéíóúñ]+){0,3})",
+    re.IGNORECASE,
+)
+# Tras "soy/me llamo", estas palabras cortan el nombre (no forman parte de él).
+_STOP_NOMBRE_PAPA = frozenset({
+    "la", "el", "los", "las", "mama", "mamá", "papa", "papá", "de", "del", "y",
+    "con", "para", "que", "mi", "su", "busco", "buscando", "interesad", "interesada",
+    "interesado", "aqui", "aquí", "un", "una", "porque", "pero",
+})
+
+
+def extraer_email(mensaje: str) -> str | None:
+    """Primer email válido del mensaje, o None. Captura literal (sin tocar mayúsc.)."""
+    m = _EMAIL_RE.search(mensaje or "")
+    return m.group(0) if m else None
+
+
+def extraer_telefono(mensaje: str, *, excluir: str | None = None) -> str | None:
+    """Primer teléfono (10-15 dígitos) normalizado a '+?dígitos', o None.
+
+    `excluir`: substring a remover antes de buscar (p.ej. el email ya extraído,
+    para que sus dígitos no se confundan con un teléfono).
+    """
+    texto = mensaje or ""
+    if excluir:
+        texto = texto.replace(excluir, " ")
+    for m in _TEL_RE.finditer(texto):
+        raw = m.group(0)
+        signo = "+" if raw.lstrip().startswith("+") else ""
+        digitos = re.sub(r"\D", "", raw)
+        if 10 <= len(digitos) <= 15:
+            return signo + digitos
+    return None
+
+
+def extraer_edad_simple(mensaje: str) -> int | None:
+    """'tiene 4 años' / '4 añitos' → 4. None si no hay edad con la palabra 'años'."""
+    m = _EDAD_RE.search(mensaje or "")
+    if not m:
+        return None
+    edad = int(m.group(1))
+    return edad if 0 <= edad <= 20 else None
+
+
+def extraer_nombre_papa(mensaje: str) -> str | None:
+    """'yo soy Pedro Rojas, ...' → 'Pedro Rojas'. None si no hay presentación
+    explícita o el nombre no es válido."""
+    m = _NOMBRE_PAPA_CAP_RE.search(mensaje or "")
+    if not m:
+        return None
+    tokens: list[str] = []
+    for t in m.group(1).split():
+        tl = t.lower().strip(",.;")
+        if tl in _STOP_NOMBRE_PAPA or not re.match(r"^[a-záéíóúñ]+$", tl):
+            break
+        tokens.append(tl)
+        if len(tokens) >= 3:
+            break
+    if not tokens:
+        return None
+    nombre = " ".join(w[:1].upper() + w[1:] for w in tokens)
+    return nombre if _es_nombre_valido(nombre) else None
+
+
 # Presentación EXPLÍCITA del papá ("yo soy X", "me llamo X", "mi nombre es X").
 # FIX (e): habilita corregir un nombre_papa clavado de una sesión contaminada.
 _PRESENTACION_RE = re.compile(
@@ -309,12 +410,36 @@ async def extraer_de_mensaje(
 
 
 def _aplicar_fallbacks_deterministicos(result: ExtraccionTurno, mensaje: str) -> ExtraccionTurno:
-    """Refuerza la extracción del LLM con reglas determinísticas (FIX 2026-06-01).
+    """Capa de captura DETERMINÍSTICA consolidada (FIX 2026-06-02).
 
-    Corre SIEMPRE (incluso si el LLM no estaba disponible). Nunca sobreescribe lo
-    que el LLM sí capturó, salvo la corrección nombre-papá→hijo de (c).
+    El LLM NO es load-bearing: corre SIEMPRE (incluso si el LLM no estaba
+    disponible). Los extractores de alta confianza (email, teléfono, "yo soy X")
+    MANDAN sobre el LLM; los demás rellenan lo que el LLM dejó vacío. Además sanea
+    nombres inválidos ('pequeño', 'tiene') para que el gate los pida, no se inventen.
     """
-    # (FIX 2) grado: "2 kinder" → "2° de Kinder" cuando el LLM lo dejó en None.
+    # --- Email y teléfono: regex MANDA (datos no ambiguos). ---
+    email_det = extraer_email(mensaje)
+    if email_det:
+        result.email_papa = email_det
+    tel_det = extraer_telefono(mensaje, excluir=email_det)
+    if tel_det:
+        result.telefono = tel_det
+
+    # --- Nombre del papá: presentación explícita ("yo soy X") MANDA + marca flag. ---
+    nombre_papa_det = extraer_nombre_papa(mensaje)
+    if nombre_papa_det:
+        result.nombre_papa = nombre_papa_det
+        result.nombre_papa_explicito = True
+    elif result.nombre_papa and _es_presentacion_explicita(mensaje):
+        result.nombre_papa_explicito = True
+
+    # --- Edad: regex 'N años' rellena si el LLM la dejó vacía. ---
+    if result.edad_hijo is None:
+        edad_det = extraer_edad_simple(mensaje)
+        if edad_det is not None:
+            result.edad_hijo = edad_det
+
+    # --- Grado: "2 kinder" → "2° de Kinder" cuando el LLM lo dejó en None. ---
     if not result.grado_hijo:
         grado_det, nivel_det = extraer_grado_simple(mensaje)
         if grado_det:
@@ -322,7 +447,7 @@ def _aplicar_fallbacks_deterministicos(result: ExtraccionTurno, mensaje: str) ->
             if not result.nivel_buscado and nivel_det:
                 result.nivel_buscado = nivel_det
 
-    # (FIX c) "Jose, 4 años" → Jose es el NIÑO, no el papá.
+    # --- Nombre del hijo: "Jose, 4 años" → Jose es el NIÑO, no el papá. ---
     nombre_nino = _nombre_junto_a_edad(mensaje)
     if nombre_nino:
         if not result.nombre_hijo:
@@ -331,10 +456,12 @@ def _aplicar_fallbacks_deterministicos(result: ExtraccionTurno, mensaje: str) ->
         if result.nombre_papa and result.nombre_papa.strip().lower() == nombre_nino.lower():
             result.nombre_papa = None
 
-    # (FIX e) marca presentación explícita ("yo soy Oscar") para poder corregir un
-    # nombre_papa clavado de una sesión contaminada.
-    if result.nombre_papa and _es_presentacion_explicita(mensaje):
-        result.nombre_papa_explicito = True
+    # --- Saneo de nombres: descarta palabras comunes ('pequeño', 'tiene', 'bebé')
+    # que NO son nombres propios → el gate los pedirá, NO se inventan. ---
+    if result.nombre_hijo and not _es_nombre_valido(result.nombre_hijo):
+        result.nombre_hijo = None
+    if result.nombre_papa and not _es_nombre_valido(result.nombre_papa):
+        result.nombre_papa = None
 
     return result
 
