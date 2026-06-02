@@ -25,6 +25,7 @@ from app.core.appointment_extractor import (
     extract_datetime,
     extraer_fecha_explicita,
     extraer_hora_simple,
+    extraer_proximo_dia_semana,
 )
 
 # ============================================================
@@ -407,3 +408,45 @@ def test_es_alta_confianza_borde() -> None:
 def test_tz_monterrey_correcta() -> None:
     """Sanity: el módulo apunta a la TZ que se usa en producción."""
     assert TZ_MONTERREY == ZoneInfo("America/Monterrey")
+
+
+# ============================================================
+# FIX (2026-06-02) — día de semana suelto → próxima ocurrencia DETERMINÍSTICA
+# (el LLM no debe ser load-bearing para "el viernes")
+# ============================================================
+
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        ("el viernes 10am", "2026-06-05"),  # lunes 1 → próximo viernes 5
+        ("nos vemos el viernes", "2026-06-05"),
+        ("viernes", "2026-06-05"),
+        ("este jueves", "2026-06-04"),
+        ("próximo miércoles", "2026-06-03"),
+        ("el martes", "2026-06-02"),  # mañana
+        ("puedo el lunes", "2026-06-01"),  # HOY (lunes, antes de las 15:00) → hoy
+    ],
+)
+def test_extraer_proximo_dia_semana_desde_lunes(texto, esperado) -> None:
+    now = datetime(2026, 6, 1, 9, 0, tzinfo=TZ_MONTERREY)  # lunes 1 jun, 09:00
+    assert extraer_proximo_dia_semana(texto, now) == esperado
+
+
+def test_extraer_proximo_dia_semana_hoy_ya_cerro_va_a_proxima_semana() -> None:
+    # viernes 5 jun a las 16:00 (ya pasó el horario de atención) → "el viernes"
+    # NO es hoy, es el de la próxima semana.
+    now = datetime(2026, 6, 5, 16, 0, tzinfo=TZ_MONTERREY)
+    assert extraer_proximo_dia_semana("el viernes", now) == "2026-06-12"
+
+
+def test_extraer_proximo_dia_semana_hoy_aun_abierto_es_hoy() -> None:
+    # viernes 5 jun a las 09:00 (aún dentro del horario) → "el viernes" = hoy.
+    now = datetime(2026, 6, 5, 9, 0, tzinfo=TZ_MONTERREY)
+    assert extraer_proximo_dia_semana("el viernes", now) == "2026-06-05"
+
+
+def test_extraer_proximo_dia_semana_sin_dia() -> None:
+    now = datetime(2026, 6, 1, 9, 0, tzinfo=TZ_MONTERREY)
+    assert extraer_proximo_dia_semana("tiene 4 años", now) is None
+    assert extraer_proximo_dia_semana("a las 10am", now) is None

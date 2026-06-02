@@ -31,6 +31,7 @@ from app.core.appointment_extractor import (
     extract_datetime,
     extraer_fecha_explicita,
     extraer_hora_simple,
+    extraer_proximo_dia_semana,
     fecha_humana_solo_dia,
 )
 from app.core.campus_resolver import resolve_campus_from_estado
@@ -364,9 +365,18 @@ async def handle_appointment_intent(
     # el MISMO mensaje traía fecha, así que la hora suelta se perdía y la cita
     # nunca cerraba (bug real de la prueba de Oscar). Además, un fallback
     # determinístico cubre cuando el extractor LLM no resuelve la hora suelta.
+    # FIX (2026-06-02): la FECHA se resuelve DETERMINÍSTICAMENTE primero — el LLM no
+    # debe ser load-bearing. "el viernes"/"lunes" → próxima ocurrencia; "5 de junio"
+    # → fecha explícita. Si el mensaje ACTUAL trae un día, MANDA (cubre cambios tipo
+    # "mejor el lunes"); si no trae día, NO toca el slot ya capturado (no lo borra).
+    fecha_det = extraer_fecha_explicita(mensaje, now) or extraer_proximo_dia_semana(mensaje, now)
+    if fecha_det:
+        capt.cita_fecha_slot = fecha_det
+
     appt_dt = await extract_datetime(mensaje, now=now)
     if appt_dt.es_alta_confianza:
-        if appt_dt.fecha:
+        # El LLM solo RELLENA la fecha si el resolver determinístico no la fijó.
+        if appt_dt.fecha and capt.cita_fecha_slot is None:
             capt.cita_fecha_slot = appt_dt.fecha
         if appt_dt.hora:
             capt.cita_hora_slot = appt_dt.hora

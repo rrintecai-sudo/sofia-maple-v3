@@ -14,7 +14,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.adapters.openai_client import get_openai
@@ -237,7 +237,55 @@ def extraer_fecha_explicita(texto: str, now: datetime | None = None) -> str | No
             return None
     return d.isoformat()
 
-    return None
+
+# ============================================================
+# Día de la semana suelto → próxima ocurrencia (FIX 2026-06-02)
+# ============================================================
+#
+# "el viernes" / "lunes" / "este jueves" debe resolverse DETERMINÍSTICAMENTE a la
+# próxima ocurrencia futura de ese día, SIN preguntar "¿el 5 o el 12?". Antes esto
+# dependía del LLM extract_datetime, que para días cercanos devolvía baja confianza
+# o no fijaba el slot → el flujo entraba en "pedir día" y Haiku improvisaba la
+# desambiguación. El clasificador/extractor LLM no debe ser load-bearing.
+
+_DIA_SEMANA_NUM: dict[str, int] = {
+    "lunes": 0,
+    "martes": 1,
+    "miércoles": 2,
+    "miercoles": 2,
+    "jueves": 3,
+    "viernes": 4,
+    "sábado": 5,
+    "sabado": 5,
+    "domingo": 6,
+}
+_DIA_SEMANA_RE = re.compile(
+    r"\b(?:el|este|esta|pr[óo]xim[oa])?\s*"
+    r"(lunes|martes|mi[ée]rcoles|jueves|viernes|s[áa]bado|domingo)\b",
+    re.IGNORECASE,
+)
+
+
+def extraer_proximo_dia_semana(texto: str, now: datetime | None = None) -> str | None:
+    """'el viernes' / 'lunes' / 'este jueves' → 'YYYY-MM-DD' de la PRÓXIMA ocurrencia.
+
+    Determinístico: resuelve un día de semana suelto a su próxima ocurrencia futura
+    en America/Monterrey. Si HOY es ese día y aún no pasó el horario de atención
+    (antes de las 15:00) usa hoy; si ya cerró, la próxima semana. Devuelve None si
+    el texto no menciona un día de semana.
+    """
+    m = _DIA_SEMANA_RE.search((texto or "").lower())
+    if not m:
+        return None
+    target = _DIA_SEMANA_NUM[m.group(1)]
+    base = now or datetime.now(TZ_MONTERREY)
+    if base.tzinfo is None:
+        base = base.replace(tzinfo=TZ_MONTERREY)
+    base_local = base.astimezone(TZ_MONTERREY)
+    delta = (target - base_local.weekday()) % 7
+    if delta == 0 and base_local.hour >= 15:
+        delta = 7  # hoy es ese día pero ya pasó el horario → próxima semana
+    return (base_local.date() + timedelta(days=delta)).isoformat()
 
 
 @dataclass

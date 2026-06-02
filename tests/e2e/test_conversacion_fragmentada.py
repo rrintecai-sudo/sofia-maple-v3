@@ -439,7 +439,10 @@ async def test_cierre_fragmentado_crea_y_persiste_cita() -> None:
             ExtraccionTurno(quiere_agendar=True, nivel_buscado="kinder"),
             (None, None, 0.0),
         ),
-        "El lunes a las 10am": (
+        # "Mañana" (no un día de semana) → el resolver determinístico no aplica,
+        # así que la fecha la gobierna el extractor LLM mockeado. Verifica la
+        # PERSISTENCIA del slot entre turnos, no la resolución determinística.
+        "Mañana a las 10am": (
             Intent.CONFUSO_OTRO,
             ExtraccionTurno(),
             ("2026-06-01", "10:00", 0.95),
@@ -1139,7 +1142,10 @@ async def test_rearmado_captura_todo_del_mensaje_disparador() -> None:
     from app.core.state import FaseAgendado
     from app.tools.campus import CampusResult
 
-    msg = "quiero agendar otra para mi hija Lucía, 5 años, el jueves 11am"
+    # "mañana" (no un día de semana) → la fecha la gobierna el extractor LLM
+    # mockeado; este test verifica el RE-ARMADO + captura del disparador, no la
+    # resolución determinística de día (cubierta en su propio test).
+    msg = "quiero agendar otra para mi hija Lucía, 5 años, mañana 11am"
 
     async def fake_classify(message, **kw):
         return _intent(Intent.QUIERE_AGENDAR)
@@ -1307,3 +1313,109 @@ async def test_tres_agendados_una_sesion_n_filas_y_grado_por_edad() -> None:
         ("Lucía", "3° de Kinder"),     # 5 años — sobreescribió el parcial "kinder"
         ("Anabela", "1° de Primaria"), # 6 años — NO se salta Kinder 3°/Primaria 1°
     ]
+
+
+# ============================================================
+# 11. REGRESIÓN PERMANENTE (2026-06-02): PRIMER agendado con TODO en el primer
+#     mensaje y un día CERCANO ("el viernes") → la fecha se resuelve
+#     DETERMINÍSTICAMENTE al próximo viernes (sin preguntar "¿el 5 o el 12?"),
+#     NO re-pregunta nada, y CIERRA con D.4 en UN turno. Prueba clave: el LLM
+#     extract_datetime se mockea a VACÍO → si la cita igual se crea, es porque
+#     el resolver determinístico cargó la fecha (no es load-bearing el LLM).
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_primer_agendado_dia_cercano_resuelve_determinista_y_cierra() -> None:
+    import types
+    from datetime import datetime, timedelta
+
+    from app.core.appointment_extractor import TZ_MONTERREY, AppointmentDateTime
+    from app.core.state import (
+        Canal,
+        EstadoCapturado,
+        EstadoConversacion,
+        FaseAgendado,
+    )
+    from app.tools.campus import CampusResult
+
+    MENSAJE = (
+        "hola quiero agendar mi hijo Mateo tiene 4 años yo soy Pedro Rojas, "
+        "ing2oscar@gmail.com, +17866035862 el viernes 10am"
+    )
+
+    async def fake_classify(message, **kw):
+        return _intent(Intent.QUIERE_AGENDAR)
+
+    async def fake_extract(mensaje, estado_actual):
+        return ExtraccionTurno(
+            nombre_hijo="Mateo",
+            edad_hijo=4,
+            nombre_papa="Pedro Rojas",
+            nombre_papa_explicito=True,
+            email_papa="ing2oscar@gmail.com",
+            telefono="+17866035862",
+        )
+
+    # El LLM de fecha FALLA (vacío, baja confianza). El resolver determinístico
+    # ("el viernes" → próximo viernes) y extraer_hora_simple ("10am" → 10:00)
+    # deben cargar los slots igual.
+    async def fake_extract_dt(mensaje, *, now=None):
+        return AppointmentDateTime(fecha=None, hora=None, confidence=0.0, razonamiento="vacío")
+
+    campus1 = CampusResult(
+        id=1, nombre="Campus 1", direccion="José Figueroa Siller 156", colonia="Doctores",
+        ciudad="Saltillo", estado="Coahuila", niveles=["kinder_1", "kinder_2", "kinder_3"],
+        google_maps_url="https://www.google.com/maps/search/?api=1&query=Jose",
+    )
+
+    repo = _StatefulRepo()
+    repo._conv = EstadoConversacion(
+        session_id="web:pedro", canal=Canal.WEB, identificador="pedro",
+        estado_capturado=EstadoCapturado(fase_agendado=FaseAgendado.EXPLORANDO),
+    )
+    anthropic = _fake_anthropic(["Voy a pasar tu solicitud a Lily."])  # Haiku improvisa…
+    create_appt = AsyncMock(side_effect=lambda **kw: 900 + create_appt.await_count)
+
+    leaf = [
+        patch("app.core.orchestrator.get_repository", return_value=repo),
+        patch("app.core.orchestrator.get_anthropic", return_value=anthropic),
+        patch("app.core.orchestrator.classify_intent", side_effect=fake_classify),
+        patch("app.core.orchestrator.extraer_de_mensaje", side_effect=fake_extract),
+        patch("app.core.orchestrator.get_campus_para_nivel", AsyncMock(return_value=None)),
+        patch("app.core.orchestrator.consultar_edades_de_nivel", AsyncMock(return_value=None)),
+        patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
+        patch("app.core.appointment_flow.is_slot_available",
+              AsyncMock(return_value=types.SimpleNamespace(available=True, reason="ok", alternativas=[], resumen=""))),
+        patch("app.core.appointment_flow.create_appointment", create_appt),
+        patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=campus1)),
+        patch("app.core.appointment_flow.get_lead_by_session", AsyncMock(return_value=None)),
+        patch("app.core.appointment_flow.create_lead", AsyncMock(return_value=88)),
+        patch("app.core.appointment_flow.emit_event", AsyncMock()),
+        patch("app.core.appointment_flow.send_email", AsyncMock()),
+        patch("app.core.appointment_flow.advance_stage_if_lower", AsyncMock(return_value=True)),
+    ]
+
+    from app.core.orchestrator import procesar_turno
+
+    _enter(leaf)
+    try:
+        result = await procesar_turno(mensaje=MENSAJE, session_id="web:pedro", canal=None)
+    finally:
+        _exit(leaf)
+
+    capt = repo._conv.estado_capturado
+    # 1) La cita se CREÓ en este único turno (NO ghost-close, NO "paso a Lily").
+    assert create_appt.await_count == 1
+    # 2) La fecha se resolvió DETERMINÍSTICAMENTE a un VIERNES futuro (weekday()==4).
+    fecha_dt = datetime.strptime(capt.cita_fecha_slot, "%Y-%m-%d").replace(tzinfo=TZ_MONTERREY)
+    assert fecha_dt.weekday() == 4, f"esperaba viernes, fue {capt.cita_fecha_slot}"
+    assert fecha_dt.date() >= (datetime.now(TZ_MONTERREY) - timedelta(days=1)).date()
+    assert capt.cita_hora_slot == "10:00"  # de extraer_hora_simple, no del LLM
+    # 3) NO re-preguntó: el grado se DEDUJO (no pidió nombre/edad), nivel kinder.
+    assert capt.hijos and capt.hijos[0].nombre == "Mateo"
+    assert capt.hijos[0].grado == "2° de Kinder"
+    # 4) Cerró con D.4 (override): la respuesta es la plantilla, NO el "paso a Lily".
+    assert capt.fase_agendado == FaseAgendado.CERRADO
+    assert "https://www.google.com/maps" in result.response
+    assert "Lily" not in result.response

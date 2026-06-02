@@ -156,9 +156,14 @@ async def test_handler_sin_fecha_pide_aclaracion(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_handler_confidence_baja_pide_aclaracion(monkeypatch) -> None:
+    # Mensaje SIN día de semana ni fecha explícita → el resolver determinístico no
+    # aplica y, con baja confianza del LLM, la fecha queda sin resolver → pide día.
+    # (Un "el martes" sí se resolvería determinísticamente; ver test dedicado.)
     _mock_extractor(monkeypatch, fecha="2026-05-26", hora="10:00", confidence=0.5)
     estado = _estado_base(nombre_papa="Ana", nivel=NivelEducativo.KINDER)
-    result = await handle_appointment_intent("tal vez el martes", estado, settings=_settings())
+    result = await handle_appointment_intent(
+        "tal vez cuando se pueda", estado, settings=_settings()
+    )
     assert "extract_failed" in result.acciones
 
 
@@ -824,8 +829,10 @@ def _mock_disponibilidad_lun_vie_8_15() -> None:
 @pytest.mark.asyncio
 @respx.mock
 async def test_handler_hoy_lunes_9pm_no_ofrece_hoy(monkeypatch) -> None:
-    """'el lunes' a las 21:00 del lunes → HOY ya cerró: NO se ofrece hoy, se
-    descarta el día y se proponen alternativas reales (martes)."""
+    """'el lunes' a las 21:00 del lunes → HOY ya cerró. El resolver determinístico
+    (FIX 2026-06-02) NO ofrece hoy: resuelve 'el lunes' al PRÓXIMO lunes (la
+    semana siguiente) y pide la hora para ese día. Mejor que el viejo
+    'descarta y propón martes': respeta el día que pidió el papá."""
     _mock_disponibilidad_lun_vie_8_15()
     _mock_extractor(monkeypatch, fecha="2026-06-08", hora=None, confidence=0.9)  # hoy lunes
 
@@ -836,12 +843,10 @@ async def test_handler_hoy_lunes_9pm_no_ofrece_hoy(monkeypatch) -> None:
     now = datetime(2026, 6, 8, 21, 0, tzinfo=TZ_MONTERREY)  # lunes 9pm
     result = await handle_appointment_intent("el lunes", estado, settings=_settings(), now=now)
 
-    assert any(a.startswith("dia_no_disponible") for a in result.acciones)
+    # Resolvió al PRÓXIMO lunes (2026-06-15), NUNCA hoy (2026-06-08).
+    assert estado.estado_capturado.cita_fecha_slot == "2026-06-15"
     assert result.appointment_id is None
-    # el día imposible se descarta (no se re-ofrece al turno siguiente)
-    assert estado.estado_capturado.cita_fecha_slot is None
-    # mensaje claro + alternativas, NUNCA pregunta "a qué hora" para hoy
-    assert "a qué hora" not in result.hint_para_prompt.lower()
+    assert "missing_time" in result.acciones  # ahora pide la hora de ESE lunes
 
 
 # ============================================================
