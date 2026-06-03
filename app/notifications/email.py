@@ -15,6 +15,7 @@ el cierre D.4 se hacen igual aunque el correo falle.
 
 from __future__ import annotations
 
+import html as _html
 import logging
 from dataclasses import dataclass
 
@@ -39,10 +40,17 @@ class EmailPayload:
 
 
 async def _send_via_resend(
-    to: str, subject: str, body: str, *, settings: Settings
+    to: str, subject: str, body: str, *, html: str | None = None, settings: Settings
 ) -> EmailPayload:
-    """POST a la API de Resend. NUNCA lanza: cualquier error → delivered=False."""
+    """POST a la API de Resend. NUNCA lanza: cualquier error → delivered=False.
+
+    Envía `text` siempre y `html` si se provee (clientes prefieren HTML cuando
+    existe; el texto queda como fallback).
+    """
     payload = EmailPayload(to=to, subject=subject, body=body, provider="resend")
+    cuerpo = {"from": settings.email_from, "to": [to], "subject": subject, "text": body}
+    if html:
+        cuerpo["html"] = html
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(
@@ -51,12 +59,7 @@ async def _send_via_resend(
                     "Authorization": f"Bearer {settings.resend_api_key}",
                     "Content-Type": "application/json",
                 },
-                json={
-                    "from": settings.email_from,
-                    "to": [to],
-                    "subject": subject,
-                    "text": body,
-                },
+                json=cuerpo,
             )
         if resp.status_code in (200, 201):
             payload.delivered = True
@@ -79,9 +82,15 @@ async def send_email(
     subject: str,
     body: str,
     *,
+    html: str | None = None,
     settings: Settings | None = None,
 ) -> EmailPayload:
     """Envía un email vía Resend (o stub si no hay API key). NUNCA lanza.
+
+    Args:
+        body: cuerpo en texto plano (fallback).
+        html: cuerpo HTML opcional (clientes lo prefieren; el correo de
+            confirmación al papá lo usa para el link clickeable de Maps).
 
     Returns:
         EmailPayload con `delivered` True/False. El caller puede ignorarlo: el
@@ -97,7 +106,7 @@ async def send_email(
         return EmailPayload(to=to, subject=subject, body=body)
 
     if settings.resend_api_key:
-        return await _send_via_resend(to, subject, body, settings=settings)
+        return await _send_via_resend(to, subject, body, html=html, settings=settings)
 
     # Sin API key → stub: log estructurado, auditable en producción.
     log.warning(
@@ -160,27 +169,22 @@ def render_cita_pendiente_email(
 # Correo de CONFIRMACIÓN al papá — Mensaje 2 de Gaby (Bloque C.1)
 # ============================================================
 
-# Asunto (ajustable).
+# Asunto.
 ASUNTO_CONFIRMACION_PAPA = "Confirmación de tu cita de informes — Maple Collège"
 
-# ⚠️ BORRADOR — reemplazar por el TEXTO LITERAL de Gaby (Mensaje 2 de sus
-# capturas). Placeholders disponibles: {nombre_papa} {dia} {hora} {campus}
-# {direccion}. El cuerpo es texto plano (emojis OK). Mantén los placeholders.
-_PLANTILLA_CONFIRMACION_PAPA = """Hola {nombre_papa} 😊
-
-¡Gracias por agendar tu cita de informes en Maple Collège!
-
-Estos son los detalles de tu visita:
-
-📅 Día: {dia}
-🕐 Hora: {hora}
-📍 Campus: {campus}
-🗺️ Dirección: {direccion}
-
-Te esperamos para platicarte sobre nuestra metodología y resolver todas tus dudas. Si necesitas reagendar, solo responde a este correo y lo coordinamos.
-
-¡Nos vemos pronto!
-Equipo de Admisiones — Maple Collège"""
+# Texto LITERAL de Gaby (Mensaje 2). El correo es HTML (Maps clickeable); también
+# se envía un fallback en texto plano con la URL cruda.
+_INTRO_CONFIRMACION = (
+    "Te confirmamos tu cita de informes para conocer Maple Collège y platicarte con "
+    "más detalle sobre nuestra metodología, acompañamiento académico y filosofía "
+    "educativa."
+)
+_CIERRE_CONFIRMACION = (
+    "Durante la visita podremos resolver todas sus dudas, compartirles información "
+    "importante sobre el proceso y hacer un recorrido por las instalaciones."
+)
+# CIERRE final: Gaby no dio última línea → se mantiene la del borrador.
+_DESPEDIDA_CONFIRMACION = "¡Te esperamos! 😊\nEquipo de Admisiones — Maple Collège"
 
 
 def render_confirmacion_email_papa(
@@ -188,9 +192,13 @@ def render_confirmacion_email_papa(
     nombre_papa: str | None,
     fecha_hora,  # datetime aware (America/Monterrey) — se formatea como D.4
     campus,  # CampusResult | None
-) -> tuple[str, str]:
-    """(subject, body) del correo de confirmación al PAPÁ. Reutiliza el formato de
-    fecha/hora/dirección de D.4 (Gaby) para que coincida con el cierre en chat."""
+) -> tuple[str, str, str]:
+    """(subject, body_text, body_html) del correo de confirmación al PAPÁ.
+
+    Reutiliza el formato de fecha/hora/dirección de D.4 (Gaby). El link de Maps
+    sale de `campus.google_maps_url` (misma fuente de tabla que D.4, NO inventado):
+    en HTML va como <a> clickeable; en el texto plano, la URL cruda.
+    """
     # Import local para evitar ciclo (appointment_messages importa de campus).
     from app.core.appointment_messages import formato_dia_fecha, formato_hora
 
@@ -198,9 +206,48 @@ def render_confirmacion_email_papa(
     dia = formato_dia_fecha(fecha_hora)
     hora = formato_hora(fecha_hora)
     nombre_campus = campus.nombre if campus else "nuestro campus"
-    direccion = campus.direccion_legible() if campus else "te compartimos la dirección por separado"
-
-    body = _PLANTILLA_CONFIRMACION_PAPA.format(
-        nombre_papa=nombre, dia=dia, hora=hora, campus=nombre_campus, direccion=direccion
+    direccion = (
+        campus.direccion_legible() if campus else "te compartimos la dirección por separado"
     )
-    return ASUNTO_CONFIRMACION_PAPA, body
+    maps_url = (campus.google_maps_url if campus else None) or ""
+
+    # --- Texto plano (fallback): Maps como URL cruda ---
+    text_lineas = [
+        f"Hola {nombre} 😊",
+        "",
+        _INTRO_CONFIRMACION,
+        "",
+        f"📅 Día: {dia}",
+        f"🕐 Hora: {hora}",
+        f"📍 Campus: {nombre_campus}",
+        f"📌 Dirección: {direccion}",
+    ]
+    if maps_url:
+        text_lineas.append(f"🗺️ {maps_url}")
+    text_lineas += ["", _CIERRE_CONFIRMACION, "", _DESPEDIDA_CONFIRMACION]
+    body_text = "\n".join(text_lineas)
+
+    # --- HTML: Maps como enlace clickeable. Se escapan los valores dinámicos. ---
+    def esc(s: object) -> str:
+        return _html.escape(str(s))
+
+    maps_html = (
+        f'🗺️ <a href="{esc(maps_url)}">Ver ubicación en Google Maps</a>' if maps_url else ""
+    )
+    body_html = (
+        '<!DOCTYPE html><html><body style="font-family:Arial,Helvetica,sans-serif;'
+        'font-size:15px;color:#222;line-height:1.5;">'
+        f"<p>Hola {esc(nombre)} 😊</p>"
+        f"<p>{esc(_INTRO_CONFIRMACION)}</p>"
+        "<p>"
+        f"📅 <strong>Día:</strong> {esc(dia)}<br>"
+        f"🕐 <strong>Hora:</strong> {esc(hora)}<br>"
+        f"📍 <strong>Campus:</strong> {esc(nombre_campus)}<br>"
+        f"📌 <strong>Dirección:</strong> {esc(direccion)}<br>"
+        f"{maps_html}"
+        "</p>"
+        f"<p>{esc(_CIERRE_CONFIRMACION)}</p>"
+        "<p>¡Te esperamos! 😊<br>Equipo de Admisiones — Maple Collège</p>"
+        "</body></html>"
+    )
+    return ASUNTO_CONFIRMACION_PAPA, body_text, body_html

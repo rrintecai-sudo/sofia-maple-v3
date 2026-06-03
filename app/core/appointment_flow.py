@@ -758,12 +758,14 @@ async def handle_appointment_intent(
         # capturamos. Resend; si falla, send_email NO lanza (solo loggea).
         email_papa = (estado.estado_capturado.email_papa or "").strip()
         if email_papa:
-            subj_p, body_p = render_confirmacion_email_papa(
+            subj_p, text_p, html_p = render_confirmacion_email_papa(
                 nombre_papa=estado.estado_capturado.nombre_papa,
                 fecha_hora=fecha_dt,
                 campus=campus,
             )
-            res_papa = await send_email(email_papa, subj_p, body_p, settings=settings)
+            res_papa = await send_email(
+                email_papa, subj_p, text_p, html=html_p, settings=settings
+            )
             acciones.append(
                 "email_papa_sent" if res_papa.delivered else "email_papa_failed"
             )

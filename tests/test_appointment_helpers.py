@@ -159,15 +159,25 @@ def test_render_confirmacion_email_papa() -> None:
         google_maps_url="https://www.google.com/maps/search/?api=1&query=Blvd",
     )
     dt = datetime(2026, 6, 4, 16, 0, tzinfo=ZoneInfo("America/Monterrey"))
-    subject, body = render_confirmacion_email_papa(
+    subject, text, html = render_confirmacion_email_papa(
         nombre_papa="Emma Rangel", fecha_hora=dt, campus=campus
     )
     assert subject == "Confirmación de tu cita de informes — Maple Collège"
-    assert "Emma Rangel" in body
-    assert "jueves 4 de junio de 2026" in body  # mismo formato que D.4
-    assert "4:00 p.m." in body
-    assert "Campus 2" in body
-    assert "Blvd. V. Carranza 5064" in body  # dirección de la TABLA campus
+    # Texto literal de Gaby + datos en ambas versiones
+    for cuerpo in (text, html):
+        assert "Emma Rangel" in cuerpo
+        assert "Te confirmamos tu cita de informes para conocer Maple Collège" in cuerpo
+        assert "jueves 4 de junio de 2026" in cuerpo  # mismo formato que D.4
+        assert "4:00 p.m." in cuerpo
+        assert "Campus 2" in cuerpo
+        assert "Blvd. V. Carranza 5064" in cuerpo  # dirección de la TABLA campus
+        assert "recorrido por las instalaciones" in cuerpo
+    # El link de Maps: en TEXTO la URL cruda; en HTML el <a> clickeable.
+    assert "https://www.google.com/maps/search/?api=1&query=Blvd" in text
+    assert (
+        '<a href="https://www.google.com/maps/search/?api=1&amp;query=Blvd">'
+        "Ver ubicación en Google Maps</a>" in html
+    )
 
 
 def test_render_cita_pendiente_email_completo() -> None:
