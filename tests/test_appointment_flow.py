@@ -403,6 +403,52 @@ async def test_handler_flujo_feliz_e2e(monkeypatch, caplog) -> None:
 
 
 # ============================================================
+# CRÍTICO — el correo NUNCA es load-bearing: si Resend/red falla, la cita igual
+# se crea y el cierre (appointment_id + campus) igual se devuelve.
+# ============================================================
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_correo_falla_cita_se_crea_igual(monkeypatch) -> None:
+    _mock_extractor(monkeypatch, fecha="2026-05-26", hora="10:00")
+    respx.get("https://x.supabase.co/rest/v1/lily_availability").mock(
+        return_value=httpx.Response(200, json=[
+            {"day_of_week": 2, "start_time": "09:00:00", "end_time": "17:00:00",
+             "slot_duration_minutes": 60, "active": True}])
+    )
+    respx.get("https://x.supabase.co/rest/v1/appointments").mock(
+        return_value=httpx.Response(200, json=[]))
+    respx.get("https://x.supabase.co/rest/v1/leads").mock(
+        return_value=httpx.Response(200, json=[]))
+    respx.post("https://x.supabase.co/rest/v1/leads").mock(
+        return_value=httpx.Response(201, json=[{"id": 42}]))
+    respx.post("https://x.supabase.co/rest/v1/appointments").mock(
+        return_value=httpx.Response(201, json=[{"id": 99}]))
+    respx.post("https://x.supabase.co/rest/v1/activity_events").mock(
+        return_value=httpx.Response(201, json=[{"id": 1}]))
+    _mock_campus_endpoint(1)
+
+    # El correo al papá REVIENTA (simula caída total de send_email).
+    async def boom(*a, **k):
+        raise RuntimeError("resend caído / red muerta")
+
+    monkeypatch.setattr("app.core.appointment_flow.send_email", boom)
+
+    estado = _estado_base(nombre_papa="Ana", nivel=NivelEducativo.KINDER)
+    now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)
+    result = await handle_appointment_intent(
+        "el martes 10am", estado, settings=_settings(lily_email="lily@maple.mx"), now=now
+    )
+
+    # La cita SE CREÓ y el cierre se devuelve (appointment_id + campus) → D.4 dispara.
+    assert result.appointment_id == 99
+    assert result.campus_id == 1
+    assert "appointment_created" in result.acciones
+    assert "Campus 1" in result.hint_para_prompt
+
+
+# ============================================================
 # Caso 7 — sin lily_email → email se loggea sin destinatario
 # ============================================================
 

@@ -72,6 +72,11 @@ class Settings(BaseSettings):
     # vía activity_events).
     lily_email: str = ""
     appointment_approval_url: str = ""  # link a la cita en Maple Platform
+    # Resend — correo real de confirmación al papá (Mensaje 2 de Gaby). Si
+    # `resend_api_key` está vacío, send_email cae al stub que solo loggea (el
+    # correo NUNCA es load-bearing: la cita y el cierre D.4 se hacen igual).
+    resend_api_key: str = ""
+    email_from: str = "Maple Collège <notificaciones@maplecollege.rrintecai.co>"
 
     # --- Google Calendar ---
     google_calendar_id: str = "admisiones@maplesaltillo.com"

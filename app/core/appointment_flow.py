@@ -45,7 +45,11 @@ from app.integrations.leads import (
     get_lead_by_session,
     update_lead,
 )
-from app.notifications.email import render_cita_pendiente_email, send_email
+from app.notifications.email import (
+    render_cita_pendiente_email,
+    render_confirmacion_email_papa,
+    send_email,
+)
 from app.tools.availability_checker import (
     AvailabilityResult,
     evaluar_dia,
@@ -688,64 +692,88 @@ async def handle_appointment_intent(
             availability=avail,
         )
 
-    # 5. Auditoría: emit_event + avanzar stage
+    # 5-6. Tail post-creación: eventos, stage y correos. TODO esto es BEST-EFFORT
+    # — la cita YA está creada. Va envuelto en try/except para que NINGÚN error
+    # (red, Resend, Supabase) impida devolver el AppointmentHandlerResult con el
+    # appointment_id → el cierre D.4 SIEMPRE se dispara. El correo nunca es
+    # load-bearing.
     acciones: list[str] = ["appointment_created"]
-    await emit_event(
-        "sofia_appointment_scheduled",
-        lead_id=lead_id,
-        session_id=estado.session_id,
-        description=(
-            f"Sofía solicitó cita para {fecha_humana} en "
-            f"{campus.nombre if campus else f'campus_id={campus_id}'} (pendiente de aprobación)"
-        ),
-        metadata={
-            "appointment_id": appointment_id,
-            "fecha_hora": fecha_dt.isoformat(),
-            "canal": estado.canal.value,
-            "status": "pendiente",
-            "campus_id": campus_id,
-        },
-        settings=settings,
-    )
-    acciones.append("event_emitted")
-
-    # advance_stage requiere conocer el stage actual; obtenemos el lead recién
-    lead_now = await get_lead_by_session(estado.session_id, settings=settings)
-    if lead_now and lead_now.stage != "cita_agendada":
-        avanzado = await advance_stage_if_lower(
-            lead_id, lead_now.stage, "cita_agendada", settings=settings
+    try:
+        await emit_event(
+            "sofia_appointment_scheduled",
+            lead_id=lead_id,
+            session_id=estado.session_id,
+            description=(
+                f"Sofía solicitó cita para {fecha_humana} en "
+                f"{campus.nombre if campus else f'campus_id={campus_id}'} (pendiente de aprobación)"
+            ),
+            metadata={
+                "appointment_id": appointment_id,
+                "fecha_hora": fecha_dt.isoformat(),
+                "canal": estado.canal.value,
+                "status": "pendiente",
+                "campus_id": campus_id,
+            },
+            settings=settings,
         )
-        if avanzado:
-            acciones.append("stage_advanced")
-            await emit_event(
-                "lead_stage_changed",
-                lead_id=lead_id,
-                session_id=estado.session_id,
-                description=f"Stage avanzó de {lead_now.stage} a cita_agendada",
-                metadata={"from": lead_now.stage, "to": "cita_agendada"},
-                settings=settings,
-            )
+        acciones.append("event_emitted")
 
-    # 6. Email stub a Lily
-    nombre_hijo, edad_hijo = _primer_hijo(estado)
-    subject, body = render_cita_pendiente_email(
-        nombre_papa=estado.estado_capturado.nombre_papa,
-        nombre_hijo=nombre_hijo,
-        edad_hijo=edad_hijo,
-        nivel=_nivel_para_leads(estado),
-        fecha_hora_iso=fecha_dt.isoformat(),
-        canal=estado.canal.value,
-        appointment_id=appointment_id,
-        approval_url=settings.appointment_approval_url or None,
-    )
-    if settings.lily_email:
-        await send_email(settings.lily_email, subject, body, settings=settings)
-        acciones.append("email_sent_to_lily")
-    else:
-        # Email queda solo en logs; Maple Platform mostrará la notificación
-        # vía activity_events
-        await send_email("", subject, body, settings=settings)
-        acciones.append("email_skipped_no_recipient")
+        # advance_stage requiere conocer el stage actual; obtenemos el lead recién
+        lead_now = await get_lead_by_session(estado.session_id, settings=settings)
+        if lead_now and lead_now.stage != "cita_agendada":
+            avanzado = await advance_stage_if_lower(
+                lead_id, lead_now.stage, "cita_agendada", settings=settings
+            )
+            if avanzado:
+                acciones.append("stage_advanced")
+                await emit_event(
+                    "lead_stage_changed",
+                    lead_id=lead_id,
+                    session_id=estado.session_id,
+                    description=f"Stage avanzó de {lead_now.stage} a cita_agendada",
+                    metadata={"from": lead_now.stage, "to": "cita_agendada"},
+                    settings=settings,
+                )
+
+        # 6a. Aviso interno a Lily (cita pendiente).
+        nombre_hijo, edad_hijo = _primer_hijo(estado)
+        subject, body = render_cita_pendiente_email(
+            nombre_papa=estado.estado_capturado.nombre_papa,
+            nombre_hijo=nombre_hijo,
+            edad_hijo=edad_hijo,
+            nivel=_nivel_para_leads(estado),
+            fecha_hora_iso=fecha_dt.isoformat(),
+            canal=estado.canal.value,
+            appointment_id=appointment_id,
+            approval_url=settings.appointment_approval_url or None,
+        )
+        if settings.lily_email:
+            await send_email(settings.lily_email, subject, body, settings=settings)
+            acciones.append("email_sent_to_lily")
+        else:
+            await send_email("", subject, body, settings=settings)
+            acciones.append("email_skipped_no_recipient")
+
+        # 6b. Correo de CONFIRMACIÓN al PAPÁ (Mensaje 2 de Gaby) — al correo que
+        # capturamos. Resend; si falla, send_email NO lanza (solo loggea).
+        email_papa = (estado.estado_capturado.email_papa or "").strip()
+        if email_papa:
+            subj_p, body_p = render_confirmacion_email_papa(
+                nombre_papa=estado.estado_capturado.nombre_papa,
+                fecha_hora=fecha_dt,
+                campus=campus,
+            )
+            res_papa = await send_email(email_papa, subj_p, body_p, settings=settings)
+            acciones.append(
+                "email_papa_sent" if res_papa.delivered else "email_papa_failed"
+            )
+        else:
+            acciones.append("email_papa_skipped_sin_correo")
+    except Exception as exc:  # best-effort: NUNCA rompe el cierre de la cita
+        log.warning(
+            "appointment_tail_error (cita YA creada, se ignora)",
+            extra={"appointment_id": appointment_id, "error": str(exc)},
+        )
 
     # 7. Hint final para que Sofía responda al papá
     # El campus se ASIGNA aquí; el LLM debe MENCIONARLO pero NUNCA preguntar

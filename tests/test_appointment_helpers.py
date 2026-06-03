@@ -32,6 +32,7 @@ from app.integrations.leads import (
 from app.notifications.email import (
     EmailPayload,
     render_cita_pendiente_email,
+    render_confirmacion_email_papa,
     send_email,
 )
 
@@ -51,12 +52,12 @@ def _settings() -> Settings:
 
 @pytest.mark.asyncio
 async def test_send_email_stub_loggea(caplog) -> None:
+    """Sin RESEND_API_KEY → cae al stub (solo log), delivered=False."""
     caplog.set_level(logging.WARNING)
     result = await send_email("lily@maple.mx", "Asunto X", "Body Y", settings=_settings())
     assert isinstance(result, EmailPayload)
     assert result.delivered is False
     assert result.provider == "stub"
-    # Debe haber loggeado el envío
     assert any("email_stub_send" in r.message for r in caplog.records)
 
 
@@ -65,7 +66,108 @@ async def test_send_email_destinatario_vacio(caplog) -> None:
     caplog.set_level(logging.WARNING)
     result = await send_email("", "asunto", "body", settings=_settings())
     assert result.delivered is False
-    assert any("email_stub_skip" in r.message for r in caplog.records)
+    assert any("email_skip_destinatario_vacio" in r.message for r in caplog.records)
+
+
+def _settings_resend() -> Settings:
+    return Settings(
+        env="test",
+        supabase_url="https://x.supabase.co",
+        supabase_service_key="srv-key",
+        resend_api_key="re_test_key",
+        email_from="Maple Collège <notificaciones@maplecollege.rrintecai.co>",
+    )
+
+
+@pytest.mark.asyncio
+async def test_send_email_resend_ok(monkeypatch) -> None:
+    """Con RESEND_API_KEY, POSTea a Resend y marca delivered=True con el id."""
+    import httpx
+
+    captured = {}
+
+    class _Resp:
+        status_code = 200
+
+        def json(self):
+            return {"id": "resend-abc-123"}
+
+    class _Client:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, headers=None, json=None):
+            captured.update(url=url, headers=headers, json=json)
+            return _Resp()
+
+    monkeypatch.setattr(httpx, "AsyncClient", _Client)
+    res = await send_email(
+        "papa@correo.com", "Asunto", "Cuerpo del correo", settings=_settings_resend()
+    )
+    assert res.delivered is True
+    assert res.provider == "resend"
+    assert res.provider_id == "resend-abc-123"
+    # Envió el From, To y text correctos a Resend.
+    assert captured["url"].endswith("/emails")
+    assert captured["json"]["from"] == "Maple Collège <notificaciones@maplecollege.rrintecai.co>"
+    assert captured["json"]["to"] == ["papa@correo.com"]
+    assert captured["json"]["text"] == "Cuerpo del correo"
+    assert "re_test_key" in captured["headers"]["Authorization"]
+
+
+@pytest.mark.asyncio
+async def test_send_email_resend_falla_no_lanza(monkeypatch, caplog) -> None:
+    """Si Resend lanza (red caída), send_email NO propaga: delivered=False + error."""
+    import httpx
+
+    class _Client:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, *a, **k):
+            raise httpx.ConnectError("network down")
+
+    monkeypatch.setattr(httpx, "AsyncClient", _Client)
+    caplog.set_level(logging.WARNING)
+    res = await send_email("papa@correo.com", "S", "B", settings=_settings_resend())
+    assert res.delivered is False
+    assert res.error and "network down" in res.error
+    assert any("email_resend_error" in r.message for r in caplog.records)
+
+
+def test_render_confirmacion_email_papa() -> None:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.tools.campus import CampusResult
+
+    campus = CampusResult(
+        id=2, nombre="Campus 2", direccion="Blvd. V. Carranza 5064", colonia="Doctores",
+        ciudad="Saltillo", estado="Coahuila", niveles=["secundaria_1"],
+        google_maps_url="https://www.google.com/maps/search/?api=1&query=Blvd",
+    )
+    dt = datetime(2026, 6, 4, 16, 0, tzinfo=ZoneInfo("America/Monterrey"))
+    subject, body = render_confirmacion_email_papa(
+        nombre_papa="Emma Rangel", fecha_hora=dt, campus=campus
+    )
+    assert subject == "Confirmación de tu cita de informes — Maple Collège"
+    assert "Emma Rangel" in body
+    assert "jueves 4 de junio de 2026" in body  # mismo formato que D.4
+    assert "4:00 p.m." in body
+    assert "Campus 2" in body
+    assert "Blvd. V. Carranza 5064" in body  # dirección de la TABLA campus
 
 
 def test_render_cita_pendiente_email_completo() -> None:
