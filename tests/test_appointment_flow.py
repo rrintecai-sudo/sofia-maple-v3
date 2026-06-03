@@ -954,6 +954,14 @@ async def test_ensure_lead_no_actualiza_si_no_cambia(monkeypatch) -> None:
         (5, None, "kinder", "3° de Kinder"),      # K3 = 5
         (6, None, "primaria", "1° de Primaria"),  # 72m
         (1, None, "maternal", None),       # 12m → Babies (maternal, sin grado)
+        # Primaria 4-6 + Secundaria (confirmado Lily 2026, numeración RELATIVA):
+        (9, "primaria", "primaria", "4° de Primaria"),
+        (10, "primaria", "primaria", "5° de Primaria"),
+        (11, "primaria", "primaria", "6° de Primaria"),
+        (12, "secundaria", "secundaria", "1° de Secundaria"),
+        (13, "secundaria", "secundaria", "2° de Secundaria"),  # caso real Emma/Emanuel
+        (13, None, "secundaria", "2° de Secundaria"),          # sin preferencia, igual
+        (14, "secundaria", "secundaria", "3° de Secundaria"),
     ],
 )
 async def test_derivar_nivel_grado_de_edad(edad, pref, cat, grado) -> None:

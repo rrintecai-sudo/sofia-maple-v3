@@ -189,6 +189,14 @@ _NIVELES_FALLBACK: tuple[tuple[str, int, int, list[str], str], ...] = (
     ("primaria", 72, 84, ["1°"], "Primero de Primaria"),
     ("primaria", 84, 96, ["2°"], "Segundo de Primaria"),
     ("primaria", 96, 108, ["3°"], "Tercero de Primaria"),
+    # Primaria 4-6 y Secundaria — confirmado por Lily 2026 (numeración RELATIVA al
+    # nivel, una banda de un año por grado). Espejo de niveles_por_edad (ids 51-56).
+    ("primaria", 108, 120, ["4°"], "Cuarto de Primaria"),
+    ("primaria", 120, 132, ["5°"], "Quinto de Primaria"),
+    ("primaria", 132, 144, ["6°"], "Sexto de Primaria"),
+    ("secundaria", 144, 156, ["1°"], "Primero de Secundaria"),
+    ("secundaria", 156, 168, ["2°"], "Segundo de Secundaria"),
+    ("secundaria", 168, 180, ["3°"], "Tercero de Secundaria"),
 )
 
 async def derivar_nivel_grado_de_edad(
