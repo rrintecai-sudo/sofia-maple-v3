@@ -62,6 +62,27 @@ from app.tools.niveles import consultar_edades_de_nivel
 
 log = logging.getLogger(__name__)
 
+# Intents donde el papá hace una pregunta SUSTANTIVA: durante la colección del
+# agendado, Haiku SÍ responde estos (tiene la info/tools). En cualquier otro intent
+# (dar datos, respuesta corta, confuso), la pregunta del campo la pone el código.
+_PREGUNTAS_SUSTANTIVAS = frozenset({
+    Intent.PREGUNTA_COSTOS,
+    Intent.PREGUNTA_HORARIO,
+    Intent.PREGUNTA_NIVEL,
+    Intent.PREGUNTA_METODOLOGIA,
+    Intent.PREGUNTA_PROCESO_ADMISION,
+    Intent.PREGUNTA_ESTANCIAS,
+    Intent.PREGUNTA_BECAS,
+    Intent.PREGUNTA_CAMPUS,
+    Intent.PREGUNTA_PREPA,
+    Intent.PREGUNTA_GENERAL_MAPLE,
+    Intent.MENCIONA_DIAGNOSTICO,
+    Intent.OBJECION_CARO,
+    Intent.OBJECION_FLEXIBLE,
+    Intent.OBJECION_TAREA,
+    Intent.OBJECION_OTRA,
+})
+
 # Comandos especiales — Modo Aprendizaje
 COMANDO_ENTRAR_APRENDIZAJE = "maple2026"
 COMANDOS_SALIR_APRENDIZAJE = ("/salir", "salir")
@@ -436,8 +457,28 @@ async def procesar_turno(
     llm_latency = 0
     extra_messages: list[dict[str, Any]] = []  # feedback de validators para reintentos
 
+    # COLECCIÓN DETERMINÍSTICA (2026-06-04): durante el agendado, la pregunta del
+    # único campo faltante la genera el CÓDIGO (plantilla fija). Usamos esa respuesta
+    # y NO llamamos a Haiku — salvo que el papá haga una pregunta SUSTANTIVA
+    # (costos/campus/metodología/objeción), donde Haiku sí debe contestar. Así no
+    # puede bundlear, reordenar ni improvisar ("solicitud") durante la colección.
+    coleccion_directa = bool(
+        appointment_handler is not None
+        and appointment_handler.mensaje_coleccion
+        and appointment_handler.appointment_id is None
+        and intent_result.intent not in _PREGUNTAS_SUSTANTIVAS
+    )
+
     llm_started = time.perf_counter()
     for intento in range(max_regen + 1):
+        if coleccion_directa:
+            response_text = appointment_handler.mensaje_coleccion  # type: ignore[union-attr]
+            final_report = None
+            log.info(
+                "coleccion_directa (pregunta por código, sin Haiku)",
+                extra={"session_id": session_id, "acciones": appointment_handler.acciones},
+            )
+            break
         try:
             message = await anthropic.chat(
                 system_blocks=system_blocks,

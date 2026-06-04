@@ -1029,6 +1029,53 @@ async def test_derivar_edad_fuera_de_tabla_devuelve_none() -> None:
     assert await derivar_nivel_grado_de_edad(None) is None
 
 
+# ============================================================
+# POLÍTICA A (2026-06-04) — el grado DECLARADO por el papá manda sobre la edad
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_politica_a_grado_declarado_manda_sobre_edad() -> None:
+    """Caso María: declaró '1° de Primaria' (canónico) + edad 7 (derivaría 2°) →
+    se RESPETA el declarado, NO se sobreescribe."""
+    from app.core.appointment_flow import _consolidar_y_derivar_hijo
+    from app.core.state import EstadoCapturado, HijoInfo, NivelEducativo
+
+    capt = EstadoCapturado(
+        hijos=[HijoInfo(nombre="Juan", edad=7, nivel=NivelEducativo.PRIMARIA, grado="1° de Primaria")]
+    )
+    derivado = await _consolidar_y_derivar_hijo(capt)
+    assert capt.hijos[0].grado == "1° de Primaria"  # declarado, NO 2°
+    assert derivado is None  # no derivó (había grado canónico)
+
+
+@pytest.mark.asyncio
+async def test_politica_a_sin_grado_declarado_deriva_por_edad() -> None:
+    """Sin grado declarado, la edad SIGUE derivando (no rompe lo de ayer)."""
+    from app.core.appointment_flow import _consolidar_y_derivar_hijo
+    from app.core.state import EstadoCapturado, HijoInfo, NivelEducativo
+
+    capt = EstadoCapturado(
+        hijos=[HijoInfo(nombre="Ema", edad=4, nivel=NivelEducativo.KINDER, grado=None)]
+    )
+    await _consolidar_y_derivar_hijo(capt)
+    assert capt.hijos[0].grado == "2° de Kinder"  # derivado por edad
+
+
+@pytest.mark.asyncio
+async def test_politica_a_grado_parcial_aun_se_deriva() -> None:
+    """Un grado PARCIAL ('kinder' sin año) NO es canónico → la edad lo completa
+    (FIX 2 sigue vigente bajo Política A)."""
+    from app.core.appointment_flow import _consolidar_y_derivar_hijo
+    from app.core.state import EstadoCapturado, HijoInfo, NivelEducativo
+
+    capt = EstadoCapturado(
+        hijos=[HijoInfo(nombre="Lu", edad=5, nivel=NivelEducativo.KINDER, grado="kinder")]
+    )
+    await _consolidar_y_derivar_hijo(capt)
+    assert capt.hijos[0].grado == "3° de Kinder"
+
+
 def test_datos_faltantes_maternal_no_pide_grado() -> None:
     """En Maternal, la edad determina el sub-grupo (Cubs/Baby/Infants/Toddlers).
     No se exige grado_hijo separado."""

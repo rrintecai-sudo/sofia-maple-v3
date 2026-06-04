@@ -34,6 +34,7 @@ from app.core.appointment_extractor import (
     extraer_proximo_dia_semana,
     fecha_humana_solo_dia,
 )
+from app.core.appointment_messages import render_pregunta_campo
 from app.core.campus_resolver import resolve_campus_from_estado
 from app.core.state import EstadoCapturado, EstadoConversacion, NivelEducativo
 from app.core.state_extractor import extraer_grado_simple
@@ -76,6 +77,10 @@ class AppointmentHandlerResult:
     campus: CampusResult | None = None
     appointment_datetime: AppointmentDateTime | None = None
     availability: AvailabilityResult | None = None
+    # Pregunta determinística por el ÚNICO campo faltante (un solo campo, plantilla
+    # fija). El orchestrator la usa como respuesta SALVO que el papá haga una
+    # pregunta sustantiva (costos/campus/objeción) — ahí responde Haiku.
+    mensaje_coleccion: str | None = None
 
 
 # ============================================================
@@ -359,21 +364,41 @@ def _rescatar_de_propuesta(
     return rescatados
 
 
+def _nivel_de_grado_canonico(grado: str | None) -> NivelEducativo | None:
+    """'1° de Primaria' → NivelEducativo.PRIMARIA. None si no se reconoce."""
+    if not grado:
+        return None
+    g = grado.lower()
+    for clave, nivel in (
+        ("kinder", NivelEducativo.KINDER),
+        ("primaria", NivelEducativo.PRIMARIA),
+        ("secundaria", NivelEducativo.SECUNDARIA),
+        ("maternal", NivelEducativo.MATERNAL),
+    ):
+        if clave in g:
+            return nivel
+    return None
+
+
 async def _consolidar_y_derivar_hijo(
     capt: EstadoCapturado, *, settings: Settings | None = None
 ) -> tuple[str, str | None, str] | None:
-    """FIX 1 (2026-06-01): consolida los hijos en uno y DEDUCE nivel/grado de la
-    edad (no se pregunta). Devuelve (categoria, grado, nombre_display) deducido
-    para que Sofía lo DECLARE. Respeta el nivel/grado que el papá ya dio.
+    """Consolida los hijos en uno y, POR EDAD, deduce nivel/grado SOLO cuando el
+    papá no declaró un grado canónico (Política A, 2026-06-04). Devuelve
+    (categoria, grado, nombre_display) derivado, o None si no derivó.
     """
     hijo = capt.hijo_efectivo()
     if hijo is None:
         return None
     derivado: tuple[str, str | None, str] | None = None
-    # FIX (2) (2026-06-02): la deducción por edad MANDA sobre un grado parcial o
-    # malformado (ej. "kinder" sin año, que el extractor LLM dejó truthy y
-    # bloqueaba la deducción). Solo se respeta un grado CANÓNICO ("3° de Kinder").
+    # POLÍTICA A (2026-06-04): un grado CANÓNICO declarado por el papá ("1° de
+    # Primaria", incl. "primero de primaria" ya canonicalizado) MANDA — la edad NO
+    # lo sobreescribe. La derivación por edad solo aplica si NO hay grado canónico
+    # (grado parcial tipo "kinder", o sin grado). FIX (2) sigue vigente para parciales.
     grado_canonico = bool(hijo.grado) and bool(_GRADO_CANONICO_RE.match(hijo.grado.strip()))
+    # El nivel se infiere del GRADO declarado (no de la edad) para no contradecirlo.
+    if grado_canonico and hijo.nivel is None:
+        hijo.nivel = _nivel_de_grado_canonico(hijo.grado)
     if hijo.edad is not None and (hijo.nivel is None or not grado_canonico):
         nivel_pref = hijo.nivel.value if hijo.nivel else (
             capt.nivel_buscado_actual.value if capt.nivel_buscado_actual else None
@@ -482,6 +507,9 @@ async def handle_appointment_intent(
                 resumen_cap,
                 extra=f" NO inventes una fecha.{horario_linea}",
             ),
+            mensaje_coleccion=render_pregunta_campo(
+                "dia", horario="Atendemos de lunes a viernes, de 9:00 a.m. a 5:00 p.m."
+            ),
             acciones=["extract_failed"],
             appointment_datetime=appt_dt,
         )
@@ -538,6 +566,11 @@ async def handle_appointment_intent(
             )
         resumen_cap = _resumen_capturado(estado, fecha_slot=fecha_slot, hora_slot=None)
         capt.ultimo_campo_pedido = "hora"
+        horas_libres = (
+            _formatear_horas(eval_dia.alternativas[:6])
+            if eval_dia is not None and eval_dia.available and eval_dia.alternativas
+            else None
+        )
         return AppointmentHandlerResult(
             hint_para_prompt=_instruccion_un_campo(
                 f"a qué HORA le queda mejor el {dia_resuelto}",
@@ -546,6 +579,9 @@ async def handle_appointment_intent(
                     f" Usa EXACTAMENTE ese día ({dia_resuelto}); NO lo recalcules ni "
                     f"inventes otro.{horas_linea}"
                 ),
+            ),
+            mensaje_coleccion=render_pregunta_campo(
+                "hora", dia=dia_resuelto, horas_libres=horas_libres
             ),
             acciones=["missing_time"],
             appointment_datetime=appt_dt,
@@ -630,10 +666,15 @@ async def handle_appointment_intent(
         # El CÓDIGO elige el ÚNICO dato a pedir (el primero faltante por prioridad);
         # Haiku solo lo frasea. Nunca elige qué pedir ni re-pregunta un slot lleno.
         pedir = _ETIQUETA_CAMPO.get(faltantes[0], faltantes[0])
-        capt.ultimo_campo_pedido = _CLAVE_CAMPO.get(faltantes[0])
+        clave = _CLAVE_CAMPO.get(faltantes[0])
+        capt.ultimo_campo_pedido = clave
         resumen = _resumen_capturado(estado, fecha_slot=fecha_slot, hora_slot=hora_slot)
+        nombre_hijo_actual, _ = _primer_hijo(estado)
         return AppointmentHandlerResult(
             hint_para_prompt=_instruccion_un_campo(pedir, resumen),
+            mensaje_coleccion=render_pregunta_campo(clave, nombre_hijo=nombre_hijo_actual)
+            if clave
+            else None,
             acciones=[f"missing_lead_data:{','.join(faltantes)}"],
             appointment_datetime=appt_dt,
             availability=avail,

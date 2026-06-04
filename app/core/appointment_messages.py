@@ -92,6 +92,46 @@ def _maps_line(google_maps_url: str | None, canal: str | None) -> str | None:
     return f"🗺️ {google_maps_url}"
 
 
+# ============================================================
+# Preguntas de COLECCIÓN determinísticas (2026-06-04). La pregunta de cada campo
+# la genera el CÓDIGO con plantilla FIJA (un solo campo), no Haiku → no puede
+# bundlear, reordenar ni improvisar wording ("solicitud"). El override en el
+# orchestrator las usa salvo que el papá haga una pregunta sustantiva.
+# ============================================================
+
+
+def render_pregunta_campo(
+    campo: str,
+    *,
+    nombre_hijo: str | None = None,
+    dia: str | None = None,
+    horario: str | None = None,
+    horas_libres: str | None = None,
+) -> str | None:
+    """Pregunta FIJA por el único `campo` que falta. None si el campo no tiene
+    plantilla (el caller cae a Haiku con el hint)."""
+    hijo = nombre_hijo or "tu peque"
+    linea_horario = f" {horario}" if horario else ""
+    if campo == "dia":
+        return (
+            "¿Qué día te queda mejor para tu visita?" + linea_horario
+        ).strip()
+    if campo == "hora":
+        base = f"¿A qué hora del {dia} te viene bien?" if dia else "¿A qué hora te viene bien?"
+        if horas_libres:
+            return f"{base} Ese día tenemos disponibles: {horas_libres}."
+        return base + linea_horario
+    plantillas = {
+        "nombre_hijo": "Para agendar tu cita, ¿me confirmas el nombre completo de tu hijo/a? 😊",
+        "edad": f"¿Y qué edad tiene {hijo}?",
+        "grado": f"¿En qué grado está {hijo}?",
+        "nombre_papa": "Perfecto. ¿Y cuál es tu nombre completo?",
+        "correo": "Gracias. ¿Me compartes tu correo electrónico para enviarte la confirmación?",
+        "telefono": "Y por último, ¿me das tu número de celular?",
+    }
+    return plantillas.get(campo)
+
+
 def render_registration_message(
     *,
     fecha_hora: datetime,

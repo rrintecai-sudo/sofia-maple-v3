@@ -1669,9 +1669,11 @@ async def test_codigo_decide_pregunta_y_cierre_con_haiku_terco() -> None:
 
     _enter(leaf)
     try:
+        respuestas = []
         result = None
         for t in turnos:
             result = await procesar_turno(mensaje=t, session_id="web:terco", canal=None)
+            respuestas.append(result.response)
     finally:
         _exit(leaf)
 
@@ -1686,18 +1688,15 @@ async def test_codigo_decide_pregunta_y_cierre_con_haiku_terco() -> None:
     assert capt.nombre_papa == "Oscar"
     assert capt.email_papa == "oscar@oscar.com" and capt.telefono == "8441234567"
 
-    # (b) Cada hint pidió UN solo campo, en orden, SIN repetir uno ya capturado.
-    # (T1 fija día+hora juntos → no se pide ninguno; se piden los 6 datos uno a uno.)
-    pedidos = [_campo_pedido(h) for h in haiku.hints if _campo_pedido(h)]
-    assert pedidos == [
-        "el nombre completo del niño/a",
-        "la edad del niño/a",
-        "tu nombre",
-        "tu correo electrónico",
-        "tu número de celular",
-    ]
-    # Ningún campo se pidió dos veces (no hay bucle de re-pregunta).
-    assert len(pedidos) == len(set(pedidos))
+    # (b) Las respuestas de colección las generó el CÓDIGO (Haiku NO se llamó),
+    # un solo campo por turno, en orden. (T1 fija día+hora → pide nombre del hijo.)
+    assert len(haiku.hints) <= 1  # solo el turno de CIERRE llama a Haiku (D.4 lo sobreescribe)
+    assert "nombre completo de tu hijo" in respuestas[0]
+    assert "edad tiene Emanuel" in respuestas[1]
+    assert "tu nombre completo" in respuestas[2]
+    assert "correo electrónico" in respuestas[3]
+    assert "número de celular" in respuestas[4]
+    assert "https://www.google.com/maps" in respuestas[5]  # cierre D.4
 
 
 # ============================================================
@@ -1858,8 +1857,10 @@ async def test_apellido_hijo_no_se_vuelve_nombre_papa() -> None:
     ]
     _enter(leaf)
     try:
+        respuestas = []
         for t in turnos_sin_nombre_papa:
-            await procesar_turno(mensaje=t, session_id="web:apellido", canal=None)
+            r = await procesar_turno(mensaje=t, session_id="web:apellido", canal=None)
+            respuestas.append(r.response)
     finally:
         _exit(leaf)
 
@@ -1870,9 +1871,9 @@ async def test_apellido_hijo_no_se_vuelve_nombre_papa() -> None:
     assert create_appt.await_count == 0
     assert capt.fase_agendado == FaseAgendado.AGENDANDO  # sigue esperando el nombre
 
-    # El último hint pidió EXACTAMENTE el nombre del papá (no cerró sin él).
-    pedidos = [_campo_pedido(h) for h in haiku.hints if _campo_pedido(h)]
-    assert pedidos and pedidos[-1] == "tu nombre"
+    # La última respuesta (generada por el CÓDIGO) pidió EXACTAMENTE el nombre del papá.
+    assert haiku.hints == []
+    assert "tu nombre completo" in respuestas[-1]
 
     # Ahora el papá SÍ da su nombre ("yo soy Oscar") → se captura y cierra.
     haiku2 = _HaikuTerco()
@@ -1940,12 +1941,12 @@ async def test_nombre_hijo_suelto_tras_pregunta_cierra() -> None:
 
 @pytest.mark.asyncio
 async def test_pide_un_solo_campo_a_la_vez_sin_bundlear() -> None:
-    """El CÓDIGO pide UN campo a la vez: nunca bundlea 'tu nombre y tu celular'
-    en una sola pregunta. (El hint controla la pregunta, no Haiku.)"""
+    """El CÓDIGO pide UN campo a la vez con plantilla fija: la RESPUESTA es del
+    código (Haiku no se llama en colección), nunca bundlea ni improvisa."""
     from app.core.orchestrator import procesar_turno
 
     repo = _nuevo_repo_explorando("web:unocampo")
-    haiku = _HaikuTerco()
+    haiku = _HaikuTerco()  # si se llamara, metería "videollamada" — NO debe pasar
     create_appt = AsyncMock(side_effect=lambda **kw: 100 + create_appt.await_count)
     leaf = _leaf_determinista(repo, haiku, create_appt)
 
@@ -1959,14 +1960,78 @@ async def test_pide_un_solo_campo_a_la_vez_sin_bundlear() -> None:
     ]
     _enter(leaf)
     try:
+        respuestas = []
         for t in turnos:
-            await procesar_turno(mensaje=t, session_id="web:unocampo", canal=None)
+            r = await procesar_turno(mensaje=t, session_id="web:unocampo", canal=None)
+            respuestas.append(r.response)
     finally:
         _exit(leaf)
 
-    # Cada hint pidió EXACTAMENTE un campo; ninguno bundleó dos.
-    pedidos = [_campo_pedido(h) for h in haiku.hints if _campo_pedido(h)]
-    assert pedidos, "el código debió pedir al menos un campo"
-    for p in pedidos:
-        assert " y " not in p, f"hint bundleó dos campos: {p!r}"
-    assert len(pedidos) == len(set(pedidos))  # sin repetir (sin bucle)
+    # Las 5 primeras son preguntas determinísticas de UN solo campo, en orden.
+    assert "nombre completo de tu hijo" in respuestas[0]
+    assert "edad tiene Diego Pérez" in respuestas[1]
+    assert "tu nombre completo" in respuestas[2]
+    assert "correo electrónico" in respuestas[3]
+    assert "número de celular" in respuestas[4]
+    # Haiku NO se llamó en colección → su invento no aparece nunca.
+    for r in respuestas[:5]:
+        assert "videollamada" not in r
+    assert len(haiku.hints) <= 1  # solo el turno de CIERRE llama a Haiku (D.4 lo sobreescribe)
+    # La 6ª cierra con D.4 (override de cierre).
+    assert "https://www.google.com/maps" in respuestas[5]
+
+
+# ============================================================
+# 17. REGRESIÓN INTEGRAL (2026-06-04): el caso de MARÍA de punta a punta.
+#     Bundle "X, hijo Y" (papá + hijo en un turno) + grado declarado "primero de
+#     primaria" sin edad. Antes: ghost-close (nombre_papa=None), edad pedida al
+#     final, grado pisado a 2°, Maps improvisado. Ahora: CIERRA con D.4,
+#     nombre_papa="Maria Urdaneta", grado="1° de Primaria" (Política A), Campus 1.
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_maria_bundle_y_grado_declarado_cierra_e2e() -> None:
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import FaseAgendado, HijoInfo, NivelEducativo
+
+    repo = _nuevo_repo_explorando("web:maria")
+    # Entra a la colección ya con el grado DECLARADO (como en T1 "primero de
+    # primaria", ya canonicalizado) y SIN edad — el patrón que rompía.
+    repo._conv.estado_capturado.hijos = [
+        HijoInfo(nombre=None, edad=None, nivel=NivelEducativo.PRIMARIA, grado="1° de Primaria")
+    ]
+    haiku = _HaikuTerco()
+    create_appt = AsyncMock(side_effect=lambda **kw: 600 + create_appt.await_count)
+    leaf = _leaf_determinista(repo, haiku, create_appt)
+
+    turnos = [
+        "quiero agendar el viernes a las 10am",          # día+hora → AGENDANDO
+        "maria urdaneta, hijo juan david wilchez",       # BUNDLE: papá + hijo en un turno
+        "tiene 7 años",                                  # edad (pedida EN ORDEN, no al final)
+        "ingenieriademarketing@gmail.com, 6622236125",   # correo + cel → 6 datos → CIERRA
+    ]
+    _enter(leaf)
+    try:
+        result = None
+        for t in turnos:
+            result = await procesar_turno(mensaje=t, session_id="web:maria", canal=None)
+    finally:
+        _exit(leaf)
+
+    capt = repo._conv.estado_capturado
+    # Bundle capturó AMBOS nombres en su slot correcto.
+    assert capt.nombre_papa == "Maria Urdaneta"
+    assert capt.hijos[0].nombre == "Juan David Wilchez"
+    # Política A: la edad (7) está, PERO el grado DECLARADO ("1° de Primaria") manda
+    # — NO se pisó con el derivado por edad (que sería 2°).
+    assert capt.hijos[0].edad == 7
+    assert capt.hijos[0].grado == "1° de Primaria"
+    assert capt.email_papa == "ingenieriademarketing@gmail.com"
+    assert capt.telefono == "6622236125"
+    # CERRÓ con D.4 + Maps de TABLA (Campus 1), no "Lily te contacta" ni "solicitud".
+    assert create_appt.await_count == 1
+    assert capt.fase_agendado == FaseAgendado.CERRADO
+    assert capt.campus_cita == "Campus 1"
+    assert "https://www.google.com/maps" in result.response
+    assert "Lily te" not in result.response and "solicitud" not in result.response

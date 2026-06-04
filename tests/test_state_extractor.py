@@ -20,7 +20,60 @@ from app.core.state_extractor import (
     extraer_telefono,
     nombre_hijo_por_contexto,
     nombre_papa_por_contexto,
+    parsear_bundle_papa_hijo,
 )
+
+# ============================================================
+# FIX (2026-06-04) — parser acotado del bundle "X, hijo Y" (caso María)
+# ============================================================
+
+
+@pytest.mark.parametrize(
+    "mensaje,papa,hijo",
+    [
+        # Caso REAL de María: papá + hijo en un turno.
+        ("maria urdaneta, hijo juan david wilchez", "Maria Urdaneta", "Juan David Wilchez"),
+        ("Ana López, mi hija se llama Lucía", "Ana López", "Lucía"),
+        ("soy Pedro, mi hijo es Diego", "Pedro", "Diego"),
+        # Solo hijo (sin papá antes del marcador) → papá None.
+        ("se llama Emanuel", None, "Emanuel"),
+        ("mi hijo Mateo", None, "Mateo"),
+        # Sin marcador de hijo → no aplica el bundle.
+        ("Oscar Rodriguez", None, None),
+        ("hola quiero agendar", None, None),
+    ],
+)
+def test_parsear_bundle_papa_hijo(mensaje, papa, hijo) -> None:
+    assert parsear_bundle_papa_hijo(mensaje) == (papa, hijo)
+
+
+def test_fallback_bundle_captura_papa_y_hijo() -> None:
+    """El bundle de María: 'maria urdaneta, hijo juan david wilchez' → AMBOS slots,
+    el papá NO se cae por la regla de no-explícito."""
+    res = _aplicar_fallbacks_deterministicos(
+        ExtraccionTurno(), "maria urdaneta, hijo juan david wilchez"
+    )
+    assert res.nombre_papa == "Maria Urdaneta"
+    assert res.nombre_papa_explicito is True  # sobrevive el drop de no-explícito
+    assert res.nombre_hijo == "Juan David Wilchez"
+
+
+@pytest.mark.parametrize(
+    "declarado,esperado",
+    [
+        ("primero de primaria", "1° de Primaria"),
+        ("segundo de primaria", "2° de Primaria"),
+        ("tercero de kinder", "3° de Kinder"),
+        ("2do primaria", "2° de Primaria"),
+        ("1° de Primaria", "1° de Primaria"),  # ya canónico, idempotente
+    ],
+)
+def test_fallback_canonicaliza_grado_declarado(declarado, esperado) -> None:
+    """Cambio A: un grado declarado en palabra se canonicaliza ('primero de
+    primaria' → '1° de Primaria') para que la edad NO lo pise (Política A)."""
+    res = _aplicar_fallbacks_deterministicos(ExtraccionTurno(grado_hijo=declarado), declarado)
+    assert res.grado_hijo == esperado
+
 
 # ============================================================
 # FIX (2026-06-02) — capa de captura DETERMINÍSTICA consolidada

@@ -324,6 +324,60 @@ def nombre_hijo_por_contexto(mensaje: str, ultimo_assistant: str | None) -> str 
     return _nombre_limpio_de_respuesta((mensaje or "").strip())
 
 
+def _tomar_nombre_inicial(texto: str, *, max_tokens: int = 3) -> str | None:
+    """Toma los primeros tokens-nombre de `texto` (parando en palabra-función o no
+    alfabético). 'juan david wilchez, ...' → 'Juan David Wilchez'."""
+    tokens: list[str] = []
+    for raw in re.split(r"[\s,;]+", texto or ""):
+        t = raw.lower().strip(",.;¿?¡!()")
+        if not t:
+            continue
+        if t in _PREFIJO_CORTESIA:
+            continue
+        if t in _PALABRAS_NO_NOMBRE or not re.match(r"^[a-záéíóúñ]+$", t):
+            break
+        tokens.append(t)
+        if len(tokens) >= max_tokens:
+            break
+    if not tokens:
+        return None
+    nombre = " ".join(w[:1].upper() + w[1:] for w in tokens)
+    return nombre if _es_nombre_valido(nombre) else None
+
+
+# Marcador de hijo para el BUNDLE: como _NOMBRE_HIJO_MARCADOR_RE pero con "mi"
+# OPCIONAL, para pescar "hijo X" pelón ('maria urdaneta, hijo juan david wilchez').
+_BUNDLE_HIJO_MARCADOR_RE = re.compile(
+    r"\b(?:"
+    r"se\s+llama|"
+    r"(?:mi\s+)?(?:hijo|hija|peque\w*|niñ[oa]|nin[oa]|beb[eé])(?:\s+(?:se\s+llama|es))?|"
+    r"el\s+niñ[oa]|la\s+niñ[oa]"
+    r")\s+",
+    re.IGNORECASE,
+)
+
+
+def parsear_bundle_papa_hijo(mensaje: str) -> tuple[str | None, str | None]:
+    """ALCANCE ACOTADO (lunes): parsea el patrón bundle 'X, hijo Y' donde el papá
+    dio AMBOS nombres en un turno (caso real de María: 'maria urdaneta, hijo juan
+    david wilchez'). El marcador de hijo PARTE el mensaje: lo de antes → papá; lo
+    de después → hijo. Devuelve (nombre_papa, nombre_hijo); cada uno puede ser None.
+
+    NO reemplaza los guards (eso es el refactor fast-follow); solo rescata el bundle
+    que hoy se cae por los 4 guards a la vez.
+    """
+    m = _BUNDLE_HIJO_MARCADOR_RE.search(mensaje or "")
+    if not m:
+        return None, None
+    antes = (mensaje or "")[: m.start()]
+    despues = (mensaje or "")[m.end() :]
+    hijo = _tomar_nombre_inicial(despues, max_tokens=3)
+    # El papá es el nombre limpio ANTES del marcador (sin email/tel), o una
+    # presentación explícita DESPUÉS ('... soy María').
+    papa = _nombre_limpio_de_respuesta(antes) or extraer_nombre_papa(despues)
+    return papa, hijo
+
+
 # Presentación EXPLÍCITA del papá ("yo soy X", "me llamo X", "mi nombre es X").
 # FIX (e): habilita corregir un nombre_papa clavado de una sesión contaminada.
 _PRESENTACION_RE = re.compile(
@@ -558,11 +612,18 @@ def _aplicar_fallbacks_deterministicos(
     if tel_det:
         result.telefono = tel_det
 
-    # --- Nombre del papá: presentación explícita ("yo soy X") o respuesta SUELTA
-    # a "¿tu nombre?". El gate persiste qué pidió (ultimo_campo_pedido) → la
-    # captura NO depende de cómo lo frasee Haiku. MANDAN + marcan flag. ---
-    nombre_papa_det = extraer_nombre_papa(mensaje) or nombre_papa_por_contexto(
-        mensaje, ultimo_assistant
+    # --- Bundle "X, hijo Y" (papá + hijo en un turno): parse acotado (caso María).
+    # El marcador de hijo parte el mensaje; lo de antes → papá. Rescata lo que hoy
+    # se cae por los 4 guards a la vez. ---
+    bundle_papa, bundle_hijo = parsear_bundle_papa_hijo(mensaje)
+
+    # --- Nombre del papá: presentación explícita ("yo soy X"), respuesta SUELTA
+    # a "¿tu nombre?" (ultimo_campo_pedido) o el papá del bundle. MANDAN + marcan
+    # flag → la captura NO depende de cómo lo frasee Haiku. ---
+    nombre_papa_det = (
+        extraer_nombre_papa(mensaje)
+        or nombre_papa_por_contexto(mensaje, ultimo_assistant)
+        or bundle_papa
     )
     if not nombre_papa_det and ultimo_campo_pedido == "nombre_papa":
         # El CÓDIGO pidió el nombre del papá el turno anterior → la respuesta suelta
@@ -589,6 +650,15 @@ def _aplicar_fallbacks_deterministicos(
             result.grado_hijo = grado_det
             if not result.nivel_buscado and nivel_det:
                 result.nivel_buscado = nivel_det
+    # CANONICALIZAR el grado declarado (FIX 2026-06-04): "primero de primaria" →
+    # "1° de Primaria". Así un grado que el papá DECLARA en palabra queda canónico
+    # y la derivación por edad NO lo pisa (Política A: el grado declarado manda).
+    if result.grado_hijo:
+        g_canon, niv_canon = extraer_grado_simple(result.grado_hijo)
+        if g_canon:
+            result.grado_hijo = g_canon
+            if not result.nivel_buscado and niv_canon:
+                result.nivel_buscado = niv_canon
 
     # --- Nombre del hijo: "Jose, 4 años" (pegado a edad), "se llama Emanuel"
     # (marcador) o "Emanuel Rodriguez" SUELTO tras "¿nombre de tu hijo?" (contexto)
@@ -596,6 +666,7 @@ def _aplicar_fallbacks_deterministicos(
     nombre_nino = (
         _nombre_junto_a_edad(mensaje)
         or extraer_nombre_hijo(mensaje)
+        or bundle_hijo
         or nombre_hijo_por_contexto(mensaje, ultimo_assistant)
     )
     if not nombre_nino and ultimo_campo_pedido == "nombre_hijo":
