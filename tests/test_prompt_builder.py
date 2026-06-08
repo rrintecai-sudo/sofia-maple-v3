@@ -466,3 +466,26 @@ def test_agendado_prompt_exige_dia_mas_fecha() -> None:
     full = "\n".join(b["text"] for b in blocks).lower()
     assert "día + fecha exacta" in full or "día+fecha" in full or "siempre juntos" in full
     assert "nunca menciones solo el día" in full or ("nunca" in full and "solo el día" in full)
+
+
+def test_rules_incluye_postura_tareas_y_examenes() -> None:
+    """FIX (2026-06-04): la postura de Maple sobre tareas/exámenes está en
+    rules.md (siempre cargado) → presente en TODO prompt."""
+    text = load_prompt_file("rules.md").lower()
+    # Tareas: no se manda tarea a casa + prohibición de "Sí, tenemos tareas".
+    assert "no" in text and "manda tareas a casa" in text
+    assert "nunca" in text and 'abras con "sí, tenemos tareas"' in text
+    # Exámenes: no memorización, entender y aplicar.
+    assert "memorización" in text and "entienda y aplique" in text
+
+
+def test_postura_tareas_en_build_system_blocks() -> None:
+    """La postura de tareas se inyecta en el system prompt en cualquier fase."""
+    from app.core.state import Canal, EstadoConversacion, FaseJourney
+
+    estado = EstadoConversacion.nueva("web:t")
+    estado.canal = Canal.WEB
+    estado.fase_journey = FaseJourney.DESCUBRIMIENTO
+    full = "\n".join(b["text"] for b in build_system_blocks(estado)).lower()
+    assert "manda tareas a casa" in full
+    assert 'abras con "sí, tenemos tareas"' in full

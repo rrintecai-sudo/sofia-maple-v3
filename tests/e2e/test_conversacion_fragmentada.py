@@ -24,12 +24,19 @@ el estado capturado se acumule turno a turno, como en producción.
 
 from __future__ import annotations
 
+from datetime import datetime
 from unittest.mock import AsyncMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 from app.core.appointment_flow import AppointmentHandlerResult
 from app.core.intent_classifier import Intent, IntentResult
 from app.core.state_extractor import ExtraccionTurno
+
+# Reloj FIJO para tests con resolución de fecha determinística (miércoles 3-jun
+# 2026, 9:00 a.m., antes del cierre de Lily). Inyectado vía procesar_turno(now=).
+# "mañana"→jue 4-jun; "el jueves"→4-jun; "el viernes"→5-jun; "hoy"→3-jun.
+_NOW_MIE = datetime(2026, 6, 3, 9, 0, tzinfo=ZoneInfo("America/Monterrey"))
 
 # ============================================================
 # Infra de test: repo stateful + fake anthropic
@@ -513,13 +520,15 @@ async def test_cierre_fragmentado_crea_y_persiste_cita() -> None:
     try:
         result = None
         for mensaje in SCRIPT:
-            result = await procesar_turno(mensaje=mensaje, session_id="whatsapp:e2e", canal=None)
+            result = await procesar_turno(
+                mensaje=mensaje, session_id="whatsapp:e2e", canal=None, now=_NOW_MIE
+            )
     finally:
         _exit(leaf)
 
     capt = repo._conv.estado_capturado
-    # Slots de fecha persistieron desde el turno 2 hasta el cierre
-    assert capt.cita_fecha_slot == "2026-06-01"
+    # "Mañana" (now=mié 3-jun) → jue 4-jun, resuelto por extraer_fecha_relativa.
+    assert capt.cita_fecha_slot == "2026-06-04"
     assert capt.cita_hora_slot == "10:00"
     # El CÓDIGO creó la cita exactamente una vez
     create_appt.assert_awaited_once()
@@ -530,7 +539,7 @@ async def test_cierre_fragmentado_crea_y_persiste_cita() -> None:
     # La respuesta final es la plantilla determinística D.4 (no la de Haiku)
     assert "ya quedó agendada" in result.response
     assert "Campus 1" in result.response
-    assert "1 de junio" in result.response
+    assert "4 de junio" in result.response
     assert "https://www.google.com/maps" in result.response
 
 
@@ -678,7 +687,9 @@ async def test_reproduccion_oscar_hora_suelta_y_nombre_obligatorio() -> None:
     try:
         result = None
         for mensaje in SCRIPT:
-            result = await procesar_turno(mensaje=mensaje, session_id="whatsapp:oscar", canal=None)
+            result = await procesar_turno(
+                mensaje=mensaje, session_id="whatsapp:oscar", canal=None, now=_NOW_MIE
+            )
             capt = repo._conv.estado_capturado
             if mensaje == "2pm":
                 # FIX 1: la hora suelta SÍ se guardó aunque la fecha vino antes
@@ -806,7 +817,9 @@ async def test_entrada_sucia_cierra_con_confirmacion() -> None:
     try:
         result = None
         for mensaje in SCRIPT:
-            result = await procesar_turno(mensaje=mensaje, session_id="whatsapp:sucia", canal=None)
+            result = await procesar_turno(
+                mensaje=mensaje, session_id="whatsapp:sucia", canal=None, now=_NOW_MIE
+            )
             capt = repo._conv.estado_capturado
             if mensaje == "viernes 10a,":
                 assert capt.cita_hora_slot == "10:00", "el typo '10a' no se rescató"
@@ -1191,7 +1204,9 @@ async def test_rearmado_captura_todo_del_mensaje_disparador() -> None:
 
     _enter(leaf)
     try:
-        result = await procesar_turno(mensaje=msg, session_id="web:reuse", canal=None)
+        result = await procesar_turno(
+            mensaje=msg, session_id="web:reuse", canal=None, now=_NOW_MIE
+        )
     finally:
         _exit(leaf)
 
@@ -1200,7 +1215,8 @@ async def test_rearmado_captura_todo_del_mensaje_disparador() -> None:
     assert capt.hijos[0].nombre == "Lucía"
     assert capt.hijos[0].edad == 5
     assert capt.hijos[0].grado == "3° de Kinder"  # deducido de 5 años
-    assert capt.cita_fecha_slot == "2026-06-11" and capt.cita_hora_slot == "11:00"
+    # "mañana" (now=mié 3-jun) → jue 4-jun (extraer_fecha_relativa, no el mock).
+    assert capt.cita_fecha_slot == "2026-06-04" and capt.cita_hora_slot == "11:00"
     # cerró en UN turno (todo venía + el papá ya estaba en el estado)
     create_appt.assert_awaited_once()
     assert capt.fase_agendado == FaseAgendado.CERRADO
@@ -1477,6 +1493,12 @@ def _leaf_determinista(repo, anthropic, create_appt):
         patch("app.core.orchestrator.get_campus_para_nivel", AsyncMock(return_value=None)),
         patch("app.core.orchestrator.consultar_edades_de_nivel", AsyncMock(return_value=None)),
         patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
+        patch("app.core.appointment_flow.resumen_disponibilidad",
+              AsyncMock(return_value="lunes a viernes de 8:00 a.m. a 3:00 p.m.")),
+        patch("app.core.appointment_flow.evaluar_dia",
+              AsyncMock(return_value=types.SimpleNamespace(
+                  available=True, reason="ok", alternativas=[],
+                  resumen="lunes a viernes de 8:00 a.m. a 3:00 p.m."))),
         patch("app.core.appointment_flow.is_slot_available",
               AsyncMock(return_value=types.SimpleNamespace(
                   available=True, reason="ok", alternativas=[], resumen=""))),
@@ -1802,6 +1824,12 @@ async def test_confirmacion_confuso_otro_con_datos_completos_cierra() -> None:
         patch("app.core.orchestrator.get_campus_para_nivel", AsyncMock(return_value=None)),
         patch("app.core.orchestrator.consultar_edades_de_nivel", AsyncMock(return_value=None)),
         patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
+        patch("app.core.appointment_flow.resumen_disponibilidad",
+              AsyncMock(return_value="lunes a viernes de 8:00 a.m. a 3:00 p.m.")),
+        patch("app.core.appointment_flow.evaluar_dia",
+              AsyncMock(return_value=types.SimpleNamespace(
+                  available=True, reason="ok", alternativas=[],
+                  resumen="lunes a viernes de 8:00 a.m. a 3:00 p.m."))),
         patch("app.core.appointment_flow.is_slot_available",
               AsyncMock(return_value=types.SimpleNamespace(
                   available=True, reason="ok", alternativas=[], resumen=""))),
@@ -1921,7 +1949,9 @@ async def test_nombre_hijo_suelto_tras_pregunta_cierra() -> None:
     try:
         result = None
         for t in turnos:
-            result = await procesar_turno(mensaje=t, session_id="web:hijosuelto", canal=None)
+            result = await procesar_turno(
+                mensaje=t, session_id="web:hijosuelto", canal=None, now=_NOW_MIE
+            )
     finally:
         _exit(leaf)
 
@@ -2035,3 +2065,38 @@ async def test_maria_bundle_y_grado_declarado_cierra_e2e() -> None:
     assert capt.campus_cita == "Campus 1"
     assert "https://www.google.com/maps" in result.response
     assert "Lily te" not in result.response and "solicitud" not in result.response
+
+
+# ============================================================
+# 18. REGRESIÓN (2026-06-04): "HOY" se resuelve y la pregunta del día NO se repite.
+#     Antes: "hoy" no se parseaba → la pregunta del día se re-renderizaba idéntica.
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_hoy_se_resuelve_y_no_repite_pregunta_del_dia() -> None:
+    from app.core.orchestrator import procesar_turno
+
+    repo = _nuevo_repo_explorando("web:hoy")
+    haiku = _HaikuTerco()
+    create_appt = AsyncMock(side_effect=lambda **kw: 700 + create_appt.await_count)
+    leaf = _leaf_determinista(repo, haiku, create_appt)
+
+    _enter(leaf)
+    try:
+        # T1: sin fecha → el código pide el DÍA.
+        r1 = await procesar_turno(
+            mensaje="quiero agendar una visita", session_id="web:hoy", canal=None, now=_NOW_MIE
+        )
+        # T2: "hoy" (mié 3-jun 9am) → resuelve a HOY (3-jun), NO repite la pregunta del día.
+        r2 = await procesar_turno(
+            mensaje="hoy", session_id="web:hoy", canal=None, now=_NOW_MIE
+        )
+    finally:
+        _exit(leaf)
+
+    capt = repo._conv.estado_capturado
+    assert capt.cita_fecha_slot == "2026-06-03"  # "hoy" resuelto, no None
+    assert "qué día" in r1.response.lower()       # T1 pidió el día
+    assert r2.response != r1.response             # T2 NO repite idéntico
+    assert "qué hora" in r2.response.lower()       # ya avanzó: ahora pide la hora

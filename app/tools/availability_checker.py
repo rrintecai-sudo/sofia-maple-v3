@@ -68,8 +68,15 @@ def _fmt_hhmm(t: time) -> str:
     return f"{t.hour}:{t.minute:02d}"
 
 
+def _fmt_hora_humana(t: time) -> str:
+    """'08:00' → '8:00 a.m.'; '15:00' → '3:00 p.m.' (estilo local mexicano)."""
+    sufijo = "a.m." if t.hour < 12 else "p.m."
+    h12 = t.hour % 12 or 12
+    return f"{h12}:{t.minute:02d} {sufijo}"
+
+
 def resumen_disponibilidad_humano(windows: list[LilyAvailabilityWindow]) -> str:
-    """'lunes a viernes de 8:00 a 15:00' a partir de las ventanas activas.
+    """'lunes a viernes de 8:00 a.m. a 3:00 p.m.' a partir de las ventanas activas.
 
     Agrupa días con el mismo horario y detecta rangos contiguos.
     """
@@ -92,7 +99,7 @@ def resumen_disponibilidad_humano(windows: list[LilyAvailabilityWindow]) -> str:
             dias_txt = f"{_DOW_NOMBRES[ordenados[0]]} a {_DOW_NOMBRES[ordenados[-1]]}"
         else:
             dias_txt = ", ".join(_DOW_NOMBRES[d] for d in ordenados)
-        partes.append(f"{dias_txt} de {_fmt_hhmm(st)} a {_fmt_hhmm(en)}")
+        partes.append(f"{dias_txt} de {_fmt_hora_humana(st)} a {_fmt_hora_humana(en)}")
     return "; ".join(partes)
 
 

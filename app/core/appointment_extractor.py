@@ -288,6 +288,47 @@ def extraer_proximo_dia_semana(texto: str, now: datetime | None = None) -> str |
     return (base_local.date() + timedelta(days=delta)).isoformat()
 
 
+# Cierre del horario de atención de Lily (8 a.m. a 3 p.m.). Tras esta hora, "hoy"
+# ya no es agendable → se ofrece el próximo día hábil.
+_HORA_CIERRE_LILY = 15
+_HOY_RE = re.compile(r"\bhoy\b", re.IGNORECASE)
+_PASADO_MANANA_RE = re.compile(r"\bpasado\s+ma[ñn]ana\b", re.IGNORECASE)
+_MANANA_RE = re.compile(r"\bma[ñn]ana\b", re.IGNORECASE)
+
+
+def _proximo_dia_habil(d: date) -> date:
+    """Avanza `d` hasta el próximo día lun-vie (si cae sábado/domingo)."""
+    while d.weekday() >= 5:  # 5=sábado, 6=domingo
+        d = d + timedelta(days=1)
+    return d
+
+
+def extraer_fecha_relativa(texto: str, now: datetime | None = None) -> str | None:
+    """'hoy' / 'mañana' / 'pasado mañana' → 'YYYY-MM-DD' determinístico.
+
+    - 'hoy': la fecha de hoy; si ya pasó el horario de atención (>=15:00) o cae en
+      fin de semana, ofrece el PRÓXIMO día hábil.
+    - 'mañana' / 'pasado mañana': día siguiente / +2 (literal; la validación de
+      disponibilidad descarta fin de semana y propone alternativas).
+    Devuelve None si el texto no menciona una fecha relativa.
+    """
+    t = (texto or "").lower()
+    base = now or datetime.now(TZ_MONTERREY)
+    if base.tzinfo is None:
+        base = base.replace(tzinfo=TZ_MONTERREY)
+    base_local = base.astimezone(TZ_MONTERREY)
+    if _PASADO_MANANA_RE.search(t):
+        return (base_local.date() + timedelta(days=2)).isoformat()
+    if _MANANA_RE.search(t):
+        return (base_local.date() + timedelta(days=1)).isoformat()
+    if _HOY_RE.search(t):
+        d = base_local.date()
+        if base_local.hour >= _HORA_CIERRE_LILY:
+            d = d + timedelta(days=1)  # ya cerró hoy → próximo día
+        return _proximo_dia_habil(d).isoformat()
+    return None
+
+
 @dataclass
 class AppointmentDateTime:
     """Fecha/hora extraída de un mensaje. Si fecha o hora son None,
@@ -323,7 +364,7 @@ class AppointmentDateTime:
 _SYSTEM_PROMPT_TPL = """Eres un extractor de fechas en español mexicano. La zona horaria es America/Monterrey. AHORA mismo es {fecha_actual} ({dia_semana}) a las {hora_actual}. Convierte expresiones a fecha y hora exactas, SIEMPRE en el futuro respecto a este momento.
 
 REGLAS:
-1. Si el papá no especifica AM/PM en una hora ambigua (ej. "a las 3"), asume horario laboral típico: 9-17h → 3 PM (15:00), no 3 AM.
+1. Si el papá no especifica AM/PM en una hora ambigua (ej. "a las 2"), asume el horario de atención de Lily: lunes a viernes de 8 a.m. a 3 p.m. (8-15h). "a las 2" → 2 PM (14:00), no 2 AM.
 2. "Mañana" = fecha de hoy + 1 día.
 3. "El <día de la semana>" = la PRÓXIMA ocurrencia futura de ese día. Si HOY es ese día pero ya pasó el horario de atención (después de las 15:00) o ya es de noche, NO uses hoy: usa el de la PRÓXIMA semana.
 4. NUNCA devuelvas una fecha/hora que ya pasó respecto al momento actual ({fecha_actual} {hora_actual}). Si el papá pide "hoy" pero ya es tarde, devuelve la fecha de hoy igual y deja que el sistema valide (pero nunca un día/hora anterior a ahora).

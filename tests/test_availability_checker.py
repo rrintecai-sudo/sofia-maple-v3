@@ -463,11 +463,11 @@ async def test_normaliza_fecha_sin_tz() -> None:
 
 
 def test_resumen_disponibilidad_humano() -> None:
-    """lun-vie 8-15 → 'lunes a viernes de 8:00 a 15:00'."""
+    """lun-vie 8-15 → 'lunes a viernes de 8:00 a.m. a 3:00 p.m.'."""
     windows = [
         LilyAvailabilityWindow(d, time(8, 0), time(15, 0), 60, True) for d in (1, 2, 3, 4, 5)
     ]
-    assert resumen_disponibilidad_humano(windows) == "lunes a viernes de 8:00 a 15:00"
+    assert resumen_disponibilidad_humano(windows) == "lunes a viernes de 8:00 a.m. a 3:00 p.m."
 
 
 @pytest.mark.asyncio
@@ -484,7 +484,7 @@ async def test_evaluar_dia_hoy_lunes_9pm_no_ofrece_hoy() -> None:
     assert res.alternativas, "debe proponer próximos slots reales"
     # Las alternativas son del MARTES (9-jun) en adelante, NUNCA hoy
     assert all(a.date() > now.date() for a in res.alternativas)
-    assert res.resumen == "lunes a viernes de 8:00 a 15:00"
+    assert res.resumen == "lunes a viernes de 8:00 a.m. a 3:00 p.m."
 
 
 @pytest.mark.asyncio
@@ -523,7 +523,7 @@ async def test_is_slot_available_viernes_5pm_fuera_horario_ofrece_mismo_dia() ->
     res = await is_slot_available(viernes_5pm, settings=_settings(), now=now)
     assert res.available is False
     assert res.reason == "fuera_de_horario"
-    assert res.resumen == "lunes a viernes de 8:00 a 15:00"
+    assert res.resumen == "lunes a viernes de 8:00 a.m. a 3:00 p.m."
     assert res.alternativas
     # La más cercana a las 17:00 del viernes es ese MISMO viernes a las 14:00
     assert res.alternativas[0].date() == viernes_5pm.date()

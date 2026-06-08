@@ -24,6 +24,7 @@ from app.core.appointment_extractor import (
     es_confirmacion,
     extract_datetime,
     extraer_fecha_explicita,
+    extraer_fecha_relativa,
     extraer_hora_simple,
     extraer_proximo_dia_semana,
 )
@@ -450,3 +451,39 @@ def test_extraer_proximo_dia_semana_sin_dia() -> None:
     now = datetime(2026, 6, 1, 9, 0, tzinfo=TZ_MONTERREY)
     assert extraer_proximo_dia_semana("tiene 4 años", now) is None
     assert extraer_proximo_dia_semana("a las 10am", now) is None
+
+
+# ============================================================
+# FIX (2026-06-04) — fechas relativas: "hoy" / "mañana" (antes se repetía la
+# pregunta del día sin resolver). Cierre de Lily = 15:00 (8 a.m.–3 p.m.).
+# ============================================================
+
+
+def test_fecha_relativa_hoy_antes_del_cierre() -> None:
+    # miércoles 3-jun 9:00 → "hoy" = hoy mismo (3-jun).
+    now = datetime(2026, 6, 3, 9, 0, tzinfo=TZ_MONTERREY)
+    assert extraer_fecha_relativa("hoy puedo", now) == "2026-06-03"
+
+
+def test_fecha_relativa_hoy_despues_del_cierre_va_a_proximo_dia() -> None:
+    # miércoles 3-jun 16:00 (ya cerró Lily) → "hoy" ofrece el próximo día hábil (jue 4).
+    now = datetime(2026, 6, 3, 16, 0, tzinfo=TZ_MONTERREY)
+    assert extraer_fecha_relativa("hoy", now) == "2026-06-04"
+
+
+def test_fecha_relativa_hoy_viernes_tarde_salta_finde() -> None:
+    # viernes 5-jun 16:00 → "hoy" tras el cierre → próximo hábil = lunes 8-jun (no sáb/dom).
+    now = datetime(2026, 6, 5, 16, 0, tzinfo=TZ_MONTERREY)
+    assert extraer_fecha_relativa("hoy", now) == "2026-06-08"
+
+
+def test_fecha_relativa_manana_y_pasado() -> None:
+    now = datetime(2026, 6, 3, 9, 0, tzinfo=TZ_MONTERREY)
+    assert extraer_fecha_relativa("mañana a las 10", now) == "2026-06-04"
+    assert extraer_fecha_relativa("pasado mañana", now) == "2026-06-05"
+
+
+def test_fecha_relativa_sin_relativa() -> None:
+    now = datetime(2026, 6, 3, 9, 0, tzinfo=TZ_MONTERREY)
+    assert extraer_fecha_relativa("el viernes", now) is None
+    assert extraer_fecha_relativa("a las 10am", now) is None

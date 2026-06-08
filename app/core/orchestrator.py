@@ -22,6 +22,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
@@ -130,6 +131,7 @@ async def procesar_turno(
     *,
     canal: Canal | None = None,
     tester: bool = False,
+    now: datetime | None = None,
 ) -> TurnResult:
     """Procesa un turno completo de conversación.
 
@@ -338,7 +340,7 @@ async def procesar_turno(
     if en_agendado:
         try:
             appointment_handler = await handle_appointment_intent(
-                mensaje, estado, ultimo_assistant=ultimo_assistant_msg
+                mensaje, estado, ultimo_assistant=ultimo_assistant_msg, now=now
             )
         except Exception as exc:  # resiliente: nunca rompemos el turno
             log.warning(

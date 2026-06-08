@@ -30,6 +30,7 @@ from app.core.appointment_extractor import (
     es_confirmacion,
     extract_datetime,
     extraer_fecha_explicita,
+    extraer_fecha_relativa,
     extraer_hora_simple,
     extraer_proximo_dia_semana,
     fecha_humana_solo_dia,
@@ -467,10 +468,14 @@ async def handle_appointment_intent(
     # nunca cerraba (bug real de la prueba de Oscar). Además, un fallback
     # determinístico cubre cuando el extractor LLM no resuelve la hora suelta.
     # FIX (2026-06-02): la FECHA se resuelve DETERMINÍSTICAMENTE primero — el LLM no
-    # debe ser load-bearing. "el viernes"/"lunes" → próxima ocurrencia; "5 de junio"
-    # → fecha explícita. Si el mensaje ACTUAL trae un día, MANDA (cubre cambios tipo
-    # "mejor el lunes"); si no trae día, NO toca el slot ya capturado (no lo borra).
-    fecha_det = extraer_fecha_explicita(mensaje, now) or extraer_proximo_dia_semana(mensaje, now)
+    # debe ser load-bearing. "5 de junio" → explícita; "hoy"/"mañana" → relativa;
+    # "el viernes"/"lunes" → próxima ocurrencia. Si el mensaje ACTUAL trae una fecha,
+    # MANDA (cubre cambios tipo "mejor el lunes"); si no, NO toca el slot capturado.
+    fecha_det = (
+        extraer_fecha_explicita(mensaje, now)
+        or extraer_fecha_relativa(mensaje, now)
+        or extraer_proximo_dia_semana(mensaje, now)
+    )
     if fecha_det:
         capt.cita_fecha_slot = fecha_det
 
@@ -508,7 +513,7 @@ async def handle_appointment_intent(
                 extra=f" NO inventes una fecha.{horario_linea}",
             ),
             mensaje_coleccion=render_pregunta_campo(
-                "dia", horario="Atendemos de lunes a viernes, de 9:00 a.m. a 5:00 p.m."
+                "dia", horario=f"Atendemos {resumen}." if resumen else None
             ),
             acciones=["extract_failed"],
             appointment_datetime=appt_dt,
