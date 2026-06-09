@@ -121,11 +121,13 @@ def render_pregunta_campo(
     dia: str | None = None,
     horario: str | None = None,
     horas_libres: str | None = None,
+    motivo: str | None = None,
     reintento: bool = False,
 ) -> str | None:
     """Pregunta FIJA por el único `campo` que falta. None si el campo no tiene
     plantilla (el caller cae a Haiku con el hint).
 
+    `motivo`: explicación corta que se antepone (ej. el día pedido no se puede).
     `reintento=True`: la respuesta anterior no se parseó → re-formula con el formato
     esperado (NUNCA se repite idéntica la misma línea — guard anti-bucle)."""
     hijo = nombre_hijo or "tu peque"
@@ -150,6 +152,8 @@ def render_pregunta_campo(
         base = plantillas.get(campo)
     if base is None:
         return None
+    if motivo:
+        base = f"{motivo} {base}"
     if reintento:
         ejemplo = _EJEMPLO_FORMATO.get(campo)
         prefijo = "Perdón, no te entendí bien. "

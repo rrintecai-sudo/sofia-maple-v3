@@ -561,11 +561,23 @@ async def handle_appointment_intent(
                 if eval_dia.resumen
                 else ""
             )
+            # El CÓDIGO re-pide el día (solo lun-vie 8-15), nunca fin de semana.
+            motivo_corto = {
+                "fecha_pasada": "Ese día ya no es posible.",
+                "dia_no_laborable": "Ese día no atendemos (solo lun-vie).",
+                "slot_ocupado": "Ese día ya está lleno.",
+            }.get(eval_dia.reason, "Ese día no se puede.")
+            horario_lv = (
+                f"Atendemos {eval_dia.resumen}." if eval_dia.resumen else None
+            )
             return AppointmentHandlerResult(
                 hint_para_prompt=(
                     f"[FLUJO AGENDADO — {motivo}.{horario} Dilo con claridad (NADA de "
                     f"'no tengo claro') y propón EXACTAMENTE estas opciones, sin inventar "
                     f"otras: {alts_str}. Una sola pregunta breve: '¿te queda alguna?']"
+                ),
+                mensaje_coleccion=render_pregunta_campo(
+                    "dia", horario=horario_lv, motivo=motivo_corto
                 ),
                 acciones=[f"dia_no_disponible:{eval_dia.reason}"],
                 appointment_datetime=appt_dt,
@@ -615,11 +627,13 @@ async def handle_appointment_intent(
         # Slot corrupto → limpiarlo para volver a pedir, no quedar en bucle.
         capt.cita_fecha_slot = None
         capt.cita_hora_slot = None
+        capt.ultimo_campo_pedido = "dia"
         return AppointmentHandlerResult(
             hint_para_prompt=(
                 "[FLUJO AGENDADO — no pude convertir la fecha del papá. Pídele que "
                 "te confirme día y hora exactos.]"
             ),
+            mensaje_coleccion=render_pregunta_campo("dia"),
             acciones=["parse_failed"],
             appointment_datetime=appt_dt,
         )
@@ -638,17 +652,25 @@ async def handle_appointment_intent(
             if avail.reason in ("fecha_pasada", "dia_no_laborable"):
                 capt.cita_fecha_slot = None
 
+        horario_lv = f"Atendemos {avail.resumen}." if avail.resumen else None
+        msg_col: str | None = None  # pregunta por código del campo a re-pedir
         if avail.reason == "fecha_pasada":
             hint = (
                 f"[FLUJO AGENDADO — {fecha_humana} ya pasó (respecto a la hora actual). "
                 f"NO lo ofrezcas.{horario} Propón EXACTAMENTE: {alts_str}. "
                 f"Una sola pregunta breve.]"
             )
+            capt.ultimo_campo_pedido = "dia"
+            msg_col = render_pregunta_campo("dia", horario=horario_lv, motivo="Ese día ya pasó.")
         elif avail.reason == "dia_no_laborable":
             hint = (
                 f"[FLUJO AGENDADO — ese día ({fecha_humana}) Lily NO atiende.{horario} "
                 f"Propón EXACTAMENTE estas alternativas, sin inventar otras: {alts_str}. "
                 f"Una sola pregunta breve: '¿te queda alguna de estas?']"
+            )
+            capt.ultimo_campo_pedido = "dia"
+            msg_col = render_pregunta_campo(
+                "dia", horario=horario_lv, motivo="Ese día no atendemos (solo lun-vie)."
             )
         elif avail.reason == "fuera_de_horario":
             hint = (
@@ -657,12 +679,18 @@ async def handle_appointment_intent(
                 f"opción más cercana dentro del horario. Propón EXACTAMENTE: {alts_str}. "
                 f"Una sola pregunta breve.]"
             )
+            capt.ultimo_campo_pedido = "hora"
+            msg_col = render_pregunta_campo(
+                "hora", motivo="Esa hora está fuera de nuestro horario.", horario=horario_lv
+            )
         elif avail.reason == "slot_ocupado":
             hint = (
                 f"[FLUJO AGENDADO — ese horario ({fecha_humana}) ya está ocupado.{horario} "
                 f"Propón EXACTAMENTE estas alternativas: {alts_str}. Una sola pregunta breve.]"
             )
-        else:  # supabase_error
+            capt.ultimo_campo_pedido = "hora"
+            msg_col = render_pregunta_campo("hora", motivo="Esa hora ya está ocupada.")
+        else:  # supabase_error — transitorio, deja a Haiku pedir confirmación
             hint = (
                 "[FLUJO AGENDADO — no pude verificar disponibilidad ahora. "
                 "Pídele al papá que te confirme la fecha y dile que en breve "
@@ -670,6 +698,7 @@ async def handle_appointment_intent(
             )
         return AppointmentHandlerResult(
             hint_para_prompt=hint,
+            mensaje_coleccion=msg_col,
             acciones=[f"availability:{avail.reason}"],
             appointment_datetime=appt_dt,
             availability=avail,
@@ -703,12 +732,14 @@ async def handle_appointment_intent(
     # 4. Datos completos — ahora sí, ensure_lead
     lead_id = await _ensure_lead_para_cita(estado, settings=settings)
     if lead_id is None:
+        capt.ultimo_campo_pedido = "nombre_papa"
         return AppointmentHandlerResult(
             hint_para_prompt=(
                 f"[FLUJO AGENDADO — la fecha ({fecha_humana}) está disponible, "
                 "pero aún no sabemos el nombre del papá. Pregúntaselo amable "
                 "en UNA oración antes de cerrar la cita: '¿cómo te llamas?']"
             ),
+            mensaje_coleccion=render_pregunta_campo("nombre_papa"),
             acciones=["missing_parent_name"],
             appointment_datetime=appt_dt,
             availability=avail,
@@ -718,6 +749,8 @@ async def handle_appointment_intent(
     campus_id = resolve_campus_from_estado(estado)
     if campus_id is None:
         # Caso ambiguo (típico: primaria sin grado). Pide grado antes de cerrar.
+        nombre_hijo_actual, _ = _primer_hijo(estado)
+        capt.ultimo_campo_pedido = "grado"
         return AppointmentHandlerResult(
             hint_para_prompt=(
                 f"[FLUJO AGENDADO — la fecha ({fecha_humana}) está disponible, "
@@ -725,6 +758,7 @@ async def handle_appointment_intent(
                 "(Primaria 1°-5° va a Campus 1, Primaria 6° va a Campus 2). "
                 "Pregunta el grado exacto en UNA oración breve. NO inventes campus.]"
             ),
+            mensaje_coleccion=render_pregunta_campo("grado", nombre_hijo=nombre_hijo_actual),
             acciones=["missing_grado"],
             lead_id=lead_id,
             appointment_datetime=appt_dt,

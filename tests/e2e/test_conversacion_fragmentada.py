@@ -2229,3 +2229,168 @@ async def test_booking_completo_respuesta_natural_minima_por_campo() -> None:
     assert "solicitud" not in respuestas[-1] and "Lily te" not in respuestas[-1]
     # Ningún turno de colección se quedó pegado repitiendo (todos distintos o avanzando).
     assert "no te entendí" not in " ".join(respuestas).lower()
+
+
+# ============================================================
+# 21. REGRESIÓN ESTRUCTURAL (2026-06-04): el CÓDIGO es dueño de TODOS los turnos de
+#     colección, por el MISMO camino de producción donde Haiku PUEDE meterse
+#     (clasificador realista + Haiku que improvisa bundle/fin de semana). Réplica
+#     EXACTA de la secuencia que falló en vivo.
+# ============================================================
+
+
+class _HaikuMalo:
+    """Haiku que SIEMPRE improvisa una pregunta de colección mala (junta campos y
+    ofrece fin de semana). Si el código lo dejara armar la colección, esto se
+    filtraría — el test prueba que NO."""
+
+    _RESPUESTA = "¿Me das el nombre y la edad de tu peque? ¿Te viene bien el sábado o el fin de semana?"
+
+    def __init__(self) -> None:
+        self.llamadas = 0
+
+    async def chat(self, *, system_blocks, messages, **kw):
+        self.llamadas += 1
+        return _FakeMessage(self._RESPUESTA)
+
+
+def _leaf_produccion(repo, anthropic, create_appt, intents: dict):
+    """Como _leaf_determinista pero con clasificador REALISTA (per-mensaje, incluye
+    intents SUSTANTIVOS) — el camino donde Haiku puede meterse."""
+    import types
+
+    from app.core.appointment_extractor import AppointmentDateTime
+    from app.core.state_extractor import (
+        ExtraccionTurno,
+        _aplicar_fallbacks_deterministicos,
+    )
+
+    async def fake_classify(message, **kw):
+        return _intent(intents.get(message, Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO))
+
+    async def fake_extract(mensaje, estado_actual, *, ultimo_assistant=None, **kw):
+        return _aplicar_fallbacks_deterministicos(
+            ExtraccionTurno(), mensaje, ultimo_assistant=ultimo_assistant,
+            ultimo_campo_pedido=estado_actual.ultimo_campo_pedido,
+        )
+
+    async def fake_extract_dt(mensaje, *, now=None):
+        return AppointmentDateTime(fecha=None, hora=None, confidence=0.0, razonamiento="vacío")
+
+    return [
+        patch("app.core.orchestrator.get_repository", return_value=repo),
+        patch("app.core.orchestrator.get_anthropic", return_value=anthropic),
+        patch("app.core.orchestrator.classify_intent", side_effect=fake_classify),
+        patch("app.core.orchestrator.extraer_de_mensaje", side_effect=fake_extract),
+        patch("app.core.orchestrator.get_campus_para_nivel", AsyncMock(return_value=None)),
+        patch("app.core.orchestrator.consultar_edades_de_nivel", AsyncMock(return_value=None)),
+        patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
+        patch("app.core.appointment_flow.resumen_disponibilidad",
+              AsyncMock(return_value="lunes a viernes de 8:00 a.m. a 3:00 p.m.")),
+        patch("app.core.appointment_flow.evaluar_dia",
+              AsyncMock(return_value=types.SimpleNamespace(
+                  available=True, reason="ok", alternativas=[],
+                  resumen="lunes a viernes de 8:00 a.m. a 3:00 p.m."))),
+        patch("app.core.appointment_flow.is_slot_available",
+              AsyncMock(return_value=types.SimpleNamespace(
+                  available=True, reason="ok", alternativas=[], resumen=""))),
+        patch("app.core.appointment_flow.create_appointment", create_appt),
+        patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=_campus_test())),
+        patch("app.core.appointment_flow.get_lead_by_session", AsyncMock(return_value=None)),
+        patch("app.core.appointment_flow.create_lead", AsyncMock(return_value=88)),
+        patch("app.core.appointment_flow.update_lead", AsyncMock()),
+        patch("app.core.appointment_flow.emit_event", AsyncMock()),
+        patch("app.core.appointment_flow.send_email", AsyncMock()),
+        patch("app.core.appointment_flow.advance_stage_if_lower", AsyncMock(return_value=True)),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_camino_produccion_codigo_dueno_de_la_coleccion() -> None:
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import FaseAgendado
+
+    repo = _nuevo_repo_explorando("web:prod")
+    haiku = _HaikuMalo()
+    create_appt = AsyncMock(side_effect=lambda **kw: 11 + create_appt.await_count)
+    # Clasificador realista: "primero de primaria" y "mandan tareas?" SUSTANTIVOS.
+    intents = {
+        "hola": Intent.SALUDO_INICIAL,
+        "primero de primaria": Intent.PREGUNTA_NIVEL,
+        "mandan tareas?": Intent.OBJECION_TAREA,
+        "quiero visitar el colegio": Intent.QUIERE_AGENDAR,
+    }
+    leaf = _leaf_produccion(repo, haiku, create_appt, intents)
+
+    turnos = [
+        "hola",
+        "primero de primaria",          # sustantiva (Haiku) — pero captura grado por extracción
+        "mandan tareas?",               # sustantiva (Haiku, postura tareas)
+        "quiero visitar el colegio",    # → AGENDANDO; el código pide el día
+        "hoy", "10", "emanuel rodriguez", "5", "oscar rodriguez",
+        "oscar@correo.com", "7866035862",
+    ]
+    respuestas = []
+    _enter(leaf)
+    try:
+        for t in turnos:
+            r = await procesar_turno(mensaje=t, session_id="web:prod", canal=None, now=_NOW_MIE)
+            respuestas.append(r.response)
+    finally:
+        _exit(leaf)
+
+    capt = repo._conv.estado_capturado
+    # Slots: cada dato quedó en su lugar (fuente de verdad), edad incluida.
+    assert capt.cita_fecha_slot == "2026-06-03"  # "hoy" (mié, antes del cierre)
+    assert capt.cita_hora_slot == "10:00"        # "10" NO se perdió
+    assert capt.hijos[0].nombre == "Emanuel Rodriguez"
+    assert capt.hijos[0].edad == 5
+    assert capt.hijos[0].grado == "1° de Primaria"
+    assert capt.nombre_papa == "Oscar Rodriguez"
+    # Las respuestas de COLECCIÓN (turnos del agendado) las generó el CÓDIGO:
+    # nunca el bundle ni el "fin de semana" de Haiku.
+    resp_coleccion = respuestas[3:]  # desde "quiero visitar" en adelante
+    junto = " ".join(resp_coleccion).lower()
+    assert "sábado" not in junto and "fin de semana" not in junto  # NUNCA fin de semana
+    assert "nombre y la edad" not in junto                          # NUNCA bundle de Haiku
+    # La EDAD se pidió EXACTAMENTE una vez (no re-preguntada tras tener 5).
+    n_edad = sum(1 for r in resp_coleccion if "qué edad" in r.lower())
+    assert n_edad == 1, f"edad preguntada {n_edad} veces"
+    # Cierre con D.4, Campus 1, 10:00.
+    assert create_appt.await_count == 1
+    assert capt.fase_agendado == FaseAgendado.CERRADO
+    assert capt.campus_cita == "Campus 1"
+    assert "ya quedó agendada" in respuestas[-1]
+    assert "3:00 p.m." in respuestas[-1] or "10:00" in respuestas[-1] or "a.m." in respuestas[-1]
+    assert "https://www.google.com/maps" in respuestas[-1]
+
+
+@pytest.mark.asyncio
+async def test_pregunta_sustantiva_mid_coleccion_haiku_contesta_codigo_retoma() -> None:
+    """Pregunta de FONDO en mitad de la colección: Haiku contesta, el CÓDIGO RETOMA
+    con la pregunta del campo, y el slot del turno previo PERSISTE."""
+    from app.core.orchestrator import procesar_turno
+
+    repo = _nuevo_repo_explorando("web:mid")
+    haiku = _HaikuMalo()
+    create_appt = AsyncMock(side_effect=lambda **kw: 33 + create_appt.await_count)
+    intents = {
+        "quiero agendar": Intent.QUIERE_AGENDAR,
+        "cuánto cuesta?": Intent.PREGUNTA_COSTOS,  # sustantiva, MID-colección
+    }
+    leaf = _leaf_produccion(repo, haiku, create_appt, intents)
+    _enter(leaf)
+    try:
+        await procesar_turno(mensaje="quiero agendar", session_id="web:mid", canal=None, now=_NOW_MIE)
+        await procesar_turno(mensaje="hoy", session_id="web:mid", canal=None, now=_NOW_MIE)  # día
+        # Mid-colección el papá pregunta costos (sustantiva):
+        r = await procesar_turno(mensaje="cuánto cuesta?", session_id="web:mid", canal=None, now=_NOW_MIE)
+    finally:
+        _exit(leaf)
+
+    capt = repo._conv.estado_capturado
+    # El día del turno previo PERSISTIÓ (no se perdió por la pregunta sustantiva).
+    assert capt.cita_fecha_slot == "2026-06-03"
+    # Haiku contestó (su texto aparece) Y el código RETOMÓ con la pregunta del campo.
+    assert haiku.llamadas >= 1                       # Haiku se invocó para la sustantiva
+    assert "qué hora" in r.response.lower()           # el código retomó pidiendo la hora

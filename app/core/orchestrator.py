@@ -459,17 +459,21 @@ async def procesar_turno(
     llm_latency = 0
     extra_messages: list[dict[str, Any]] = []  # feedback de validators para reintentos
 
-    # COLECCIÓN DETERMINÍSTICA (2026-06-04): durante el agendado, la pregunta del
-    # único campo faltante la genera el CÓDIGO (plantilla fija). Usamos esa respuesta
-    # y NO llamamos a Haiku — salvo que el papá haga una pregunta SUSTANTIVA
-    # (costos/campus/metodología/objeción), donde Haiku sí debe contestar. Así no
-    # puede bundlear, reordenar ni improvisar ("solicitud") durante la colección.
-    coleccion_directa = bool(
+    # COLECCIÓN DETERMINÍSTICA (2026-06-04): el CÓDIGO es dueño de TODOS los turnos
+    # de colección. La pregunta del único campo faltante la genera render_pregunta_campo
+    # (plantilla fija) — Haiku NO arma preguntas de colección (no bundlea, no ofrece
+    # fin de semana, no improvisa). Haiku solo se invoca para PREGUNTAS SUSTANTIVAS
+    # del papá (costos/metodología/objeción); tras responder, el código RETOMA con
+    # la pregunta del campo (se anexa abajo, tras el loop).
+    es_coleccion = bool(
         appointment_handler is not None
         and appointment_handler.mensaje_coleccion
         and appointment_handler.appointment_id is None
-        and intent_result.intent not in _PREGUNTAS_SUSTANTIVAS
     )
+    intent_sustantivo = intent_result.intent in _PREGUNTAS_SUSTANTIVAS
+    # Solo saltamos Haiku cuando NO es pregunta sustantiva: ahí la respuesta ES la
+    # pregunta del campo. Si es sustantiva, Haiku contesta y luego anexamos el campo.
+    coleccion_directa = es_coleccion and not intent_sustantivo
 
     llm_started = time.perf_counter()
     for intento in range(max_regen + 1):
@@ -566,6 +570,16 @@ async def procesar_turno(
             )
 
     llm_latency = int((time.perf_counter() - llm_started) * 1000)
+
+    # COLECCIÓN + pregunta sustantiva: Haiku contestó la duda del papá; el CÓDIGO
+    # RETOMA con la pregunta del campo faltante (determinística, un solo campo) →
+    # Haiku nunca arma la pregunta de colección.
+    if es_coleccion and intent_sustantivo and appointment_handler.mensaje_coleccion:
+        response_text = f"{response_text.rstrip()}\n\n{appointment_handler.mensaje_coleccion}"
+        log.info(
+            "coleccion_retoma_tras_sustantiva",
+            extra={"session_id": session_id, "intent": intent_result.intent.value},
+        )
 
     cost = calculate_cost(
         model=settings.anthropic_model_principal,
