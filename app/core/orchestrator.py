@@ -42,6 +42,10 @@ from app.core.intent_classifier import (
     quiere_agendar_explicito,
 )
 from app.core.learning_mode import guardar_feedback
+from app.core.oferta_resolver import (
+    horario_subnivel_de_estado,
+    precio_nivel_de_estado,
+)
 from app.core.prompt_builder import build_system_blocks
 from app.core.repository import get_repository
 from app.core.state import (
@@ -59,7 +63,10 @@ from app.core.validators import (
 )
 from app.observability.costs import calculate_cost
 from app.tools.campus import get_campus_para_nivel
+from app.tools.estancias import get_estancias, render_estancias_bloque
+from app.tools.horarios import get_horario
 from app.tools.niveles import consultar_edades_de_nivel
+from app.tools.precios import get_precio, get_todos_precios
 
 log = logging.getLogger(__name__)
 
@@ -327,6 +334,52 @@ async def procesar_turno(
                     extra={"nivel": nivel_para_campus, "campus": campus_res.nombre},
                 )
 
+    # COSTOS / HORARIOS / ESTANCIAS — inyección DETERMINÍSTICA del dato exacto desde
+    # las tablas (precios_por_nivel / horarios_por_nivel / modalidades_estancia). El
+    # número lo pone el CÓDIGO, no Haiku. Corre por intent — también DURANTE el
+    # agendado (estos intents están en _PREGUNTAS_SUSTANTIVAS → Haiku contesta con
+    # ESTE bloque inyectado y luego el código retoma con la pregunta del campo).
+    if intent_result.intent == Intent.PREGUNTA_COSTOS:
+        nivel_precio = precio_nivel_de_estado(estado)
+        if nivel_precio:
+            precio = await get_precio(nivel_precio)
+            if precio:
+                tools_data["costos"] = precio.bloque_costos()
+        else:
+            todos = await get_todos_precios()
+            if todos:
+                tabla = "; ".join(
+                    f"{p.nivel} ${(p.colegiatura_mensual or 0):,.0f}/mes" for p in todos
+                )
+                tools_data["costos"] = (
+                    f"Colegiaturas mensuales por nivel: {tabla}. Si el papá no dijo el "
+                    f"nivel, pregúntalo para darle el dato exacto."
+                )
+
+    if intent_result.intent == Intent.PREGUNTA_HORARIO:
+        subnivel, necesita_grado = horario_subnivel_de_estado(estado)
+        if subnivel:
+            hor = await get_horario(subnivel)
+            if hor:
+                tools_data["horario"] = hor.bloque()
+        elif necesita_grado:
+            tools_data["horario"] = (
+                "El horario depende del GRADO exacto (Kinder tiene 3 horarios "
+                "distintos). Pregúntale en qué grado va ANTES de dar el horario; NO "
+                "des un horario sin saber el grado."
+            )
+        else:
+            tools_data["horario"] = (
+                "Aún no sé el nivel/grado. Pregúntalo ANTES de dar un horario; NO "
+                "inventes ni des una tabla."
+            )
+
+    if intent_result.intent == Intent.PREGUNTA_ESTANCIAS:
+        nivel_est = precio_nivel_de_estado(estado)
+        estancias = await get_estancias(nivel=nivel_est)
+        if estancias:
+            tools_data["estancias"] = render_estancias_bloque(estancias)
+
     # 5quater. Handler de QUIERE_AGENDAR (Bloque C.1). Si el papá quiere
     # agendar, intentamos extraer fecha/hora, verificar disponibilidad y
     # (si todo cuadra) crear la cita en pendiente + notificar Lily. El
@@ -408,7 +461,11 @@ async def procesar_turno(
         )
 
     if tools_data:
-        tool_hint_lines = ["[Información traída de tools al momento:]"]
+        tool_hint_lines = [
+            "[DATO OFICIAL del sistema — úsalo EXACTO. NO cambies ni inventes números "
+            "de costo/horario/estancia: si un número no está aquí, defiérelo a Miss "
+            "Lili, NO lo inventes:]"
+        ]
         for tool_name, data in tools_data.items():
             tool_hint_lines.append(f"- {tool_name}: {data}")
         mensaje_para_llm = f"{mensaje_para_llm}\n\n" + "\n".join(tool_hint_lines)

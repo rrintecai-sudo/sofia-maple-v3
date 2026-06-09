@@ -12,6 +12,31 @@ from app.config import Settings, get_settings
 log = logging.getLogger(__name__)
 
 
+# Nombre legible del sub-nivel para el bloque inyectado.
+_NIVEL_DISPLAY: dict[str, str] = {
+    "premater": "Premater",
+    "maternal": "Maternal",
+    "kinder_1": "1° de Kinder",
+    "kinder_2": "2° de Kinder",
+    "kinder_3": "3° de Kinder",
+    "primaria_baja": "1° a 3° de Primaria",
+    "primaria_alta": "4° a 6° de Primaria",
+    "secundaria": "Secundaria",
+}
+
+
+def _fmt_hora(hhmmss: str) -> str:
+    """'09:00:00' → '9:00 a.m.'; '14:00:00' → '2:00 p.m.'."""
+    try:
+        h, m, *_ = str(hhmmss).split(":")
+        hi = int(h)
+    except (ValueError, AttributeError):
+        return str(hhmmss)
+    sufijo = "a.m." if hi < 12 else "p.m."
+    h12 = hi % 12 or 12
+    return f"{h12}:{int(m):02d} {sufijo}"
+
+
 @dataclass(frozen=True)
 class HorarioResult:
     nivel: str
@@ -23,6 +48,12 @@ class HorarioResult:
 
     def resumen_corto(self) -> str:
         return f"{self.nivel}: {self.hora_inicio} a {self.hora_fin} ({self.dias})"
+
+    def bloque(self) -> str:
+        """Bloque de inyección legible: '2° de Kinder: 9:00 a.m. a 2:00 p.m. (lun a viernes)'."""
+        display = _NIVEL_DISPLAY.get(self.nivel, self.nivel)
+        dias = "lunes a viernes" if self.dias in ("L-V", "lun-vie") else self.dias
+        return f"Horario de {display}: {_fmt_hora(self.hora_inicio)} a {_fmt_hora(self.hora_fin)} ({dias})."
 
 
 async def get_horario(

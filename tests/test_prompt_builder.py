@@ -489,3 +489,11 @@ def test_postura_tareas_en_build_system_blocks() -> None:
     full = "\n".join(b["text"] for b in build_system_blocks(estado)).lower()
     assert "manda tareas a casa" in full
     assert 'abras con "sí, tenemos tareas"' in full
+
+
+def test_rules_incluye_regla_dato_oficial_y_defiere_a_lili() -> None:
+    """Costos/horarios/estancias: solo el dato inyectado; si no hay, defiere a Lili."""
+    text = load_prompt_file("rules.md").lower()
+    assert "dato oficial" in text
+    assert "miss lili" in text
+    assert "nunca" in text and ("inventar" in text or "inventes" in text)

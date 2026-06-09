@@ -54,6 +54,47 @@ class PrecioResult:
             lines.append(self.notas)
         return "\n".join(lines)
 
+    def bloque_costos(self) -> str:
+        """Bloque de inyección con los datos REALES (colegiatura + inscripción)."""
+        cole = self.colegiatura_mensual or Decimal("0")
+        partes = [
+            f"Colegiatura {self.nivel}: ${cole:,.0f} al mes "
+            f"({self.num_colegiaturas} al año, ago-jun)."
+        ]
+        if self.inscripcion is not None:
+            partes.append(f"Inscripción: ${self.inscripcion:,.0f}.")
+        return " ".join(partes)
+
+
+async def get_todos_precios(
+    *, ciclo_escolar: str = CICLO_ACTUAL, settings: Settings | None = None
+) -> list[PrecioResult]:
+    """Todas las filas vigentes (para la tabla compacta cuando no hay nivel claro)."""
+    settings = settings or get_settings()
+    if not settings.supabase_url or not settings.supabase_service_key:
+        return []
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{settings.supabase_url}/rest/v1/precios_por_nivel",
+                headers={
+                    "apikey": settings.supabase_service_key,
+                    "Authorization": f"Bearer {settings.supabase_service_key}",
+                },
+                params={
+                    "ciclo_escolar": f"eq.{ciclo_escolar}",
+                    "vigente": "eq.true",
+                    "select": "*",
+                    "order": "colegiatura_mensual.asc",
+                },
+            )
+        resp.raise_for_status()
+        rows = resp.json()
+    except Exception as exc:
+        log.warning("get_todos_precios failed", extra={"error": str(exc)})
+        return []
+    return [_row_to_result(r) for r in rows]
+
 
 async def get_precio(
     nivel: str,
