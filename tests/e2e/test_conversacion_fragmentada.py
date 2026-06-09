@@ -2100,3 +2100,74 @@ async def test_hoy_se_resuelve_y_no_repite_pregunta_del_dia() -> None:
     assert "qué día" in r1.response.lower()       # T1 pidió el día
     assert r2.response != r1.response             # T2 NO repite idéntico
     assert "qué hora" in r2.response.lower()       # ya avanzó: ahora pide la hora
+
+
+# ============================================================
+# 19. REGRESIÓN (2026-06-04): la HORA suelta "10" se parsea y cierra; y NINGÚN
+#     campo re-renderiza idéntica la pregunta cuando la respuesta no parsea.
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_hora_suelta_10_se_parsea_y_cierra() -> None:
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import (
+        EstadoCapturado,
+        FaseAgendado,
+        HijoInfo,
+        NivelEducativo,
+    )
+
+    repo = _nuevo_repo_explorando("web:hora")
+    # En AGENDANDO con los 6 datos y el DÍA listos; falta solo la hora (el código
+    # acaba de pedirla → ultimo_campo_pedido='hora').
+    repo._conv.estado_capturado = EstadoCapturado(
+        nombre_papa="Oscar Rodriguez", email_papa="o@x.com", telefono="7866035862",
+        nivel_buscado_actual=NivelEducativo.KINDER,
+        hijos=[HijoInfo(nombre="Mateo", edad=4, nivel=NivelEducativo.KINDER, grado="2° de Kinder")],
+        fase_agendado=FaseAgendado.AGENDANDO,
+        cita_fecha_slot="2026-06-11", cita_hora_slot=None,
+        ultimo_campo_pedido="hora",
+    )
+    haiku = _HaikuTerco()
+    create_appt = AsyncMock(side_effect=lambda **kw: 800 + create_appt.await_count)
+    leaf = _leaf_determinista(repo, haiku, create_appt)
+    _enter(leaf)
+    try:
+        result = await procesar_turno(mensaje="10", session_id="web:hora", canal=None, now=_NOW_MIE)
+    finally:
+        _exit(leaf)
+    capt = repo._conv.estado_capturado
+    assert capt.cita_hora_slot == "10:00"  # "10" → 10:00 (estaba en las opciones)
+    assert create_appt.await_count == 1
+    assert capt.fase_agendado == FaseAgendado.CERRADO
+    assert "https://www.google.com/maps" in result.response
+
+
+@pytest.mark.asyncio
+async def test_respuesta_no_parseable_no_repite_pregunta_identica() -> None:
+    """Guard anti-bucle: si la respuesta de un campo no parsea, la re-pregunta NO
+    es idéntica — se reformula con el formato esperado."""
+    from app.core.orchestrator import procesar_turno
+
+    repo = _nuevo_repo_explorando("web:bucle")
+    haiku = _HaikuTerco()
+    create_appt = AsyncMock(side_effect=lambda **kw: 900 + create_appt.await_count)
+    leaf = _leaf_determinista(repo, haiku, create_appt)
+    _enter(leaf)
+    try:
+        # T1: da el día → el código pide la HORA (primera vez, base).
+        r1 = await procesar_turno(
+            mensaje="quiero agendar el jueves", session_id="web:bucle", canal=None, now=_NOW_MIE
+        )
+        # T2: respuesta que NO parsea como hora → re-pregunta, pero NO idéntica.
+        r2 = await procesar_turno(
+            mensaje="mmm no sé bien", session_id="web:bucle", canal=None, now=_NOW_MIE
+        )
+    finally:
+        _exit(leaf)
+
+    assert "qué hora" in r1.response.lower()        # T1 pidió la hora (base)
+    assert r2.response != r1.response               # T2 NO repite idéntica
+    assert "no te entendí" in r2.response.lower()    # reformuló con disculpa + formato
+    assert "qué hora" in r2.response.lower()         # sigue pidiendo la hora

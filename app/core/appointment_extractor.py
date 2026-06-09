@@ -168,6 +168,29 @@ def extraer_hora_simple(mensaje: str) -> str | None:
     return None
 
 
+# Número SUELTO como hora — SOLO cuando el código acaba de pedir la hora (contexto).
+# "10" → 10:00; "1" → 13:00 (1-7 = PM por el horario de Lily); "13" → 13:00.
+_NUM_SUELTO_HORA_RE = re.compile(
+    r"^\s*(?:a\s+las\s+)?(\d{1,2})(?:[:.]([0-5]\d))?\s*(?:hrs?|horas?|h)?\s*\.?\s*$",
+    re.IGNORECASE,
+)
+
+
+def extraer_hora_de_numero_suelto(mensaje: str) -> str | None:
+    """'10' → '10:00'; '1' → '13:00'; '13' → '13:00'; '10:30' → '10:30'. None si el
+    mensaje no es básicamente un número. Usar SOLO cuando el gate pidió la hora."""
+    m = _NUM_SUELTO_HORA_RE.match(mensaje or "")
+    if not m:
+        return None
+    h = int(m.group(1))
+    mi = int(m.group(2) or 0)
+    if 1 <= h <= 7:  # franja PM por el horario de Lily (8-15)
+        h += 12
+    if 0 <= h <= 23 and 0 <= mi <= 59:
+        return f"{h:02d}:{mi:02d}"
+    return None
+
+
 # ============================================================
 # Confirmación general + fecha explícita (FIX (b) 2026-06-01)
 # ============================================================

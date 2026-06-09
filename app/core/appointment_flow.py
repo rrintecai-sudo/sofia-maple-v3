@@ -31,6 +31,7 @@ from app.core.appointment_extractor import (
     extract_datetime,
     extraer_fecha_explicita,
     extraer_fecha_relativa,
+    extraer_hora_de_numero_suelto,
     extraer_hora_simple,
     extraer_proximo_dia_semana,
     fecha_humana_solo_dia,
@@ -479,6 +480,10 @@ async def handle_appointment_intent(
     if fecha_det:
         capt.cita_fecha_slot = fecha_det
 
+    # Campo que el CÓDIGO pidió el turno anterior (para parsear la respuesta SUELTA
+    # y para detectar reintentos del mismo campo — guard anti-bucle).
+    campo_pedido_prev = capt.ultimo_campo_pedido
+
     appt_dt = await extract_datetime(mensaje, now=now)
     if appt_dt.es_alta_confianza:
         # El LLM solo RELLENA la fecha si el resolver determinístico no la fijó.
@@ -488,6 +493,9 @@ async def handle_appointment_intent(
             capt.cita_hora_slot = appt_dt.hora
     if capt.cita_hora_slot is None:
         hora_det = extraer_hora_simple(mensaje)
+        # Si el gate pidió la HORA, un número SUELTO ("10", "1", "13") es la hora.
+        if not hora_det and campo_pedido_prev == "hora":
+            hora_det = extraer_hora_de_numero_suelto(mensaje)
         if hora_det:
             capt.cita_hora_slot = hora_det
 
@@ -505,6 +513,7 @@ async def handle_appointment_intent(
             else ""
         )
         resumen_cap = _resumen_capturado(estado, fecha_slot=None, hora_slot=hora_slot)
+        es_reintento = campo_pedido_prev == "dia"  # ya habíamos pedido el día → no repetir igual
         capt.ultimo_campo_pedido = "dia"
         return AppointmentHandlerResult(
             hint_para_prompt=_instruccion_un_campo(
@@ -513,7 +522,9 @@ async def handle_appointment_intent(
                 extra=f" NO inventes una fecha.{horario_linea}",
             ),
             mensaje_coleccion=render_pregunta_campo(
-                "dia", horario=f"Atendemos {resumen}." if resumen else None
+                "dia",
+                horario=f"Atendemos {resumen}." if resumen else None,
+                reintento=es_reintento,
             ),
             acciones=["extract_failed"],
             appointment_datetime=appt_dt,
@@ -570,6 +581,7 @@ async def handle_appointment_intent(
                 f"Ofrécele esas, NO inventes otras."
             )
         resumen_cap = _resumen_capturado(estado, fecha_slot=fecha_slot, hora_slot=None)
+        es_reintento = campo_pedido_prev == "hora"  # ya habíamos pedido la hora → no repetir igual
         capt.ultimo_campo_pedido = "hora"
         horas_libres = (
             _formatear_horas(eval_dia.alternativas[:6])
@@ -586,7 +598,7 @@ async def handle_appointment_intent(
                 ),
             ),
             mensaje_coleccion=render_pregunta_campo(
-                "hora", dia=dia_resuelto, horas_libres=horas_libres
+                "hora", dia=dia_resuelto, horas_libres=horas_libres, reintento=es_reintento
             ),
             acciones=["missing_time"],
             appointment_datetime=appt_dt,
@@ -672,12 +684,15 @@ async def handle_appointment_intent(
         # Haiku solo lo frasea. Nunca elige qué pedir ni re-pregunta un slot lleno.
         pedir = _ETIQUETA_CAMPO.get(faltantes[0], faltantes[0])
         clave = _CLAVE_CAMPO.get(faltantes[0])
+        es_reintento = clave is not None and clave == campo_pedido_prev  # mismo campo otra vez
         capt.ultimo_campo_pedido = clave
         resumen = _resumen_capturado(estado, fecha_slot=fecha_slot, hora_slot=hora_slot)
         nombre_hijo_actual, _ = _primer_hijo(estado)
         return AppointmentHandlerResult(
             hint_para_prompt=_instruccion_un_campo(pedir, resumen),
-            mensaje_coleccion=render_pregunta_campo(clave, nombre_hijo=nombre_hijo_actual)
+            mensaje_coleccion=render_pregunta_campo(
+                clave, nombre_hijo=nombre_hijo_actual, reintento=es_reintento
+            )
             if clave
             else None,
             acciones=[f"missing_lead_data:{','.join(faltantes)}"],

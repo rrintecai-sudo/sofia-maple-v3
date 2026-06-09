@@ -100,6 +100,20 @@ def _maps_line(google_maps_url: str | None, canal: str | None) -> str | None:
 # ============================================================
 
 
+# Aclaración de FORMATO por campo, para el reintento (guard anti-bucle): si la
+# respuesta no se pudo parsear, se re-formula con un ejemplo en vez de repetir
+# idéntica la misma pregunta.
+_EJEMPLO_FORMATO: dict[str, str] = {
+    "dia": "puedes decir 'mañana', 'el jueves' o una fecha como '12 de junio'",
+    "hora": "por ejemplo '10am', '1pm' o 'a las 11'",
+    "edad": "solo el número de años, por ejemplo '5'",
+    "nombre_hijo": "su nombre y apellido",
+    "nombre_papa": "tu nombre completo",
+    "correo": "algo como nombre@correo.com",
+    "telefono": "tus 10 dígitos",
+}
+
+
 def render_pregunta_campo(
     campo: str,
     *,
@@ -107,29 +121,40 @@ def render_pregunta_campo(
     dia: str | None = None,
     horario: str | None = None,
     horas_libres: str | None = None,
+    reintento: bool = False,
 ) -> str | None:
     """Pregunta FIJA por el único `campo` que falta. None si el campo no tiene
-    plantilla (el caller cae a Haiku con el hint)."""
+    plantilla (el caller cae a Haiku con el hint).
+
+    `reintento=True`: la respuesta anterior no se parseó → re-formula con el formato
+    esperado (NUNCA se repite idéntica la misma línea — guard anti-bucle)."""
     hijo = nombre_hijo or "tu peque"
     linea_horario = f" {horario}" if horario else ""
     if campo == "dia":
-        return (
-            "¿Qué día te queda mejor para tu visita?" + linea_horario
-        ).strip()
-    if campo == "hora":
+        base = ("¿Qué día te queda mejor para tu visita?" + linea_horario).strip()
+    elif campo == "hora":
         base = f"¿A qué hora del {dia} te viene bien?" if dia else "¿A qué hora te viene bien?"
         if horas_libres:
-            return f"{base} Ese día tenemos disponibles: {horas_libres}."
-        return base + linea_horario
-    plantillas = {
-        "nombre_hijo": "Para agendar tu cita, ¿me confirmas el nombre completo de tu hijo/a? 😊",
-        "edad": f"¿Y qué edad tiene {hijo}?",
-        "grado": f"¿En qué grado está {hijo}?",
-        "nombre_papa": "Perfecto. ¿Y cuál es tu nombre completo?",
-        "correo": "Gracias. ¿Me compartes tu correo electrónico para enviarte la confirmación?",
-        "telefono": "Y por último, ¿me das tu número de celular?",
-    }
-    return plantillas.get(campo)
+            base = f"{base} Ese día tenemos disponibles: {horas_libres}."
+        else:
+            base = base + linea_horario
+    else:
+        plantillas = {
+            "nombre_hijo": "Para agendar tu cita, ¿me confirmas el nombre completo de tu hijo/a? 😊",
+            "edad": f"¿Y qué edad tiene {hijo}?",
+            "grado": f"¿En qué grado está {hijo}?",
+            "nombre_papa": "Perfecto. ¿Y cuál es tu nombre completo?",
+            "correo": "Gracias. ¿Me compartes tu correo electrónico para enviarte la confirmación?",
+            "telefono": "Y por último, ¿me das tu número de celular?",
+        }
+        base = plantillas.get(campo)
+    if base is None:
+        return None
+    if reintento:
+        ejemplo = _EJEMPLO_FORMATO.get(campo)
+        prefijo = "Perdón, no te entendí bien. "
+        return f"{prefijo}{base}" + (f" ({ejemplo})" if ejemplo else "")
+    return base
 
 
 def render_registration_message(

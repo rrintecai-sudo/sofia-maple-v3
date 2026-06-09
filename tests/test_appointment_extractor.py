@@ -25,9 +25,32 @@ from app.core.appointment_extractor import (
     extract_datetime,
     extraer_fecha_explicita,
     extraer_fecha_relativa,
+    extraer_hora_de_numero_suelto,
     extraer_hora_simple,
     extraer_proximo_dia_semana,
 )
+
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        ("10", "10:00"),
+        ("8", "08:00"),
+        ("12", "12:00"),
+        ("1", "13:00"),   # 1-7 = PM por el horario de Lily
+        ("3", "15:00"),
+        ("13", "13:00"),
+        ("10:30", "10:30"),
+        ("a las 11", "11:00"),
+        ("11hrs", "11:00"),
+        # No es un número suelto → None (lo maneja extraer_hora_simple u otro path).
+        ("esta bien", None),
+        ("10 años", None),
+        ("", None),
+    ],
+)
+def test_extraer_hora_de_numero_suelto(texto, esperado) -> None:
+    assert extraer_hora_de_numero_suelto(texto) == esperado
 
 # ============================================================
 # FIX (a) 2026-06-01 — hora "sucia": 10a, 10hrs, etc.
