@@ -129,6 +129,20 @@ def test_extraer_edad_simple(texto, esperado) -> None:
     assert extraer_edad_simple(texto) == esperado
 
 
+def test_fallback_edad_numero_suelto_con_contexto() -> None:
+    """Cuando el gate pidió la EDAD, un número suelto ('5', 'tiene 5') es la edad."""
+    for msg in ("5", "tiene 5", "5 añitos"):
+        res = _aplicar_fallbacks_deterministicos(
+            ExtraccionTurno(), msg, ultimo_campo_pedido="edad"
+        )
+        assert res.edad_hijo == 5, msg
+    # Sin contexto de edad, un '5' suelto NO se vuelve edad.
+    res = _aplicar_fallbacks_deterministicos(
+        ExtraccionTurno(), "5", ultimo_campo_pedido="nombre_papa"
+    )
+    assert res.edad_hijo is None
+
+
 @pytest.mark.parametrize(
     "texto,esperado",
     [

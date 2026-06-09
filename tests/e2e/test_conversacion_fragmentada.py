@@ -2171,3 +2171,61 @@ async def test_respuesta_no_parseable_no_repite_pregunta_identica() -> None:
     assert r2.response != r1.response               # T2 NO repite idéntica
     assert "no te entendí" in r2.response.lower()    # reformuló con disculpa + formato
     assert "qué hora" in r2.response.lower()         # sigue pidiendo la hora
+
+
+# ============================================================
+# 20. REGRESIÓN INTEGRAL (2026-06-04): booking COMPLETO con la respuesta natural
+#     MÁS SIMPLE en CADA campo. Ejercita el parseo de todos los campos en un solo
+#     test para no volver a descubrir fallos campo por campo en vivo.
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_booking_completo_respuesta_natural_minima_por_campo() -> None:
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import FaseAgendado
+
+    repo = _nuevo_repo_explorando("web:natural")
+    haiku = _HaikuTerco()  # Haiku activo: solo lo llamaría en el cierre (D.4 lo override)
+    create_appt = AsyncMock(side_effect=lambda **kw: 950 + create_appt.await_count)
+    leaf = _leaf_determinista(repo, haiku, create_appt)
+
+    # La respuesta MÁS SIMPLE que daría un papá real, campo por campo.
+    turnos = [
+        "quiero agendar para primero de primaria",  # nivel/grado declarado
+        "mañana",                                    # día (relativa)
+        "10",                                        # hora (número suelto)
+        "emanuel rodriguez",                         # nombre del hijo (suelto)
+        "5",                                         # edad (número suelto)
+        "oscar rodriguez",                           # nombre del papá (suelto)
+        "oscar@correo.com",                          # correo
+        "7866035862",                                # teléfono → CIERRA
+    ]
+    respuestas = []
+    _enter(leaf)
+    try:
+        for t in turnos:
+            r = await procesar_turno(mensaje=t, session_id="web:natural", canal=None, now=_NOW_MIE)
+            respuestas.append(r.response)
+    finally:
+        _exit(leaf)
+
+    capt = repo._conv.estado_capturado
+    # Cada campo se capturó de su respuesta natural mínima.
+    assert capt.cita_fecha_slot == "2026-06-04"  # "mañana"
+    assert capt.cita_hora_slot == "10:00"        # "10"
+    assert capt.hijos[0].nombre == "Emanuel Rodriguez"
+    assert capt.hijos[0].edad == 5               # "5"
+    assert capt.hijos[0].grado == "1° de Primaria"  # declarado, Política A (no 1° por edad 5)
+    assert capt.nombre_papa == "Oscar Rodriguez"
+    assert capt.email_papa == "oscar@correo.com"
+    assert capt.telefono == "7866035862"
+    # CIERRA con D.4 + Campus 1 (primaria 1°), sin "solicitud"/"Lily te".
+    assert create_appt.await_count == 1
+    assert capt.fase_agendado == FaseAgendado.CERRADO
+    assert capt.campus_cita == "Campus 1"
+    assert "ya quedó agendada" in respuestas[-1]
+    assert "https://www.google.com/maps" in respuestas[-1]
+    assert "solicitud" not in respuestas[-1] and "Lily te" not in respuestas[-1]
+    # Ningún turno de colección se quedó pegado repitiendo (todos distintos o avanzando).
+    assert "no te entendí" not in " ".join(respuestas).lower()

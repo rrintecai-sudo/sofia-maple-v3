@@ -187,6 +187,19 @@ def extraer_edad_simple(mensaje: str) -> int | None:
     return edad if 0 <= edad <= 20 else None
 
 
+_EDAD_NUM_SUELTO_RE = re.compile(r"\b(\d{1,2})\b")
+
+
+def extraer_edad_de_numero_suelto(mensaje: str) -> int | None:
+    """'5' / 'tiene 5' → 5. Primer número 0-20 del mensaje. Usar SOLO cuando el
+    gate pidió la edad (contexto), para no confundir un número con otra cosa."""
+    m = _EDAD_NUM_SUELTO_RE.search(mensaje or "")
+    if not m:
+        return None
+    edad = int(m.group(1))
+    return edad if 0 <= edad <= 20 else None
+
+
 def extraer_nombre_papa(mensaje: str) -> str | None:
     """'yo soy Pedro Rojas, ...' → 'Pedro Rojas'. None si no hay presentación
     explícita o el nombre no es válido."""
@@ -637,9 +650,12 @@ def _aplicar_fallbacks_deterministicos(
     elif result.nombre_papa and _es_presentacion_explicita(mensaje):
         result.nombre_papa_explicito = True
 
-    # --- Edad: regex 'N años' rellena si el LLM la dejó vacía. ---
+    # --- Edad: regex 'N años' rellena si el LLM la dejó vacía. Si el gate pidió la
+    # EDAD, un número SUELTO ("5", "tiene 5") es la edad. ---
     if result.edad_hijo is None:
         edad_det = extraer_edad_simple(mensaje)
+        if edad_det is None and ultimo_campo_pedido == "edad":
+            edad_det = extraer_edad_de_numero_suelto(mensaje)
         if edad_det is not None:
             result.edad_hijo = edad_det
 
