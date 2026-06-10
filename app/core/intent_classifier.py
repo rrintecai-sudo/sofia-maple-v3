@@ -177,7 +177,15 @@ _QUIERE_AGENDAR_RE = re.compile(
     r"|\bagendar\s+(?:una|otra)\b"
     r"|\bag[ée]nda(?:me|nos)?\b"
     r"|\bquiero\s+(?:otra|una)\s+(?:cita|visita)\b"
-    r"|\b(?:agendar|reagendar)\s+(?:una\s+)?(?:cita|visita)\b",
+    r"|\b(?:agendar|reagendar)\s+(?:una\s+)?(?:cita|visita)\b"
+    # Señales de VISITA = querer conocer/visitar el colegio → agendar (no discovery).
+    # Requiere objeto-lugar para no atrapar "conocer los costos / más sobre X".
+    r"|\b(?:conocer|visitar|ver)\s+(?:el\s+|la\s+|las\s+|los\s+|sus\s+|su\s+)?"
+    r"(?:colegio|escuela|maple|instalaciones|plantel|campus|k[íi]nder|primaria|secundaria)\b"
+    r"|\b(?:conocer|visitar|ver)(?:los|las)\b"
+    r"|\b(?:pasar|ir)\s+a\s+(?:ver|conocer|visitar)(?:los|las)?\b"
+    r"|\bcu[áa]ndo\s+(?:puedo|podemos|podr[íi]a(?:mos)?|se\s+puede)\s+"
+    r"(?:visitar|conocer|pasar|ir|ver)\b",
     re.IGNORECASE,
 )
 

@@ -312,6 +312,91 @@ async def test_guards_no_rompen_costos_camino_produccion() -> None:
     assert "cómo lo viven" not in r.response.lower()
 
 
+@pytest.mark.asyncio
+async def test_costos_sin_sondeo_enganchado() -> None:
+    """Punto 2: tras dar costos, NO engancha pregunta de sondeo."""
+    from app.core.orchestrator import procesar_turno
+
+    repo = _Repo(_conv_kinder2())
+    haiku = _Haiku("Colegiatura: $6,450. ¿Qué es lo que más te importa que viva tu hijo?")
+    ctx = _leaf(repo, haiku, Intent.PREGUNTA_COSTOS)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(mensaje="¿costos de kinder?", session_id="web:lili", canal=None)
+    finally:
+        _exit(ctx)
+    assert "$5,250" in r.response                       # dato correcto
+    assert "más te importa" not in r.response.lower()   # sondeo eliminado
+    assert "?" not in r.response                          # cero sondeo enganchado
+
+
+@pytest.mark.asyncio
+async def test_visita_dispara_agendado_no_sondeo() -> None:
+    """Punto 1: 'quiero conocer el colegio' arranca la cita de informes, NO sondeo."""
+    from app.core.appointment_flow import AppointmentHandlerResult
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import FaseAgendado
+
+    repo = _Repo(_conv(None, None))
+    haiku = _Haiku("¿Qué es lo que más te importa que tu hijo viva en la escuela?")  # sondeo
+    ctx = _leaf(repo, haiku, Intent.CONFUSO_OTRO)
+    ctx.append(
+        patch(
+            "app.core.orchestrator.handle_appointment_intent",
+            AsyncMock(return_value=AppointmentHandlerResult(
+                hint_para_prompt="[FLUJO AGENDADO — pide el día]",
+                mensaje_coleccion="¿Qué día te queda mejor para tu visita? "
+                "Atendemos lunes a viernes de 8:00 a.m. a 3:00 p.m.",
+                acciones=["missing_date"],
+            )),
+        )
+    )
+    _enter(ctx)
+    try:
+        r = await procesar_turno(
+            mensaje="quiero conocer el colegio", session_id="web:lili", canal=None
+        )
+    finally:
+        _exit(ctx)
+    assert repo._conv.estado_capturado.fase_agendado == FaseAgendado.AGENDANDO  # disparó agendar
+    assert "qué día" in r.response.lower()                       # avanza a agendar
+    assert "más te importa" not in r.response.lower()            # NO sondeo
+
+
+@pytest.mark.asyncio
+async def test_discovery_solo_una_pregunta_en_la_conversacion() -> None:
+    """Punto 3: si ya hizo su pregunta de discovery, no hace otra."""
+    from app.core.orchestrator import procesar_turno
+
+    conv = _conv(None, None)
+    conv.estado_capturado.discovery_pregunta_hecha = True  # ya gastó el cupo
+    repo = _Repo(conv)
+    haiku = _Haiku("Qué bien. ¿En qué año escolar va tu peque?")  # otro sondeo
+    ctx = _leaf(repo, haiku, Intent.SALUDO_INICIAL)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(mensaje="hola", session_id="web:lili", canal=None)
+    finally:
+        _exit(ctx)
+    assert "?" not in r.response  # cupo gastado → sin más preguntas de sondeo
+
+
+@pytest.mark.asyncio
+async def test_primera_discovery_marca_flag() -> None:
+    from app.core.orchestrator import procesar_turno
+
+    repo = _Repo(_conv(None, None))
+    haiku = _Haiku("Qué gusto que escribas. ¿Para qué ciclo buscas?")
+    ctx = _leaf(repo, haiku, Intent.SALUDO_INICIAL)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(mensaje="hola", session_id="web:lili", canal=None)
+    finally:
+        _exit(ctx)
+    assert r.response.count("?") == 1  # se permite la primera
+    assert repo._conv.estado_capturado.discovery_pregunta_hecha is True  # cupo marcado
+
+
 def test_kid_visit_no_es_cita_agendable_solo_informes() -> None:
     """Punto 4: la única cita agendable es la de informes; Kid Visit es paso posterior."""
     from app.core.prompt_builder import load_prompt_file

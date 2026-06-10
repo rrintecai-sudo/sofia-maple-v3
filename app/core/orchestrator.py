@@ -671,16 +671,23 @@ async def procesar_turno(
 
     llm_latency = int((time.perf_counter() - llm_started) * 1000)
 
-    # GUARDS de TEXTO LIBRE de Haiku (Bloque B) — ENFORZAR, no instruir. Quita
-    # venezolanismos/colombianismos ("¿cómo lo viven?", "te viene/vienen bien") y
-    # recorta a máx 1 pregunta. SOLO sobre el texto de Haiku; NUNCA sobre líneas
-    # de código (oferta / pregunta de colección / cierre D.4) — por eso corre ANTES
-    # de antepone oferta y de anexar la pregunta del campo, y se omite si la
-    # respuesta YA es 100% código (coleccion_directa).
+    # GUARDS de TEXTO LIBRE de Haiku (Bloque B) — ENFORZAR la ESTRATEGIA, no solo la
+    # cantidad. Quita venezolanismos y recorta preguntas. El tope de preguntas es
+    # DINÁMICO para que Sofía no interrogue:
+    #   - turno de OFERTA (dio costos/horario/estancia) → 0 preguntas de sondeo
+    #     enganchadas (da el dato y cierra; nada de "¿qué es lo que más te importa?").
+    #   - ya gastó su ÚNICA pregunta de discovery en la conversación → 0.
+    #   - si no → el tope normal (1).
+    # Las preguntas de DATOS del agendado las emite el código aparte, no cuentan.
     if not coleccion_directa:
-        response_text = sanear_texto_libre_haiku(
-            response_text, max_preguntas=settings.max_preguntas_por_turno
-        )
+        if lineas_oferta or capt.discovery_pregunta_hecha:
+            max_preg = 0
+        else:
+            max_preg = settings.max_preguntas_por_turno
+        response_text = sanear_texto_libre_haiku(response_text, max_preguntas=max_preg)
+        # Si quedó una pregunta de discovery (no fue turno de oferta), gasta el cupo.
+        if not lineas_oferta and not en_agendado and "?" in response_text:
+            capt.discovery_pregunta_hecha = True
 
     # OFERTA — el número lo EMITE el código. Saneamos SOLO la parte de Haiku (borra
     # cualquier $monto/hora no oficial) y anteponemos las líneas con las cifras

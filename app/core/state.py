@@ -122,6 +122,11 @@ class EstadoCapturado(BaseModel):
     # siguiente turno por su propia vía, sin depender de cómo lo frasee Haiku.
     # Valores: 'nombre_hijo'|'nombre_papa'|'edad'|'correo'|'telefono'|'dia'|'hora'|'grado'.
     ultimo_campo_pedido: str | None = None
+    # Bloque B (estrategia): máx UNA pregunta de discovery (sondeo) en TODA la
+    # conversación. Una vez hecha, el código recorta las siguientes preguntas de
+    # sondeo de Haiku. NO afecta las preguntas de datos del agendado (las emite el
+    # código) ni un turno donde el papá pidió algo concreto.
+    discovery_pregunta_hecha: bool = False
 
     handoff_a_lily: bool = False
     fuente_entrada: str | None = None  # 'dm_redes', 'anuncio_whatsapp', 'referido', 'directo'
