@@ -250,3 +250,73 @@ async def test_kinder_sin_grado_pide_grado_no_emite_horario() -> None:
 def _conv_kinder2():
     from app.core.state import NivelEducativo
     return _conv(NivelEducativo.KINDER, "2° de Kinder")
+
+
+# ============================================================
+# Bloque B — guards de texto libre por el CAMINO DE PRODUCCIÓN (no mocks puros):
+# Haiku devuelve venezolanismos / muchas preguntas y la respuesta final los limpia.
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_guard_borra_venezolanismos_camino_produccion() -> None:
+    from app.core.orchestrator import procesar_turno
+
+    repo = _Repo(_conv(None, None))
+    haiku = _Haiku(
+        "¡Hola! ¿Está tu hijo en alguna escuela? ¿Cómo lo viven? "
+        "Avísame qué día te viene bien."
+    )
+    ctx = _leaf(repo, haiku, Intent.SALUDO_INICIAL)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(mensaje="hola", session_id="web:lili", canal=None)
+    finally:
+        _exit(ctx)
+    low = r.response.lower()
+    assert "cómo lo viven" not in low
+    assert "te viene bien" not in low
+
+
+@pytest.mark.asyncio
+async def test_guard_tope_una_pregunta_camino_produccion() -> None:
+    from app.core.orchestrator import procesar_turno
+
+    repo = _Repo(_conv(None, None))
+    haiku = _Haiku("Qué gusto. ¿Vives cerca? ¿Buscas kinder? ¿Cuándo quieres venir?")
+    ctx = _leaf(repo, haiku, Intent.SALUDO_INICIAL)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(mensaje="hola", session_id="web:lili", canal=None)
+    finally:
+        _exit(ctx)
+    assert r.response.count("?") <= 1
+
+
+@pytest.mark.asyncio
+async def test_guards_no_rompen_costos_camino_produccion() -> None:
+    """Con venezolanismo + costos: el dato sigue correcto y se limpia el texto."""
+    from app.core.orchestrator import procesar_turno
+
+    repo = _Repo(_conv_kinder2())
+    haiku = _Haiku("¡Está regalado! Colegiatura: $6,450. ¿Cómo lo viven en casa?")
+    ctx = _leaf(repo, haiku, Intent.PREGUNTA_COSTOS)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(mensaje="¿costos de kinder?", session_id="web:lili", canal=None)
+    finally:
+        _exit(ctx)
+    assert "$5,250" in r.response and "$10,000" in r.response  # dato correcto intacto
+    assert "$6,450" not in r.response                          # guard de cifras
+    assert "regalado" not in r.response.lower()                # guard de frases
+    assert "cómo lo viven" not in r.response.lower()
+
+
+def test_kid_visit_no_es_cita_agendable_solo_informes() -> None:
+    """Punto 4: la única cita agendable es la de informes; Kid Visit es paso posterior."""
+    from app.core.prompt_builder import load_prompt_file
+
+    rules = load_prompt_file("rules.md").lower()
+    assert "única cita agendable" in rules or "cita de informes" in rules
+    assert "kid visit" in rules  # se aclara que es paso POSTERIOR, no opción a elegir
+    assert "posterior" in rules

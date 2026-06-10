@@ -49,6 +49,7 @@ from app.core.oferta_resolver import (
     precio_nivel_de_estado,
     sanear_cifras_ajenas,
 )
+from app.core.output_guards import sanear_texto_libre_haiku
 from app.core.prompt_builder import build_system_blocks
 from app.core.repository import get_repository
 from app.core.state import (
@@ -669,6 +670,17 @@ async def procesar_turno(
             )
 
     llm_latency = int((time.perf_counter() - llm_started) * 1000)
+
+    # GUARDS de TEXTO LIBRE de Haiku (Bloque B) — ENFORZAR, no instruir. Quita
+    # venezolanismos/colombianismos ("¿cómo lo viven?", "te viene/vienen bien") y
+    # recorta a máx 1 pregunta. SOLO sobre el texto de Haiku; NUNCA sobre líneas
+    # de código (oferta / pregunta de colección / cierre D.4) — por eso corre ANTES
+    # de antepone oferta y de anexar la pregunta del campo, y se omite si la
+    # respuesta YA es 100% código (coleccion_directa).
+    if not coleccion_directa:
+        response_text = sanear_texto_libre_haiku(
+            response_text, max_preguntas=settings.max_preguntas_por_turno
+        )
 
     # OFERTA — el número lo EMITE el código. Saneamos SOLO la parte de Haiku (borra
     # cualquier $monto/hora no oficial) y anteponemos las líneas con las cifras
