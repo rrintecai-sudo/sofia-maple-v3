@@ -35,6 +35,7 @@ from app.core.appointment_extractor import (
     extraer_hora_simple,
     extraer_proximo_dia_semana,
     fecha_humana_solo_dia,
+    motivo_ajuste_fecha_relativa,
 )
 from app.core.appointment_messages import render_pregunta_campo
 from app.core.campus_resolver import resolve_campus_from_estado
@@ -480,6 +481,10 @@ async def handle_appointment_intent(
     if fecha_det:
         capt.cita_fecha_slot = fecha_det
 
+    # Si "hoy" se movió a otro día (cierre/fin de semana), guardamos la RAZÓN para
+    # decírsela al papá — no saltar de día en silencio.
+    motivo_fecha = motivo_ajuste_fecha_relativa(mensaje, now) if fecha_det else None
+
     # Campo que el CÓDIGO pidió el turno anterior (para parsear la respuesta SUELTA
     # y para detectar reintentos del mismo campo — guard anti-bucle).
     campo_pedido_prev = capt.ultimo_campo_pedido
@@ -610,7 +615,15 @@ async def handle_appointment_intent(
                 ),
             ),
             mensaje_coleccion=render_pregunta_campo(
-                "hora", dia=dia_resuelto, horas_libres=horas_libres, reintento=es_reintento
+                "hora",
+                dia=dia_resuelto,
+                horas_libres=horas_libres,
+                reintento=es_reintento,
+                motivo=(
+                    f"{motivo_fecha}, te propongo el {dia_resuelto}."
+                    if motivo_fecha
+                    else None
+                ),
             ),
             acciones=["missing_time"],
             appointment_datetime=appt_dt,

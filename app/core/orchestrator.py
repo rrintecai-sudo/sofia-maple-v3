@@ -49,7 +49,7 @@ from app.core.oferta_resolver import (
     precio_nivel_de_estado,
     sanear_cifras_ajenas,
 )
-from app.core.output_guards import sanear_texto_libre_haiku
+from app.core.output_guards import sanear_sondeo, sanear_texto_libre_haiku
 from app.core.prompt_builder import build_system_blocks
 from app.core.repository import get_repository
 from app.core.state import (
@@ -685,6 +685,10 @@ async def procesar_turno(
         else:
             max_preg = settings.max_preguntas_por_turno
         response_text = sanear_texto_libre_haiku(response_text, max_preguntas=max_preg)
+        # Turno de OFERTA: además, NADA de sondeo (ni pregunta ni afirmación tipo
+        # "me gustaría entender qué buscas"). Da el dato y para.
+        if lineas_oferta:
+            response_text = sanear_sondeo(response_text)
         # Si quedó una pregunta de discovery (no fue turno de oferta), gasta el cupo.
         if not lineas_oferta and not en_agendado and "?" in response_text:
             capt.discovery_pregunta_hecha = True

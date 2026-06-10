@@ -352,6 +352,24 @@ def extraer_fecha_relativa(texto: str, now: datetime | None = None) -> str | Non
     return None
 
 
+def motivo_ajuste_fecha_relativa(texto: str, now: datetime | None = None) -> str | None:
+    """Si el papá dijo 'hoy' pero la fecha se MOVIÓ a otro día (cerró el horario o es
+    fin de semana), devuelve la RAZÓN legible para que Sofía la explique en vez de
+    saltar de día en silencio. None si no se movió. (El caso 'mañana'→fin de semana
+    lo explica el path de disponibilidad.)"""
+    t = (texto or "").lower()
+    base = now or datetime.now(TZ_MONTERREY)
+    if base.tzinfo is None:
+        base = base.replace(tzinfo=TZ_MONTERREY)
+    base_local = base.astimezone(TZ_MONTERREY)
+    if _HOY_RE.search(t):
+        if base_local.hour >= _HORA_CIERRE_LILY:
+            return "Hoy ya cerramos el horario de visitas"
+        if base_local.date().weekday() >= 5:
+            return "Hoy no atendemos porque es fin de semana"
+    return None
+
+
 @dataclass
 class AppointmentDateTime:
     """Fecha/hora extraída de un mensaje. Si fecha o hora son None,

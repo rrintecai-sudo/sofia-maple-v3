@@ -397,6 +397,27 @@ async def test_primera_discovery_marca_flag() -> None:
     assert repo._conv.estado_capturado.discovery_pregunta_hecha is True  # cupo marcado
 
 
+@pytest.mark.asyncio
+async def test_costos_sin_marcador_suelto_ni_sondeo() -> None:
+    """Pulido 2+3: respuesta de costos sin '**' suelto y sin frase de sondeo."""
+    from app.core.orchestrator import procesar_turno
+
+    repo = _Repo(_conv_kinder2())
+    haiku = _Haiku(
+        "** ¡Claro! Colegiatura: $6,450. Me gustaría entender qué buscas para tu hijo."
+    )
+    ctx = _leaf(repo, haiku, Intent.PREGUNTA_COSTOS)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(mensaje="¿costos?", session_id="web:lili", canal=None)
+    finally:
+        _exit(ctx)
+    assert "$5,250" in r.response
+    assert "** " not in r.response and not r.response.strip().endswith("**")  # sin marcador suelto
+    assert "me gustaría entender" not in r.response.lower()                    # sin sondeo
+    assert "$6,450" not in r.response
+
+
 def test_kid_visit_no_es_cita_agendable_solo_informes() -> None:
     """Punto 4: la única cita agendable es la de informes; Kid Visit es paso posterior."""
     from app.core.prompt_builder import load_prompt_file

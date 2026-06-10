@@ -536,6 +536,36 @@ async def test_handler_fecha_pasada(monkeypatch) -> None:
     assert "ya pasó" in result.hint_para_prompt
 
 
+@pytest.mark.asyncio
+@respx.mock
+async def test_handler_hoy_pasado_cierre_explica_motivo(monkeypatch) -> None:
+    """Pulido 1: 'hoy' a las 3 p.m. se mueve a jueves 11 y Sofía EXPLICA por qué
+    (no salta de día en silencio)."""
+    _mock_extractor(monkeypatch, fecha=None, hora=None)  # el LLM no aporta fecha
+    respx.get("https://x.supabase.co/rest/v1/lily_availability").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"day_of_week": d, "start_time": "08:00:00", "end_time": "15:00:00",
+                 "slot_duration_minutes": 60, "active": True}
+                for d in (1, 2, 3, 4, 5)
+            ],
+        )
+    )
+    respx.get("https://x.supabase.co/rest/v1/appointments").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    estado = _estado_base(nombre_papa="Ana", nivel=NivelEducativo.KINDER)
+    now = datetime(2026, 6, 10, 15, 0, tzinfo=TZ_MONTERREY)  # miércoles 3 p.m.
+    result = await handle_appointment_intent("hoy", estado, settings=_settings(), now=now)
+
+    assert estado.estado_capturado.cita_fecha_slot == "2026-06-11"  # se movió a jueves
+    msg = (result.mensaje_coleccion or "").lower()
+    assert "cerramos" in msg                  # explica la razón
+    assert "jueves 11 de junio" in msg        # nombra el día propuesto
+    assert "hora" in msg                       # y pide la hora de ese día
+
+
 # ============================================================
 # Bloque C.2 — Campus resuelto automáticamente desde el nivel del hijo
 # (NUNCA preguntado al papá) + mensaje incluye dirección + link Maps

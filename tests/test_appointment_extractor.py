@@ -510,3 +510,23 @@ def test_fecha_relativa_sin_relativa() -> None:
     now = datetime(2026, 6, 3, 9, 0, tzinfo=TZ_MONTERREY)
     assert extraer_fecha_relativa("el viernes", now) is None
     assert extraer_fecha_relativa("a las 10am", now) is None
+
+
+def test_motivo_ajuste_fecha_relativa_hoy_cerrado() -> None:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.core.appointment_extractor import (
+        extraer_fecha_relativa,
+        motivo_ajuste_fecha_relativa,
+    )
+
+    mty = ZoneInfo("America/Monterrey")
+    tarde = datetime(2026, 6, 10, 15, 0, tzinfo=mty)  # miércoles 3 p.m.
+    # 'hoy' se mueve a jueves 11 y la razón se explica.
+    assert extraer_fecha_relativa("hoy", tarde) == "2026-06-11"
+    assert "cerramos" in (motivo_ajuste_fecha_relativa("hoy", tarde) or "").lower()
+    # 'hoy' temprano NO se mueve → sin razón.
+    manana = datetime(2026, 6, 10, 9, 0, tzinfo=mty)
+    assert extraer_fecha_relativa("hoy", manana) == "2026-06-10"
+    assert motivo_ajuste_fecha_relativa("hoy", manana) is None

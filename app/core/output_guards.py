@@ -25,7 +25,40 @@ FRASES_PROHIBIDAS: list[str] = [
 # Máximo de preguntas en el texto de Haiku. Configurable (subir a 2 si se decide).
 MAX_PREGUNTAS_POR_TURNO = 1
 
+# Sondeo (afirmaciones que pescan info del papá). En turno de OFERTA no debe ir
+# NINGÚN sondeo — ni pregunta ni afirmación. Lista ampliable.
+SONDEO_AFIRMATIVO: list[str] = [
+    r"\bme\s+(?:gustar[íi]a|encantar[íi]a)\s+(?:entender|saber|conocer)\b",
+    r"\b(?:cu[ée]ntame|cu[ée]ntanos|plat[íi]came|plat[íi]canos)\b",
+    r"\bquiero\s+(?:entender|saber|conocer)\s+(?:qu[ée]|c[óo]mo|de\s+ti|m[áa]s\s+de)\b",
+    r"\bqu[ée]\s+(?:es\s+lo\s+que\s+)?(?:m[áa]s\s+)?(?:te\s+importa|buscas|esperas|necesitas)\b",
+    r"\bay[úu]dame\s+a\s+(?:entender|conocer)\b",
+]
+
 _FRASES_COMPILADAS = [re.compile(p, re.IGNORECASE) for p in FRASES_PROHIBIDAS]
+_SONDEO_COMPILADO = [re.compile(p, re.IGNORECASE) for p in SONDEO_AFIRMATIVO]
+
+
+def limpiar_marcadores_sueltos(texto: str) -> str:
+    """Quita marcadores de formato huérfanos (un '**' sin par) que quedan cuando se
+    elimina una oración a la mitad de un texto en negritas. Evita que salga '**'
+    suelto al usuario. Conserva las negritas BIEN formadas ('**texto**')."""
+    out: list[str] = []
+    for linea in (texto or "").split("\n"):
+        if linea.count("**") % 2 == 1:  # número impar → hay un huérfano
+            idx = linea.rfind("**")
+            linea = (linea[:idx] + linea[idx + 2:]).rstrip()
+        out.append(linea)
+    txt = "\n".join(out)
+    return re.sub(r"[ \t]{2,}", " ", txt).strip()
+
+
+def sanear_sondeo(texto: str) -> str:
+    """Elimina ORACIONES de sondeo afirmativo ('me gustaría entender qué buscas...').
+    Para usar en turnos de OFERTA: da el dato y para, sin pescar info."""
+    segmentos = _segmentar(texto)
+    fuera = [s for s in segmentos if not any(p.search(s) for p in _SONDEO_COMPILADO)]
+    return _rejoin(fuera)
 
 
 def _segmentar(texto: str) -> list[str]:
@@ -72,7 +105,8 @@ def limitar_preguntas(texto: str, maximo: int = MAX_PREGUNTAS_POR_TURNO) -> str:
 def sanear_texto_libre_haiku(
     texto: str, *, max_preguntas: int = MAX_PREGUNTAS_POR_TURNO
 ) -> str:
-    """Aplica AMBOS guards en orden: primero quita frases prohibidas, luego recorta
-    preguntas de más. Pensado para el texto libre de Haiku exclusivamente."""
+    """Aplica los guards en orden: quita frases prohibidas, recorta preguntas de más
+    y limpia marcadores de formato huérfanos. Texto libre de Haiku exclusivamente."""
     paso1 = sanear_frases_prohibidas(texto)
-    return limitar_preguntas(paso1, max_preguntas)
+    paso2 = limitar_preguntas(paso1, max_preguntas)
+    return limpiar_marcadores_sueltos(paso2)
