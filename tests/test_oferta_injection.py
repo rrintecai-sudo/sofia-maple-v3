@@ -418,6 +418,51 @@ async def test_costos_sin_marcador_suelto_ni_sondeo() -> None:
     assert "$6,450" not in r.response
 
 
+@pytest.mark.asyncio
+async def test_quiero_informes_no_entra_agendado() -> None:
+    """Bug en vivo: 'quiero informes... costos' NO debe entrar a AGENDANDO (aunque el
+    LLM lo clasifique como QUIERE_AGENDAR). Da costos y se queda en exploración."""
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import FaseAgendado
+
+    repo = _Repo(_conv(None, None))  # el estado se llena por extracción ("2do de kinder")
+    haiku = _Haiku("¡Claro! Con gusto te comparto.")
+    ctx = _leaf(repo, haiku, Intent.QUIERE_AGENDAR)  # el clasificador LLM se equivoca
+    _enter(ctx)
+    try:
+        r = await procesar_turno(
+            mensaje="Hola, quiero informes para kinder, mi hijo va a 2do de kinder, costos",
+            session_id="web:lili", canal=None,
+        )
+    finally:
+        _exit(ctx)
+    # NO entró a agendar:
+    assert repo._conv.estado_capturado.fase_agendado == FaseAgendado.EXPLORANDO
+    # dio el dato:
+    assert "$5,250" in r.response
+    # NO pidió el nombre del hijo:
+    assert "nombre completo de tu hijo" not in r.response.lower()
+
+
+@pytest.mark.asyncio
+async def test_quiero_conocer_los_costos_no_entra_agendado() -> None:
+    """'quiero conocer los costos' = exploración (tiene 'conocer' pero pide info)."""
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import FaseAgendado
+
+    repo = _Repo(_conv_kinder2())
+    ctx = _leaf(repo, _Haiku("Va."), Intent.QUIERE_AGENDAR)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(
+            mensaje="quiero conocer los costos", session_id="web:lili", canal=None
+        )
+    finally:
+        _exit(ctx)
+    assert repo._conv.estado_capturado.fase_agendado == FaseAgendado.EXPLORANDO
+    assert "$5,250" in r.response
+
+
 def test_kid_visit_no_es_cita_agendable_solo_informes() -> None:
     """Punto 4: la única cita agendable es la de informes; Kid Visit es paso posterior."""
     from app.core.prompt_builder import load_prompt_file

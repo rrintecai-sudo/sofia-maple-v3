@@ -39,6 +39,7 @@ from app.core.intent_classifier import (
     IntentResult,
     classify_intent,
     es_respuesta_corta_al_turno_previo,
+    menciona_info_exploratoria,
     quiere_agendar_explicito,
 )
 from app.core.learning_mode import guardar_feedback
@@ -319,9 +320,13 @@ async def procesar_turno(
     # FIX (2026-06-02c): el trigger del re-armado NO depende solo del clasificador
     # LLM (que falla "quiero agendar otra" → confuso_otro). Respaldo determinístico
     # con regex. El clasificador no debe ser load-bearing.
-    quiere_reagendar = (
-        intent_result.intent == Intent.QUIERE_AGENDAR
-        or quiere_agendar_explicito(mensaje)
+    # GUARD (2026-06-10): pedir info (informes/costos/horarios) NO es agendar. El
+    # clasificador LLM mete "quiero informes" a QUIERE_AGENDAR (la cita se llama
+    # "cita de informes") → solo la señal CLARA de visita/cita (regex determinístico)
+    # cuenta siempre; el intent LLM solo si el mensaje NO es una consulta de info.
+    pide_info_exploratoria = menciona_info_exploratoria(mensaje)
+    quiere_reagendar = quiere_agendar_explicito(mensaje) or (
+        intent_result.intent == Intent.QUIERE_AGENDAR and not pide_info_exploratoria
     )
     if (
         estado.estado_capturado.fase_agendado == FaseAgendado.CERRADO
@@ -353,10 +358,15 @@ async def procesar_turno(
     # + día/hora hasta cerrar. Persiste en sofia_conversations.estado_capturado.
     capt = estado.estado_capturado
 
-    senal_agendado = (
-        intent_result.intent == Intent.QUIERE_AGENDAR
-        or quiere_agendar_explicito(mensaje)
-        or contiene_expresion_temporal(mensaje)
+    # Misma regla: la señal CLARA de visita/cita (regex) cuenta siempre; el intent
+    # LLM y una expresión temporal solo si el mensaje NO es una consulta de info
+    # ("quiero informes para kinder, costos" → exploración, NO agendar).
+    senal_agendado = quiere_agendar_explicito(mensaje) or (
+        not pide_info_exploratoria
+        and (
+            intent_result.intent == Intent.QUIERE_AGENDAR
+            or contiene_expresion_temporal(mensaje)
+        )
     )
     if capt.fase_agendado == FaseAgendado.EXPLORANDO and senal_agendado:
         capt.fase_agendado = FaseAgendado.AGENDANDO

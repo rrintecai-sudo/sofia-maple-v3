@@ -196,6 +196,23 @@ def quiere_agendar_explicito(mensaje: str) -> bool:
     return bool(_QUIERE_AGENDAR_RE.search(mensaje or ""))
 
 
+# Pedir INFO (informes/costos/horarios) = EXPLORACIÓN, NO agendar. El clasificador
+# LLM mete "quiero informes" a QUIERE_AGENDAR porque la cita se llama "cita de
+# informes" → este guard evita entrar a AGENDANDO por una consulta de información.
+_INFO_EXPLORATORIA_RE = re.compile(
+    r"\b(?:informes?|informaci[óo]n|costos?|precios?|colegiaturas?|mensualidad(?:es)?|"
+    r"horarios?|cu[áa]nto\s+(?:cuesta|sale|es)|estancias?)\b",
+    re.IGNORECASE,
+)
+
+
+def menciona_info_exploratoria(mensaje: str) -> bool:
+    """True si el mensaje pide INFO (informes/costos/horarios/estancias) — señal de
+    EXPLORACIÓN, no de agendar. Úsalo para que el clasificador LLM no dispare el
+    agendado por 'quiero informes'."""
+    return bool(_INFO_EXPLORATORIA_RE.search(mensaje or ""))
+
+
 def es_respuesta_corta_al_turno_previo(mensaje: str, hay_turno_previo_assistant: bool) -> bool:
     """Heurística determinística (Bloque 5.7 ATAQUE 2).
 
