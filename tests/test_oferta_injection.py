@@ -1,12 +1,14 @@
-"""Inyección determinística de costos/horarios/estancias (réplica de la
-conversación de Lili). El dato lo pone el CÓDIGO desde las tablas; Haiku no inventa.
+"""Costos/horarios/estancias: la cifra la EMITE el CÓDIGO y un GUARD borra cualquier
+número que Haiku invente. Réplica del turno REAL de Lili (bundleado, intent=confuso_otro,
+Haiku devolviendo números equivocados) → la respuesta final muestra los datos correctos.
 
-Se mockean los tools (no red) con los valores REALES de las tablas y se captura el
-mensaje que recibe Haiku para verificar que el bloque DATO OFICIAL es correcto.
+NO se prueba "Haiku se portó bien": el fake Haiku devuelve $6,450 / 8:00 a propósito,
+y se afirma que la respuesta IGUAL muestra $5,250 / $10,000 / 9:00-2:00.
 """
 
 from __future__ import annotations
 
+import types
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
@@ -30,18 +32,12 @@ def _precio_kinder() -> PrecioResult:
 
 
 def _horario_kinder2() -> HorarioResult:
-    return HorarioResult(
-        nivel="kinder_2", modalidad="regular",
-        hora_inicio="09:00:00", hora_fin="14:00:00", dias="L-V", notas=None,
-    )
+    return HorarioResult(nivel="kinder_2", modalidad="regular",
+                         hora_inicio="09:00:00", hora_fin="14:00:00", dias="L-V", notas=None)
 
 
 def _estancias_kinder() -> list[EstanciaResult]:
     return [
-        EstanciaResult(nombre="media", aplica_para=["kinder"], hora_inicio="07:00:00",
-                       hora_fin="15:30:00", incluye_comida=True, incluye_snack=False,
-                       incluye_academia=False, costo_mensual=Decimal("1400"),
-                       costo_por_dia=None, inscripcion_extra=None, notas=None),
         EstanciaResult(nombre="after_school", aplica_para=["kinder"], hora_inicio="07:00:00",
                        hora_fin="19:00:00", incluye_comida=True, incluye_snack=True,
                        incluye_academia=True, costo_mensual=Decimal("3100"),
@@ -49,24 +45,24 @@ def _estancias_kinder() -> list[EstanciaResult]:
     ]
 
 
-class _RecordingAnthropic:
-    """Captura el último mensaje de usuario (con el bloque inyectado) y, como Haiku
-    BIEN portado, devuelve textual el bloque DATO OFICIAL que recibió."""
+# Haiku que INVENTA números equivocados (lo que hizo en vivo): $6,450 / $2,150 / 8:00-1:00.
+_HAIKU_MENTIROSO = (
+    "¡Hola! Qué gusto. Tu peque va a 2° de Kinder.\n"
+    "Colegiatura mensual: $6,450\n"
+    "Inscripción anual: $2,150\n"
+    "Horario escolar: 8:00 a.m. a 1:00 p.m.\n"
+    "¿Qué buscas para él en esta etapa?"
+)
 
-    def __init__(self) -> None:
-        self.user_msgs: list[str] = []
+
+class _Haiku:
+    def __init__(self, texto: str = _HAIKU_MENTIROSO) -> None:
+        self.texto = texto
 
     async def chat(self, *, system_blocks, messages, **kw):
-        import types
-
-        last = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
-        self.user_msgs.append(last)
-        texto = last.split("DATO OFICIAL")[-1] if "DATO OFICIAL" in last else "ok"
-        usage = types.SimpleNamespace(
-            input_tokens=10, output_tokens=10,
-            cache_read_input_tokens=0, cache_creation_input_tokens=0,
-        )
-        return types.SimpleNamespace(content=[types.SimpleNamespace(text=texto)], usage=usage)
+        usage = types.SimpleNamespace(input_tokens=10, output_tokens=10,
+                                      cache_read_input_tokens=0, cache_creation_input_tokens=0)
+        return types.SimpleNamespace(content=[types.SimpleNamespace(text=self.texto)], usage=usage)
 
 
 class _Repo:
@@ -93,11 +89,11 @@ class _Repo:
         return sum(1 for m in self._messages if m["role"] == "assistant")
 
 
-def _leaf(repo, anthropic, classify_intent_value):
+def _leaf(repo, anthropic, intent_value, *, estancias=None):
     from app.config import get_settings as _gs
 
     async def fake_classify(message, **kw):
-        return IntentResult(intent=classify_intent_value, confidence=0.9)
+        return IntentResult(intent=intent_value, confidence=0.9)
 
     async def fake_extract(mensaje, estado_actual, *, ultimo_assistant=None, **kw):
         return _aplicar_fallbacks_deterministicos(
@@ -105,9 +101,9 @@ def _leaf(repo, anthropic, classify_intent_value):
             ultimo_campo_pedido=estado_actual.ultimo_campo_pedido,
         )
 
-    settings_sin_validadores = _gs().model_copy(update={"enable_validators": False})
+    s = _gs().model_copy(update={"enable_validators": False})
     return [
-        patch("app.core.orchestrator.get_settings", return_value=settings_sin_validadores),
+        patch("app.core.orchestrator.get_settings", return_value=s),
         patch("app.core.orchestrator.get_repository", return_value=repo),
         patch("app.core.orchestrator.get_anthropic", return_value=anthropic),
         patch("app.core.orchestrator.classify_intent", side_effect=fake_classify),
@@ -117,17 +113,18 @@ def _leaf(repo, anthropic, classify_intent_value):
         patch("app.core.orchestrator.get_precio", AsyncMock(return_value=_precio_kinder())),
         patch("app.core.orchestrator.get_todos_precios", AsyncMock(return_value=[])),
         patch("app.core.orchestrator.get_horario", AsyncMock(return_value=_horario_kinder2())),
-        patch("app.core.orchestrator.get_estancias", AsyncMock(return_value=_estancias_kinder())),
+        patch("app.core.orchestrator.get_estancias",
+              AsyncMock(return_value=_estancias_kinder() if estancias is None else estancias)),
     ]
 
 
-def _estado_kinder2():
-    from app.core.state import Canal, EstadoCapturado, EstadoConversacion, HijoInfo, NivelEducativo
+def _conv(nivel, grado):
+    from app.core.state import Canal, EstadoCapturado, EstadoConversacion, HijoInfo
     return EstadoConversacion(
         session_id="web:lili", canal=Canal.WEB, identificador="lili",
         estado_capturado=EstadoCapturado(
-            nivel_buscado_actual=NivelEducativo.KINDER,
-            hijos=[HijoInfo(nivel=NivelEducativo.KINDER, grado="2° de Kinder")],
+            nivel_buscado_actual=nivel,
+            hijos=[HijoInfo(nivel=nivel, grado=grado)] if (nivel or grado) else [],
         ),
     )
 
@@ -143,99 +140,113 @@ def _exit(ctx):
 
 
 @pytest.mark.asyncio
-async def test_costos_kinder_inyecta_5250_no_6500() -> None:
+async def test_turno_real_lili_bundleado_confuso_otro_codigo_gana() -> None:
+    """RÉPLICA DEL TURNO REAL: mensaje bundleado, intent=confuso_otro, Haiku miente
+    ($6,450/$2,150/8:00). La respuesta final IGUAL muestra los datos correctos."""
     from app.core.orchestrator import procesar_turno
+    from app.core.state import NivelEducativo
 
-    repo = _Repo(_estado_kinder2())
-    haiku = _RecordingAnthropic()
-    ctx = _leaf(repo, haiku, Intent.PREGUNTA_COSTOS)
+    # El estado se llena por la EXTRACCIÓN real del mensaje ("2do de kinder").
+    repo = _Repo(_conv(None, None))
+    haiku = _Haiku(_HAIKU_MENTIROSO)
+    ctx = _leaf(repo, haiku, Intent.CONFUSO_OTRO)  # ← el intent REAL que falló
     _enter(ctx)
     try:
-        r = await procesar_turno(mensaje="¿costos de kinder?", session_id="web:lili", canal=None)
+        r = await procesar_turno(
+            mensaje="Hola, quiero informes para kinder, costos y horarios viene de otra "
+                    "escuela, va a 2do de kinder",
+            session_id="web:lili", canal=None,
+        )
     finally:
         _exit(ctx)
-    inyectado = haiku.user_msgs[0]
-    assert "$5,250" in inyectado and "$10,000" in inyectado
-    assert "$6,500" not in inyectado and "6,500" not in r.response
+
+    # El estado capturó kinder + 2° de Kinder.
+    assert repo._conv.estado_capturado.nivel_buscado_actual == NivelEducativo.KINDER
+    assert repo._conv.estado_capturado.hijos[0].grado == "2° de Kinder"
+    # CÓDIGO emitió los datos correctos:
+    assert "$5,250" in r.response and "$10,000" in r.response
+    assert "9:00 a.m. a 2:00 p.m." in r.response
+    # GUARD borró los inventos de Haiku:
+    assert "$6,450" not in r.response and "$2,150" not in r.response
+    assert "8:00 a.m. a 1:00 p.m." not in r.response and "1:00 p.m." not in r.response
 
 
 @pytest.mark.asyncio
-async def test_horario_2k_inyecta_9_a_2_no_8_230() -> None:
+async def test_costos_emite_5250_y_guard_borra_6450() -> None:
     from app.core.orchestrator import procesar_turno
 
-    repo = _Repo(_estado_kinder2())
-    haiku = _RecordingAnthropic()
-    ctx = _leaf(repo, haiku, Intent.PREGUNTA_HORARIO)
+    repo = _Repo(_conv_kinder2())
+    ctx = _leaf(repo, _Haiku("Colegiatura: $6,450 al mes. ¡Te encantará!"), Intent.PREGUNTA_COSTOS)
     _enter(ctx)
     try:
-        r = await procesar_turno(mensaje="¿horario?", session_id="web:lili", canal=None)
+        r = await procesar_turno(mensaje="¿cuánto cuesta kinder?", session_id="web:lili", canal=None)
     finally:
         _exit(ctx)
-    inyectado = haiku.user_msgs[0]
-    assert "9:00 a.m. a 2:00 p.m." in inyectado
-    assert "8:00" not in inyectado and "2:30" not in inyectado
-    assert "2:30" not in r.response
+    assert "$5,250" in r.response and "$10,000" in r.response
+    assert "$6,450" not in r.response
 
 
 @pytest.mark.asyncio
-async def test_estancias_inyecta_7_a_7_no_530() -> None:
+async def test_horario_emite_9_a_2_y_guard_borra_8_230() -> None:
     from app.core.orchestrator import procesar_turno
 
-    repo = _Repo(_estado_kinder2())
-    haiku = _RecordingAnthropic()
-    ctx = _leaf(repo, haiku, Intent.PREGUNTA_ESTANCIAS)
+    repo = _Repo(_conv_kinder2())
+    ctx = _leaf(repo, _Haiku("El horario es de 8:00 a.m. a 2:30 p.m."), Intent.PREGUNTA_HORARIO)
     _enter(ctx)
     try:
-        r = await procesar_turno(mensaje="¿estancias?", session_id="web:lili", canal=None)
+        r = await procesar_turno(mensaje="¿a qué hora entran?", session_id="web:lili", canal=None)
     finally:
         _exit(ctx)
-    inyectado = haiku.user_msgs[0]
-    assert "7:00 a.m. a 7:00 p.m." in inyectado
-    assert "5:30" not in inyectado and "5:30" not in r.response
+    assert "9:00 a.m. a 2:00 p.m." in r.response
+    assert "8:00" not in r.response and "2:30" not in r.response
 
 
 @pytest.mark.asyncio
-async def test_costos_durante_agendado_tambien_inyecta() -> None:
-    """Misma pregunta DURANTE el agendado → el bloque correcto se inyecta igual."""
+async def test_estancias_emite_7_a_7_y_guard_borra_530() -> None:
     from app.core.orchestrator import procesar_turno
-    from app.core.state import FaseAgendado
 
-    conv = _estado_kinder2()
-    conv.estado_capturado.fase_agendado = FaseAgendado.AGENDANDO  # en mitad del agendado
-    repo = _Repo(conv)
-    haiku = _RecordingAnthropic()
-    ctx = _leaf(repo, haiku, Intent.PREGUNTA_COSTOS)
-    # En agendado corre el appointment_handler; lo neutralizamos (no es el foco).
-    ctx.append(patch("app.core.orchestrator.handle_appointment_intent",
-                     AsyncMock(return_value=None)))
+    repo = _Repo(_conv_kinder2())
+    ctx = _leaf(repo, _Haiku("La estancia es hasta las 5:30 p.m."), Intent.PREGUNTA_ESTANCIAS)
     _enter(ctx)
     try:
-        await procesar_turno(mensaje="oye y ¿cuánto cuesta?", session_id="web:lili", canal=None)
+        r = await procesar_turno(mensaje="¿tienen estancia?", session_id="web:lili", canal=None)
     finally:
         _exit(ctx)
-    inyectado = haiku.user_msgs[0]
-    assert "$5,250" in inyectado  # el dato oficial llega aunque sea mid-agendado
+    assert "7:00 a.m. a 7:00 p.m." in r.response
+    assert "5:30" not in r.response
 
 
 @pytest.mark.asyncio
-async def test_kinder_sin_grado_pide_grado_no_inventa_horario() -> None:
-    """Kinder SIN grado → el bloque dice que falta el grado (no se inventa horario)."""
+async def test_keyword_dispara_aunque_intent_sea_confuso() -> None:
+    """Sin intent de costos (confuso_otro), la palabra 'costos' SÍ dispara la emisión."""
     from app.core.orchestrator import procesar_turno
-    from app.core.state import Canal, EstadoCapturado, EstadoConversacion, HijoInfo, NivelEducativo
 
-    conv = EstadoConversacion(
-        session_id="web:sg", canal=Canal.WEB, identificador="sg",
-        estado_capturado=EstadoCapturado(nivel_buscado_actual=NivelEducativo.KINDER,
-                                          hijos=[HijoInfo(nivel=NivelEducativo.KINDER)]),
-    )
-    repo = _Repo(conv)
-    haiku = _RecordingAnthropic()
-    ctx = _leaf(repo, haiku, Intent.PREGUNTA_HORARIO)
+    repo = _Repo(_conv_kinder2())
+    ctx = _leaf(repo, _Haiku("mmm no sé, $9,999"), Intent.CONFUSO_OTRO)
     _enter(ctx)
     try:
-        await procesar_turno(mensaje="¿horario de kinder?", session_id="web:sg", canal=None)
+        r = await procesar_turno(mensaje="oye los costos?", session_id="web:lili", canal=None)
     finally:
         _exit(ctx)
-    inyectado = haiku.user_msgs[0]
-    assert "grado" in inyectado.lower()  # pide el grado
-    assert "8:00" not in inyectado and "9:00 a.m. a 2:00 p.m." not in inyectado
+    assert "$5,250" in r.response and "$9,999" not in r.response
+
+
+@pytest.mark.asyncio
+async def test_kinder_sin_grado_pide_grado_no_emite_horario() -> None:
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import NivelEducativo
+
+    repo = _Repo(_conv(NivelEducativo.KINDER, None))  # kinder, sin grado
+    ctx = _leaf(repo, _Haiku("8:00 a.m. a 1:00 p.m."), Intent.PREGUNTA_HORARIO)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(mensaje="¿horario de kinder?", session_id="web:lili", canal=None)
+    finally:
+        _exit(ctx)
+    assert "grado" in r.response.lower()  # pide el grado
+    assert "9:00 a.m. a 2:00 p.m." not in r.response and "8:00" not in r.response
+
+
+def _conv_kinder2():
+    from app.core.state import NivelEducativo
+    return _conv(NivelEducativo.KINDER, "2° de Kinder")

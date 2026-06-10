@@ -13,12 +13,88 @@ Reglas:
 
 from __future__ import annotations
 
+import re
+
 from app.core.campus_resolver import (
     _infer_grado_kinder,
     _infer_grado_primaria,
     _infer_grado_secundaria,
 )
 from app.core.state import EstadoConversacion
+
+# ============================================================
+# Detección DETERMINÍSTICA de consultas de oferta (keywords) — NO depende del
+# clasificador LLM (que mandó "kinder, costos y horarios" a confuso_otro).
+# ============================================================
+
+_COSTOS_RE = re.compile(
+    r"\b(?:costos?|cuestan?|precios?|colegiaturas?|mensualidad(?:es)?|"
+    r"inscripci[óo]n(?:es)?|cu[áa]nto\s+(?:cuesta|sale|es|pagar|pago|vale))\b",
+    re.IGNORECASE,
+)
+_HORARIO_RE = re.compile(
+    r"\bhorarios?\b|\ba\s+qu[ée]\s+hora\b|\bqu[ée]\s+hora(?:rio)?\b|"
+    r"\bhora\s+de\s+(?:entrada|salida)\b",
+    re.IGNORECASE,
+)
+_ESTANCIAS_RE = re.compile(
+    r"\bestancias?\b|\bhorario\s+extendid|\bjornada\s+extendid|\bafter\s*school\b|"
+    r"\bguarder[íi]a\b|\bextraescolar",
+    re.IGNORECASE,
+)
+
+
+def detectar_consulta_oferta(mensaje: str) -> set[str]:
+    """Devuelve qué tipos de dato pide el mensaje: {'costos','horario','estancias'}.
+    Determinístico (palabras clave), independiente del clasificador LLM."""
+    m = mensaje or ""
+    tipos: set[str] = set()
+    if _COSTOS_RE.search(m):
+        tipos.add("costos")
+    if _HORARIO_RE.search(m):
+        tipos.add("horario")
+    if _ESTANCIAS_RE.search(m):
+        tipos.add("estancias")
+    return tipos
+
+
+# ============================================================
+# Guard de salida: el número lo EMITE el código; cualquier $monto u hora que
+# Haiku escriba y NO esté en el bloque oficial se ELIMINA antes de salir.
+# ============================================================
+
+_MONEY_RE = re.compile(r"\$\s?(\d[\d,]*)")
+_HHMM_RE = re.compile(r"\b(\d{1,2}):(\d{2})\b")
+# Hora con meridiano SIN minutos ("8 a.m."), no precedida por ':' o dígito.
+_HORA_AMPM_RE = re.compile(r"(?<![:\d])(\d{1,2})\s?[ap]\.?\s?m\.?\b", re.IGNORECASE)
+
+
+def extraer_figuras(texto: str) -> set[str]:
+    """Normaliza montos y horas a tokens comparables: '$5,250'→'5250', '9:00'→'9:00',
+    '8 a.m.'→'8:00'."""
+    s: set[str] = set()
+    for mm in _MONEY_RE.finditer(texto or ""):
+        s.add(mm.group(1).replace(",", ""))
+    for mm in _HHMM_RE.finditer(texto or ""):
+        s.add(f"{int(mm.group(1))}:{mm.group(2)}")
+    for mm in _HORA_AMPM_RE.finditer(texto or ""):
+        s.add(f"{int(mm.group(1))}:00")
+    return s
+
+
+def sanear_cifras_ajenas(texto_haiku: str, permitidas: set[str]) -> str:
+    """Elimina de la parte de Haiku cada LÍNEA que contenga un $monto u hora que NO
+    esté en `permitidas` (las que emitió el código). El dato correcto ya va aparte;
+    así, aunque Haiku escriba '$6,450' u '8:00', se borra antes de salir."""
+    fuera: list[str] = []
+    for linea in (texto_haiku or "").split("\n"):
+        figs = extraer_figuras(linea)
+        if figs and not figs <= permitidas:
+            continue  # la línea tiene una cifra NO oficial → se elimina
+        fuera.append(linea)
+    # Colapsa líneas en blanco repetidas que pudieran quedar tras borrar.
+    out = "\n".join(fuera)
+    return re.sub(r"\n{3,}", "\n\n", out).strip()
 
 
 def _nivel_edad_grado(estado: EstadoConversacion) -> tuple[str | None, int | None, str | None]:

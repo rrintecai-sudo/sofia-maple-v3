@@ -43,8 +43,11 @@ from app.core.intent_classifier import (
 )
 from app.core.learning_mode import guardar_feedback
 from app.core.oferta_resolver import (
+    detectar_consulta_oferta,
+    extraer_figuras,
     horario_subnivel_de_estado,
     precio_nivel_de_estado,
+    sanear_cifras_ajenas,
 )
 from app.core.prompt_builder import build_system_blocks
 from app.core.repository import get_repository
@@ -130,6 +133,56 @@ class TurnResult:
     validators_failed: list[str] = field(default_factory=list)
     validators_warnings: list[str] = field(default_factory=list)
     regenerations: int = 0
+
+
+_DEFER_LILI = "Ese dato te lo confirma Miss Lili en la cita 😊"
+
+
+async def _construir_oferta(estado: EstadoConversacion, tipos: set[str]) -> list[str]:
+    """Líneas con las cifras EXACTAS de costo/horario/estancia, emitidas por el
+    CÓDIGO desde las tablas. Si no se puede resolver el nivel/grado, emite una
+    línea que pide el dato o defiere a Miss Lili — NUNCA un número inventado."""
+    lineas: list[str] = []
+
+    if "costos" in tipos:
+        nivel = precio_nivel_de_estado(estado)
+        if nivel:
+            p = await get_precio(nivel)
+            lineas.append(f"💰 {p.bloque_costos()}" if p else f"💰 {_DEFER_LILI}")
+        else:
+            todos = await get_todos_precios()
+            if todos:
+                tabla = "; ".join(
+                    f"{p.nivel} ${(p.colegiatura_mensual or 0):,.0f}/mes" for p in todos
+                )
+                lineas.append(
+                    f"💰 Colegiatura mensual por nivel: {tabla}. (Dime el nivel para el detalle exacto.)"
+                )
+            else:
+                lineas.append(f"💰 {_DEFER_LILI}")
+
+    if "horario" in tipos:
+        sub, necesita_grado = horario_subnivel_de_estado(estado)
+        if sub:
+            h = await get_horario(sub)
+            lineas.append(f"🕐 {h.bloque()}" if h else f"🕐 {_DEFER_LILI}")
+        elif necesita_grado:
+            lineas.append(
+                "🕐 El horario depende del grado exacto (Kinder tiene 3 horarios distintos). "
+                "¿En qué grado de Kinder va tu peque?"
+            )
+        else:
+            lineas.append("🕐 ¿De qué nivel/grado necesitas el horario?")
+
+    if "estancias" in tipos:
+        nivel_est = precio_nivel_de_estado(estado)
+        estancias = await get_estancias(nivel=nivel_est)
+        if estancias:
+            lineas.append("🏫 " + render_estancias_bloque(estancias))
+        else:
+            lineas.append(f"🏫 {_DEFER_LILI}")
+
+    return lineas
 
 
 async def procesar_turno(
@@ -334,51 +387,28 @@ async def procesar_turno(
                     extra={"nivel": nivel_para_campus, "campus": campus_res.nombre},
                 )
 
-    # COSTOS / HORARIOS / ESTANCIAS — inyección DETERMINÍSTICA del dato exacto desde
-    # las tablas (precios_por_nivel / horarios_por_nivel / modalidades_estancia). El
-    # número lo pone el CÓDIGO, no Haiku. Corre por intent — también DURANTE el
-    # agendado (estos intents están en _PREGUNTAS_SUSTANTIVAS → Haiku contesta con
-    # ESTE bloque inyectado y luego el código retoma con la pregunta del campo).
+    # COSTOS / HORARIOS / ESTANCIAS — el número lo EMITE el CÓDIGO (no Haiku). Se
+    # dispara por PALABRAS CLAVE (det.) además del intent, porque el clasificador LLM
+    # falla mensajes bundleados ("kinder, costos y horarios" → confuso_otro). Las
+    # `lineas_oferta` se anteponen a la respuesta y `figuras_oferta` arma el set de
+    # cifras permitidas para el guard de salida (abajo). Funciona también DURANTE el
+    # agendado.
+    tipos_oferta = detectar_consulta_oferta(mensaje)
     if intent_result.intent == Intent.PREGUNTA_COSTOS:
-        nivel_precio = precio_nivel_de_estado(estado)
-        if nivel_precio:
-            precio = await get_precio(nivel_precio)
-            if precio:
-                tools_data["costos"] = precio.bloque_costos()
-        else:
-            todos = await get_todos_precios()
-            if todos:
-                tabla = "; ".join(
-                    f"{p.nivel} ${(p.colegiatura_mensual or 0):,.0f}/mes" for p in todos
-                )
-                tools_data["costos"] = (
-                    f"Colegiaturas mensuales por nivel: {tabla}. Si el papá no dijo el "
-                    f"nivel, pregúntalo para darle el dato exacto."
-                )
-
+        tipos_oferta.add("costos")
     if intent_result.intent == Intent.PREGUNTA_HORARIO:
-        subnivel, necesita_grado = horario_subnivel_de_estado(estado)
-        if subnivel:
-            hor = await get_horario(subnivel)
-            if hor:
-                tools_data["horario"] = hor.bloque()
-        elif necesita_grado:
-            tools_data["horario"] = (
-                "El horario depende del GRADO exacto (Kinder tiene 3 horarios "
-                "distintos). Pregúntale en qué grado va ANTES de dar el horario; NO "
-                "des un horario sin saber el grado."
-            )
-        else:
-            tools_data["horario"] = (
-                "Aún no sé el nivel/grado. Pregúntalo ANTES de dar un horario; NO "
-                "inventes ni des una tabla."
-            )
-
+        tipos_oferta.add("horario")
     if intent_result.intent == Intent.PREGUNTA_ESTANCIAS:
-        nivel_est = precio_nivel_de_estado(estado)
-        estancias = await get_estancias(nivel=nivel_est)
-        if estancias:
-            tools_data["estancias"] = render_estancias_bloque(estancias)
+        tipos_oferta.add("estancias")
+    lineas_oferta: list[str] = await _construir_oferta(estado, tipos_oferta) if tipos_oferta else []
+    figuras_oferta: set[str] = set()
+    for _ln in lineas_oferta:
+        figuras_oferta |= extraer_figuras(_ln)
+    if lineas_oferta:
+        log.info(
+            "oferta_emitida_por_codigo",
+            extra={"session_id": session_id, "tipos": sorted(tipos_oferta)},
+        )
 
     # 5quater. Handler de QUIERE_AGENDAR (Bloque C.1). Si el papá quiere
     # agendar, intentamos extraer fecha/hora, verificar disponibilidad y
@@ -469,6 +499,18 @@ async def procesar_turno(
         for tool_name, data in tools_data.items():
             tool_hint_lines.append(f"- {tool_name}: {data}")
         mensaje_para_llm = f"{mensaje_para_llm}\n\n" + "\n".join(tool_hint_lines)
+
+    # Hint de OFERTA: el sistema ya le muestra al papá las cifras exactas (las
+    # antepone el código). Haiku NO debe escribir números — se eliminan en el guard.
+    if lineas_oferta:
+        mensaje_para_llm = (
+            f"{mensaje_para_llm}\n\n[DATOS DE OFERTA: el sistema YA le muestra al papá "
+            f"las cifras exactas de costo/horario/estancia que pidió (se insertan "
+            f"automáticamente arriba de tu respuesta). TÚ no escribas NINGÚN número, "
+            f"monto, '$' ni horario — cualquier cifra que pongas se ELIMINARÁ. Solo "
+            f"agrega 1-2 frases cálidas de contexto y, si quieres, UNA pregunta breve. "
+            f"NO repitas los datos.]"
+        )
 
     # Hint del handler de agendado (Bloque C.1)
     if appointment_handler is not None and appointment_handler.hint_para_prompt:
@@ -627,6 +669,19 @@ async def procesar_turno(
             )
 
     llm_latency = int((time.perf_counter() - llm_started) * 1000)
+
+    # OFERTA — el número lo EMITE el código. Saneamos SOLO la parte de Haiku (borra
+    # cualquier $monto/hora no oficial) y anteponemos las líneas con las cifras
+    # exactas. Se hace ANTES de anexar la pregunta de colección (que es código y NO
+    # debe sanearse — su ejemplo de formato lleva horas válidas). No aplica en cierre.
+    _es_cierre = appointment_handler is not None and appointment_handler.appointment_id is not None
+    if lineas_oferta and not _es_cierre:
+        cuerpo = sanear_cifras_ajenas(response_text, figuras_oferta)
+        response_text = "\n\n".join(lineas_oferta) + (f"\n\n{cuerpo}" if cuerpo else "")
+        log.info(
+            "oferta_prepend+guard",
+            extra={"session_id": session_id, "figuras": sorted(figuras_oferta)},
+        )
 
     # COLECCIÓN + pregunta sustantiva: Haiku contestó la duda del papá; el CÓDIGO
     # RETOMA con la pregunta del campo faltante (determinística, un solo campo) →
