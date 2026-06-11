@@ -518,6 +518,31 @@ async def test_quiero_informes_no_entra_agendado() -> None:
 
 
 @pytest.mark.asyncio
+async def test_quiero_informes_para_kinder_da_costos_sin_agendar_ni_lista_rota() -> None:
+    """Bug reabierto: 'quiero informes para kinder' (intent LLM pregunta_nivel) → da
+    costos de kinder, NO entra a agendar, SIN lista rota '1. 2. 3.'."""
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import FaseAgendado
+
+    repo = _Repo(_conv(None, None))
+    # Haiku TERCO que improvisa el agendado roto. NO debe invocarse (info_directa).
+    haiku = _Haiku("Perfecto, te agendo la cita de informes para Kinder.\n1. ¿Qué día?\n2.\n3.")
+    ctx = _leaf(repo, haiku, Intent.PREGUNTA_NIVEL)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(
+            mensaje="quiero informes para kinder", session_id="web:lili", canal=None
+        )
+    finally:
+        _exit(ctx)
+    assert repo._conv.estado_capturado.fase_agendado == FaseAgendado.EXPLORANDO  # NO agendó
+    assert "$5,250" in r.response and "$10,000" in r.response                    # dio el dato
+    assert "te agendo" not in r.response.lower()                                 # sin agendado falso
+    assert "\n2.\n" not in r.response and "\n3.\n" not in r.response             # sin lista rota
+    assert "1. ¿qué día" not in r.response.lower()
+
+
+@pytest.mark.asyncio
 async def test_quiero_conocer_los_costos_no_entra_agendado() -> None:
     """'quiero conocer los costos' = exploración (tiene 'conocer' pero pide info)."""
     from app.core.orchestrator import procesar_turno

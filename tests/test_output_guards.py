@@ -81,3 +81,12 @@ def test_sanear_sondeo_quita_afirmaciones() -> None:
     # No toca afirmaciones normales:
     txt = "La colegiatura es de $5,250 al mes."
     assert sanear_sondeo(txt) == txt
+
+
+def test_limpiar_listas_rotas() -> None:
+    from app.core.output_guards import limpiar_listas_rotas as lr
+
+    assert lr("Hola\n1. ¿Qué día?\n2.\n3.\nListo.") == "Hola\n1. ¿Qué día?\nListo."
+    assert lr("Texto normal sin listas.") == "Texto normal sin listas."
+    # marcadores con contenido se conservan
+    assert lr("1. Uno\n2. Dos") == "1. Uno\n2. Dos"

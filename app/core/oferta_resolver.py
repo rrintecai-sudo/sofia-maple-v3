@@ -50,7 +50,10 @@ def nivel_buscado_de_mensaje(mensaje: str) -> NivelEducativo | None:
 
 _COSTOS_RE = re.compile(
     r"\b(?:costos?|cuestan?|precios?|colegiaturas?|mensualidad(?:es)?|"
-    r"inscripci[óo]n(?:es)?|cu[áa]nto\s+(?:cuesta|sale|es|pagar|pago|vale))\b",
+    r"inscripci[óo]n(?:es)?|cu[áa]nto\s+(?:cuesta|sale|es|pagar|pago|vale)|"
+    # "quiero informes / información" = pedido de DATO (exploración) → emite costos,
+    # NO entra a agendar (la cita se llama "cita de informes", pero esto es info).
+    r"informes?|informaci[óo]n)\b",
     re.IGNORECASE,
 )
 _HORARIO_RE = re.compile(

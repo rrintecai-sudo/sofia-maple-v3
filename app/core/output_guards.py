@@ -53,6 +53,19 @@ def limpiar_marcadores_sueltos(texto: str) -> str:
     return re.sub(r"[ \t]{2,}", " ", txt).strip()
 
 
+def limpiar_listas_rotas(texto: str) -> str:
+    """Quita marcadores de lista VACÍOS que Haiku a veces deja ('1.', '2.', '- ' sin
+    contenido) — la lista rota '1. 2. 3.' no debe llegar al usuario."""
+    out: list[str] = []
+    for linea in (texto or "").split("\n"):
+        s = linea.strip()
+        if re.fullmatch(r"(?:\d+[.)\-]|[-*•])\s*", s):  # solo marcador, sin texto
+            continue
+        out.append(linea)
+    txt = "\n".join(out)
+    return re.sub(r"\n{3,}", "\n\n", txt).strip()
+
+
 def sanear_sondeo(texto: str) -> str:
     """Elimina ORACIONES de sondeo afirmativo ('me gustaría entender qué buscas...').
     Para usar en turnos de OFERTA: da el dato y para, sin pescar info."""
@@ -109,4 +122,5 @@ def sanear_texto_libre_haiku(
     y limpia marcadores de formato huérfanos. Texto libre de Haiku exclusivamente."""
     paso1 = sanear_frases_prohibidas(texto)
     paso2 = limitar_preguntas(paso1, max_preguntas)
-    return limpiar_marcadores_sueltos(paso2)
+    paso3 = limpiar_listas_rotas(paso2)
+    return limpiar_marcadores_sueltos(paso3)
