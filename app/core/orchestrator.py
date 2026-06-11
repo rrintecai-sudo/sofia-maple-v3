@@ -47,6 +47,7 @@ from app.core.oferta_resolver import (
     detectar_consulta_oferta,
     extraer_figuras,
     horario_subnivel_de_estado,
+    nivel_buscado_de_mensaje,
     precio_nivel_de_estado,
     sanear_cifras_ajenas,
 )
@@ -138,6 +139,10 @@ class TurnResult:
 
 
 _DEFER_LILI = "Ese dato te lo confirma Miss Lili en la cita 😊"
+
+# Línea fija de cierre para turnos de info (code-emitida, corta y cálida). Una sola
+# pregunta, transaccional (no sondeo).
+_CIERRE_INFO = "¿Quieres saber algo más o agendamos una visita? 😊"
 
 
 async def _construir_oferta(estado: EstadoConversacion, tipos: set[str]) -> list[str]:
@@ -411,6 +416,12 @@ async def procesar_turno(
         tipos_oferta.add("horario")
     if intent_result.intent == Intent.PREGUNTA_ESTANCIAS:
         tipos_oferta.add("estancias")
+    # Si el papá nombró el nivel en el mensaje ("para kinder, costos") y el estado
+    # aún no lo tiene, fíjalo → la oferta emite SOLO ese nivel, no la tabla completa.
+    if tipos_oferta and capt.nivel_buscado_actual is None:
+        nivel_msg = nivel_buscado_de_mensaje(mensaje)
+        if nivel_msg is not None:
+            capt.nivel_buscado_actual = nivel_msg
     lineas_oferta: list[str] = await _construir_oferta(estado, tipos_oferta) if tipos_oferta else []
     figuras_oferta: set[str] = set()
     for _ln in lineas_oferta:
@@ -585,6 +596,12 @@ async def procesar_turno(
     # pregunta del campo. Si es sustantiva, Haiku contesta y luego anexamos el campo.
     coleccion_directa = es_coleccion and not intent_sustantivo
 
+    # INFO DIRECTA (2026-06-10): en un turno de info puro (pidió costos/horarios/
+    # estancias y NO va a agendar), la respuesta la EMITE el CÓDIGO completa: bloque
+    # de datos + una línea fija de cierre. Haiku NO se invoca → sin saludo duplicado,
+    # sin monólogo de venta, sin sondeo. (En agendado la oferta se maneja distinto.)
+    info_directa = bool(lineas_oferta) and not en_agendado
+
     llm_started = time.perf_counter()
     for intento in range(max_regen + 1):
         if coleccion_directa:
@@ -593,6 +610,14 @@ async def procesar_turno(
             log.info(
                 "coleccion_directa (pregunta por código, sin Haiku)",
                 extra={"session_id": session_id, "acciones": appointment_handler.acciones},
+            )
+            break
+        if info_directa:
+            response_text = "\n\n".join(lineas_oferta) + f"\n\n{_CIERRE_INFO}"
+            final_report = None
+            log.info(
+                "info_directa (datos por código, sin Haiku)",
+                extra={"session_id": session_id, "tipos": sorted(tipos_oferta)},
             )
             break
         try:
@@ -689,7 +714,9 @@ async def procesar_turno(
     #   - ya gastó su ÚNICA pregunta de discovery en la conversación → 0.
     #   - si no → el tope normal (1).
     # Las preguntas de DATOS del agendado las emite el código aparte, no cuentan.
-    if not coleccion_directa:
+    # info_directa ya es 100% código (datos + cierre) → no se sanea ni se le quita
+    # la pregunta de cierre.
+    if not coleccion_directa and not info_directa:
         if lineas_oferta or capt.discovery_pregunta_hecha:
             max_preg = 0
         else:
@@ -707,8 +734,9 @@ async def procesar_turno(
     # cualquier $monto/hora no oficial) y anteponemos las líneas con las cifras
     # exactas. Se hace ANTES de anexar la pregunta de colección (que es código y NO
     # debe sanearse — su ejemplo de formato lleva horas válidas). No aplica en cierre.
+    # (info_directa ya armó la respuesta 100% por código en el loop → no re-anteponer.)
     _es_cierre = appointment_handler is not None and appointment_handler.appointment_id is not None
-    if lineas_oferta and not _es_cierre:
+    if lineas_oferta and not _es_cierre and not info_directa:
         cuerpo = sanear_cifras_ajenas(response_text, figuras_oferta)
         response_text = "\n\n".join(lineas_oferta) + (f"\n\n{cuerpo}" if cuerpo else "")
         log.info(

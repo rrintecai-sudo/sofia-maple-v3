@@ -20,7 +20,28 @@ from app.core.campus_resolver import (
     _infer_grado_primaria,
     _infer_grado_secundaria,
 )
-from app.core.state import EstadoConversacion
+from app.core.state import EstadoConversacion, NivelEducativo
+
+# Nivel mencionado SUELTO en el mensaje ("para kinder, costos"). El LLM/extracción a
+# veces no lo captura en frases cortas → este respaldo determinístico sí.
+_NIVEL_MSG: list[tuple] = [
+    (re.compile(
+        r"\b(?:maternal|early\s*years|guarder[íi]a|toddlers?|infants?|babies|baby|cubs?)\b",
+        re.IGNORECASE), NivelEducativo.MATERNAL),
+    (re.compile(r"\b(?:kinder|k[íi]nder|preescolar|preschool)\b", re.IGNORECASE),
+     NivelEducativo.KINDER),
+    (re.compile(r"\b(?:secundaria|secu)\b", re.IGNORECASE), NivelEducativo.SECUNDARIA),
+    (re.compile(r"\bprimaria\b", re.IGNORECASE), NivelEducativo.PRIMARIA),
+]
+
+
+def nivel_buscado_de_mensaje(mensaje: str) -> NivelEducativo | None:
+    """Nivel mencionado en el mensaje ('para kinder' → KINDER). None si no hay."""
+    m = mensaje or ""
+    for rx, nivel in _NIVEL_MSG:
+        if rx.search(m):
+            return nivel
+    return None
 
 # ============================================================
 # Detección DETERMINÍSTICA de consultas de oferta (keywords) — NO depende del

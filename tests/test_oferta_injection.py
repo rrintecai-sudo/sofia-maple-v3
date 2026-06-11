@@ -327,7 +327,9 @@ async def test_costos_sin_sondeo_enganchado() -> None:
         _exit(ctx)
     assert "$5,250" in r.response                       # dato correcto
     assert "más te importa" not in r.response.lower()   # sondeo eliminado
-    assert "?" not in r.response                          # cero sondeo enganchado
+    # La única pregunta permitida es la línea de cierre fija (transaccional, no sondeo).
+    assert "agendamos una visita" in r.response.lower()
+    assert r.response.count("?") == 1
 
 
 @pytest.mark.asyncio
@@ -461,6 +463,40 @@ async def test_quiero_conocer_los_costos_no_entra_agendado() -> None:
         _exit(ctx)
     assert repo._conv.estado_capturado.fase_agendado == FaseAgendado.EXPLORANDO
     assert "$5,250" in r.response
+
+
+@pytest.mark.asyncio
+async def test_info_directa_solo_kinder_codigo_completo() -> None:
+    """'quiero informes para kinder, costos' → respuesta 100% código: solo costos de
+    kinder + 1 línea de cierre. SIN saludo, SIN monólogo, SIN tabla de otros niveles."""
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import FaseAgendado, NivelEducativo
+
+    repo = _Repo(_conv(None, None))  # sin nivel; lo toma de "para kinder"
+    # Haiku TERCO: saludo + monólogo + número equivocado. NO debe invocarse.
+    haiku = _Haiku(
+        "¡Hola! Bienvenido a Maple Collège, qué gusto. Tu hijo no solo aprende, se "
+        "forma. La colegiatura es $4,900. ¿Qué es lo que más te importa?"
+    )
+    ctx = _leaf(repo, haiku, Intent.PREGUNTA_COSTOS)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(
+            mensaje="quiero informes para kinder, costos", session_id="web:lili", canal=None
+        )
+    finally:
+        _exit(ctx)
+
+    assert repo._conv.estado_capturado.nivel_buscado_actual == NivelEducativo.KINDER
+    assert repo._conv.estado_capturado.fase_agendado == FaseAgendado.EXPLORANDO
+    # Solo kinder + cierre fijo:
+    assert "$5,250" in r.response and "$10,000" in r.response
+    assert "agendamos una visita" in r.response.lower()  # línea de cierre code-emitida
+    # NADA de Haiku: sin saludo, sin monólogo, sin sondeo, sin número equivocado:
+    assert "bienvenido a maple" not in r.response.lower()
+    assert "no solo aprende" not in r.response.lower()
+    assert "qué es lo que más te importa" not in r.response.lower()
+    assert "$4,900" not in r.response  # ni el de maternal ni la tabla de otros niveles
 
 
 def test_kid_visit_no_es_cita_agendable_solo_informes() -> None:
