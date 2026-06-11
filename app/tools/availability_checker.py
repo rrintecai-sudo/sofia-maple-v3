@@ -517,3 +517,56 @@ async def _proximos_slots(
     )
     libres = [s for s in cand if not _slot_choca_con_citas(s, duracion_min, citas)]
     return libres[:n]
+
+
+async def proximos_dias_habiles(
+    *,
+    settings: Settings | None = None,
+    now: datetime | None = None,
+    cantidad: int = 3,
+    duracion_min: int = 60,
+) -> list[datetime]:
+    """Próximos `cantidad` DÍAS hábiles con al menos un slot LIBRE (futuro). Salta
+    hoy si ya pasó el último slot, los fines de semana y los días sin ventana o llenos.
+    Devuelve datetimes a medianoche (solo importa la fecha). [] si no hay/falla."""
+    settings = settings or get_settings()
+    base_now = _to_monterrey(now or datetime.now(TZ_MONTERREY))
+    windows = await _fetch_availability_windows(settings)
+    if not windows:
+        return []
+    # Reúne slots libres de las próximas ~3 semanas y agrupa por día.
+    cand: list[datetime] = []
+    for off in range(0, 22):
+        dia = (base_now + timedelta(days=off)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        for s in _slots_del_dia(dia, duracion_min, windows):
+            if s > base_now:
+                cand.append(s)
+    if not cand:
+        return []
+    cand.sort()
+    citas = await _fetch_appointments_in_range(
+        settings, cand[0] - timedelta(hours=1), cand[-1] + timedelta(hours=1)
+    )
+    dias: list[datetime] = []
+    vistos: set = set()
+    for s in cand:
+        d = s.date()
+        if d in vistos:
+            continue
+        if _slot_choca_con_citas(s, duracion_min, citas):
+            # ese slot está ocupado; revisa si el día tiene OTRO libre
+            libres_dia = [
+                x for x in _slots_del_dia(
+                    s.replace(hour=0, minute=0), duracion_min, windows
+                )
+                if x > base_now and not _slot_choca_con_citas(x, duracion_min, citas)
+            ]
+            if not libres_dia:
+                continue
+        vistos.add(d)
+        dias.append(s.replace(hour=0, minute=0, second=0, microsecond=0))
+        if len(dias) >= cantidad:
+            break
+    return dias

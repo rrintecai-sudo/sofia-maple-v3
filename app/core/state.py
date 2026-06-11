@@ -118,6 +118,10 @@ class EstadoCapturado(BaseModel):
     fase_agendado: FaseAgendado = FaseAgendado.EXPLORANDO
     cita_fecha_slot: str | None = None  # 'YYYY-MM-DD' resuelto por código
     cita_hora_slot: str | None = None  # 'HH:MM' (24h) resuelto por código
+    # Fechas CONCRETAS (ISO) que el código le propuso al papá en el paso del día.
+    # El siguiente turno matchea su respuesta contra estas (elegir_opcion_dia) →
+    # ya no hay que parsear "hoy/mañana/el viernes" de forma ambigua.
+    opciones_dia_propuestas: list[str] = Field(default_factory=list)
     # Último dato que el CÓDIGO pidió (gate), para capturar la respuesta SUELTA del
     # siguiente turno por su propia vía, sin depender de cómo lo frasee Haiku.
     # Valores: 'nombre_hijo'|'nombre_papa'|'edad'|'correo'|'telefono'|'dia'|'hora'|'grado'.

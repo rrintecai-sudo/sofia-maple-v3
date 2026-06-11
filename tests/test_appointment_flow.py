@@ -532,8 +532,10 @@ async def test_handler_fecha_pasada(monkeypatch) -> None:
     estado = _estado_base(nombre_papa="Ana", nivel=NivelEducativo.KINDER)
     now = datetime(2026, 5, 25, tzinfo=TZ_MONTERREY)
     result = await handle_appointment_intent("ayer", estado, settings=_settings(), now=now)
-    assert "availability:fecha_pasada" in result.acciones
-    assert "ya pasó" in result.hint_para_prompt
+    # La hora del LLM ya NO se toma fuera del paso de la hora → la fecha pasada se
+    # rechaza en el paso del DÍA (1b), no en el de disponibilidad. Sigue siendo fecha_pasada.
+    assert any("fecha_pasada" in a for a in result.acciones)
+    assert "ya pasó" in result.hint_para_prompt or "ya no es posible" in result.hint_para_prompt
 
 
 @pytest.mark.asyncio
@@ -564,6 +566,77 @@ async def test_handler_hoy_pasado_cierre_explica_motivo(monkeypatch) -> None:
     assert "cerramos" in msg                  # explica la razón
     assert "jueves 11 de junio" in msg        # nombra el día propuesto
     assert "hora" in msg                       # y pide la hora de ese día
+
+
+def _mock_lily_lv_8a15() -> None:
+    respx.get("https://x.supabase.co/rest/v1/lily_availability").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"day_of_week": d, "start_time": "08:00:00", "end_time": "15:00:00",
+                 "slot_duration_minutes": 60, "active": True}
+                for d in (1, 2, 3, 4, 5)
+            ],
+        )
+    )
+    respx.get("https://x.supabase.co/rest/v1/appointments").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_handler_paso_dia_propone_fechas_concretas(monkeypatch) -> None:
+    """Nuevo enfoque: el paso del día PROPONE 2-3 fechas concretas (no abre a parseo)."""
+    _mock_extractor(monkeypatch, fecha=None, hora=None)
+    _mock_lily_lv_8a15()
+    estado = _estado_base(nombre_papa="Ana", nivel=NivelEducativo.KINDER)
+    now = datetime(2026, 6, 10, 15, 0, tzinfo=TZ_MONTERREY)  # miércoles 3 p.m.
+    result = await handle_appointment_intent("quiero agendar", estado, settings=_settings(), now=now)
+
+    msg = (result.mensaje_coleccion or "").lower()
+    assert "tengo disponible" in msg
+    assert "jueves 11" in msg and "viernes 12" in msg and "lunes 15" in msg
+    assert estado.estado_capturado.opciones_dia_propuestas == [
+        "2026-06-11", "2026-06-12", "2026-06-15",
+    ]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_handler_papa_elige_opcion_dia(monkeypatch) -> None:
+    """El papá elige una de las fechas ofrecidas → toma esa fecha y pasa a la hora."""
+    _mock_extractor(monkeypatch, fecha=None, hora=None)
+    _mock_lily_lv_8a15()
+    estado = _estado_base(nombre_papa="Ana", nivel=NivelEducativo.KINDER)
+    estado.estado_capturado.opciones_dia_propuestas = [
+        "2026-06-11", "2026-06-12", "2026-06-15",
+    ]
+    estado.estado_capturado.ultimo_campo_pedido = "dia"
+    now = datetime(2026, 6, 10, 15, 0, tzinfo=TZ_MONTERREY)
+    result = await handle_appointment_intent("el jueves", estado, settings=_settings(), now=now)
+
+    assert estado.estado_capturado.cita_fecha_slot == "2026-06-11"
+    assert estado.estado_capturado.opciones_dia_propuestas == []  # ya eligió
+    assert "hora" in (result.mensaje_coleccion or "").lower()  # pasó a la hora
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_handler_hoy_en_paso_dia_no_se_vuelve_hora(monkeypatch) -> None:
+    """BUG: 'hoy' en el paso del día NO debe volverse una hora alucinada por el LLM
+    ('esa hora fuera de horario'). Resuelve la FECHA y pasa a pedir la hora."""
+    _mock_extractor(monkeypatch, fecha="2026-06-10", hora="15:30")  # LLM alucina hora
+    _mock_lily_lv_8a15()
+    estado = _estado_base(nombre_papa="Ana", nivel=NivelEducativo.KINDER)
+    estado.estado_capturado.ultimo_campo_pedido = "dia"  # estamos en el paso del DÍA
+    now = datetime(2026, 6, 10, 15, 0, tzinfo=TZ_MONTERREY)  # miércoles 3 p.m.
+    result = await handle_appointment_intent("hoy", estado, settings=_settings(), now=now)
+
+    assert estado.estado_capturado.cita_hora_slot is None  # la hora del LLM NO se tomó
+    texto = (result.hint_para_prompt + (result.mensaje_coleccion or "")).lower()
+    assert "fuera" not in texto                  # NO "esa hora fuera de horario"
+    assert "hora" in (result.mensaje_coleccion or "").lower()  # ahora sí pide la hora
 
 
 # ============================================================

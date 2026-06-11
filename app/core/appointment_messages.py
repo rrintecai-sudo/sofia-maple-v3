@@ -114,6 +114,28 @@ _EJEMPLO_FORMATO: dict[str, str] = {
 }
 
 
+def _join_o(partes: list[str]) -> str:
+    """['a','b','c'] → 'a, b o c'."""
+    if not partes:
+        return ""
+    if len(partes) == 1:
+        return partes[0]
+    return ", ".join(partes[:-1]) + f" o {partes[-1]}"
+
+
+def formato_opciones_dia(fechas: list[datetime]) -> str:
+    """[jueves 11, viernes 12, lunes 15 (mismo mes)] → 'jueves 11, viernes 12 o
+    lunes 15 de junio'. Si cruzan meses, repite el mes por fecha."""
+    if not fechas:
+        return ""
+    mismo_mes = len({(f.year, f.month) for f in fechas}) == 1
+    if mismo_mes:
+        partes = [f"{_DIAS_ES[f.weekday()]} {f.day}" for f in fechas]
+        return f"{_join_o(partes)} de {_MESES_ES[fechas[0].month - 1]}"
+    partes = [f"{_DIAS_ES[f.weekday()]} {f.day} de {_MESES_ES[f.month - 1]}" for f in fechas]
+    return _join_o(partes)
+
+
 def render_pregunta_campo(
     campo: str,
     *,
@@ -121,6 +143,7 @@ def render_pregunta_campo(
     dia: str | None = None,
     horario: str | None = None,
     horas_libres: str | None = None,
+    opciones_dia: str | None = None,
     motivo: str | None = None,
     reintento: bool = False,
 ) -> str | None:
@@ -133,7 +156,11 @@ def render_pregunta_campo(
     hijo = nombre_hijo or "tu peque"
     linea_horario = f" {horario}" if horario else ""
     if campo == "dia":
-        base = ("¿Qué día te queda mejor para tu visita?" + linea_horario).strip()
+        if opciones_dia:
+            # El código PROPONE fechas concretas (no abre a parseo ambiguo de "hoy").
+            base = f"¿Qué día te queda mejor? Tengo disponible {opciones_dia}."
+        else:
+            base = ("¿Qué día te queda mejor para tu visita?" + linea_horario).strip()
     elif campo == "hora":
         base = f"¿A qué hora del {dia} te viene bien?" if dia else "¿A qué hora te viene bien?"
         if horas_libres:

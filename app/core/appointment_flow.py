@@ -27,6 +27,7 @@ from app.config import Settings, get_settings
 from app.core.appointment_extractor import (
     TZ_MONTERREY,
     AppointmentDateTime,
+    elegir_opcion_dia,
     es_confirmacion,
     extract_datetime,
     extraer_fecha_explicita,
@@ -37,7 +38,7 @@ from app.core.appointment_extractor import (
     fecha_humana_solo_dia,
     motivo_ajuste_fecha_relativa,
 )
-from app.core.appointment_messages import render_pregunta_campo
+from app.core.appointment_messages import formato_opciones_dia, render_pregunta_campo
 from app.core.campus_resolver import resolve_campus_from_estado
 from app.core.state import EstadoCapturado, EstadoConversacion, NivelEducativo
 from app.core.state_extractor import extraer_grado_simple
@@ -58,6 +59,7 @@ from app.tools.availability_checker import (
     AvailabilityResult,
     evaluar_dia,
     is_slot_available,
+    proximos_dias_habiles,
     resumen_disponibilidad,
 )
 from app.tools.campus import CampusResult, get_campus_by_id
@@ -473,44 +475,53 @@ async def handle_appointment_intent(
     # debe ser load-bearing. "5 de junio" → explícita; "hoy"/"mañana" → relativa;
     # "el viernes"/"lunes" → próxima ocurrencia. Si el mensaje ACTUAL trae una fecha,
     # MANDA (cubre cambios tipo "mejor el lunes"); si no, NO toca el slot capturado.
+    # NUEVO ENFOQUE (2026-06-11): el código PROPONE fechas concretas y el papá elige.
+    # `elegir_opcion_dia` matchea su respuesta contra las opciones ofrecidas (ordinal/
+    # nombre del día/número). Las relativas quedan como respaldo, no como vía principal.
+    campo_pedido_prev = capt.ultimo_campo_pedido
     fecha_det = (
         extraer_fecha_explicita(mensaje, now)
+        or elegir_opcion_dia(mensaje, capt.opciones_dia_propuestas)
         or extraer_fecha_relativa(mensaje, now)
         or extraer_proximo_dia_semana(mensaje, now)
     )
     if fecha_det:
         capt.cita_fecha_slot = fecha_det
+        capt.opciones_dia_propuestas = []  # ya eligió → limpia las opciones
 
     # Si "hoy" se movió a otro día (cierre/fin de semana), guardamos la RAZÓN para
     # decírsela al papá — no saltar de día en silencio.
     motivo_fecha = motivo_ajuste_fecha_relativa(mensaje, now) if fecha_det else None
 
-    # Campo que el CÓDIGO pidió el turno anterior (para parsear la respuesta SUELTA
-    # y para detectar reintentos del mismo campo — guard anti-bucle).
-    campo_pedido_prev = capt.ultimo_campo_pedido
-
     appt_dt = await extract_datetime(mensaje, now=now)
-    if appt_dt.es_alta_confianza:
+    if appt_dt.es_alta_confianza and appt_dt.fecha and capt.cita_fecha_slot is None:
         # El LLM solo RELLENA la fecha si el resolver determinístico no la fijó.
-        if appt_dt.fecha and capt.cita_fecha_slot is None:
-            capt.cita_fecha_slot = appt_dt.fecha
-        if appt_dt.hora:
-            capt.cita_hora_slot = appt_dt.hora
+        capt.cita_fecha_slot = appt_dt.fecha
+
+    # HORA: la fija el código desde tokens DETERMINISTAS. La hora del LLM solo se
+    # acepta cuando ESTAMOS en el paso de la hora — NUNCA en el paso del día (evita
+    # que "hoy" se vuelva una hora alucinada → "esa hora fuera de horario").
+    en_paso_hora = campo_pedido_prev == "hora"
     if capt.cita_hora_slot is None:
         hora_det = extraer_hora_simple(mensaje)
-        # Si el gate pidió la HORA, un número SUELTO ("10", "1", "13") es la hora.
-        if not hora_det and campo_pedido_prev == "hora":
+        if not hora_det and en_paso_hora:
             hora_det = extraer_hora_de_numero_suelto(mensaje)
+        if not hora_det and en_paso_hora and appt_dt.es_alta_confianza and appt_dt.hora:
+            hora_det = appt_dt.hora
         if hora_det:
             capt.cita_hora_slot = hora_det
 
     fecha_slot = capt.cita_fecha_slot
     hora_slot = capt.cita_hora_slot
 
-    # 1a. Sin día en los slots → pedir día y hora, anclando al horario REAL de Lily
-    # para que Sofía NUNCA diga "todos los días disponibles".
+    # 1a. Sin día en los slots → el CÓDIGO PROPONE fechas concretas disponibles y el
+    # papá elige (ya no se parsea "hoy/mañana"). Si no hay disponibilidad (o falla),
+    # cae a la pregunta abierta con el horario real.
     if fecha_slot is None:
         resumen = await resumen_disponibilidad(settings)
+        dias_opciones = await proximos_dias_habiles(settings=settings, now=now, cantidad=3)
+        opciones_texto = formato_opciones_dia(dias_opciones) if dias_opciones else None
+        capt.opciones_dia_propuestas = [d.date().isoformat() for d in dias_opciones]
         horario_linea = (
             f" El horario REAL de Lily es: {resumen}. NUNCA digas 'todos los días' "
             f"ni inventes disponibilidad; ofrece SOLO dentro de ese horario."
@@ -520,18 +531,24 @@ async def handle_appointment_intent(
         resumen_cap = _resumen_capturado(estado, fecha_slot=None, hora_slot=hora_slot)
         es_reintento = campo_pedido_prev == "dia"  # ya habíamos pedido el día → no repetir igual
         capt.ultimo_campo_pedido = "dia"
+        opciones_hint = (
+            f" Ofrece EXACTAMENTE estas fechas, sin inventar otras: {opciones_texto}."
+            if opciones_texto
+            else f" NO inventes una fecha.{horario_linea}"
+        )
         return AppointmentHandlerResult(
             hint_para_prompt=_instruccion_un_campo(
                 "qué DÍA le queda mejor para la visita",
                 resumen_cap,
-                extra=f" NO inventes una fecha.{horario_linea}",
+                extra=opciones_hint,
             ),
             mensaje_coleccion=render_pregunta_campo(
                 "dia",
-                horario=f"Atendemos {resumen}." if resumen else None,
+                opciones_dia=opciones_texto,
+                horario=(f"Atendemos {resumen}." if resumen else None),
                 reintento=es_reintento,
             ),
-            acciones=["extract_failed"],
+            acciones=["propone_dias" if opciones_texto else "extract_failed"],
             appointment_datetime=appt_dt,
         )
 

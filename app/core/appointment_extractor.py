@@ -432,6 +432,48 @@ _DIAS_SEMANA_ES = [
 ]
 
 
+_ORDINAL_OPCION: list[tuple] = [
+    (re.compile(r"\b(?:el\s+)?(?:primer[oa]?|1[°º]|la\s+primera)\b", re.IGNORECASE), 0),
+    (re.compile(r"\b(?:el\s+)?(?:segund[oa]|2[°º]|la\s+segunda)\b", re.IGNORECASE), 1),
+    (re.compile(r"\b(?:el\s+)?(?:tercer[oa]?|3[°º]|la\s+tercera|[úu]ltim[oa])\b", re.IGNORECASE), 2),
+]
+
+
+def elegir_opcion_dia(mensaje: str, opciones_iso: list[str] | None) -> str | None:
+    """Matchea la respuesta del papá contra las fechas OFRECIDAS (ISO). Reconoce:
+    ordinal ('el primero'/'la segunda'), nombre del día ('el jueves') y número de día
+    del mes ('11'). Devuelve la fecha ISO elegida o None si no matchea ninguna."""
+    if not opciones_iso:
+        return None
+    t = (mensaje or "").lower()
+    try:
+        fechas = [date.fromisoformat(o) for o in opciones_iso]
+    except (ValueError, TypeError):
+        return None
+    # 1) ordinal ("el primero", "la segunda", "el último")
+    for rx, idx in _ORDINAL_OPCION:
+        if rx.search(t):
+            if idx == 2 and "últim" in t:
+                return fechas[-1].isoformat()
+            if idx < len(fechas):
+                return fechas[idx].isoformat()
+    # 2) nombre del día de la semana ("el jueves")
+    for dow, nombre in enumerate(_DIAS_SEMANA_ES):
+        nombre_norm = nombre.replace("é", "e").replace("á", "a")
+        if re.search(rf"\b{nombre}\b", t) or re.search(rf"\b{nombre_norm}\b", t):
+            for f in fechas:
+                if f.weekday() == dow:
+                    return f.isoformat()
+    # 3) número de día del mes ("11", "el 12")
+    m = re.search(r"\b(\d{1,2})\b", t)
+    if m:
+        dom = int(m.group(1))
+        for f in fechas:
+            if f.day == dom:
+                return f.isoformat()
+    return None
+
+
 def _build_system_prompt(now: datetime) -> str:
     fecha_actual = now.strftime("%Y-%m-%d")
     dia_semana = _DIAS_SEMANA_ES[now.weekday()]
