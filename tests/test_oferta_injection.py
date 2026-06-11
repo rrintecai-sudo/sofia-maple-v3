@@ -36,12 +36,29 @@ def _horario_kinder2() -> HorarioResult:
                          hora_inicio="09:00:00", hora_fin="14:00:00", dias="L-V", notas=None)
 
 
+_NIVELES_ALL = ["maternal", "kinder", "primaria_baja", "primaria_alta", "secundaria"]
+
+
 def _estancias_kinder() -> list[EstanciaResult]:
+    """Las 5 modalidades oficiales (Lili 2026-06-11). SIN After School ni Academias $630."""
+    def e(nombre, ini, fin, comida, snack, aca, mes, dia, notas):
+        return EstanciaResult(
+            nombre=nombre, aplica_para=_NIVELES_ALL, hora_inicio=ini, hora_fin=fin,
+            incluye_comida=comida, incluye_snack=snack, incluye_academia=aca,
+            costo_mensual=Decimal(mes) if mes else None,
+            costo_por_dia=Decimal(dia) if dia else None, inscripcion_extra=None, notas=notas,
+        )
     return [
-        EstanciaResult(nombre="after_school", aplica_para=["kinder"], hora_inicio="07:00:00",
-                       hora_fin="19:00:00", incluye_comida=True, incluye_snack=True,
-                       incluye_academia=True, costo_mensual=Decimal("3100"),
-                       costo_por_dia=None, inscripcion_extra=None, notas=None),
+        e("manana", "07:00:00", None, False, False, False, "550", None,
+          "De 7:00 a.m. hasta la hora de entrada del alumno. Sin alimentos."),
+        e("media", "07:00:00", "16:00:00", True, False, True, "1400", None,
+          "Incluye comida y 1 academia."),
+        e("completa", "07:00:00", "19:00:00", True, True, True, "2500", None,
+          "Incluye comida, snack y 2 academias."),
+        e("express", "07:00:00", "19:00:00", True, False, False, None, "210",
+          "Por día. Se solicita en recepción."),
+        e("academia_individual", None, None, True, False, False, "800", None,
+          "2 clases por semana. Incluye comida los días de asistencia."),
     ]
 
 
@@ -214,6 +231,51 @@ async def test_estancias_emite_7_a_7_y_guard_borra_530() -> None:
         _exit(ctx)
     assert "7:00 a.m. a 7:00 p.m." in r.response
     assert "5:30" not in r.response
+
+
+@pytest.mark.asyncio
+async def test_tienen_estancia_confirma_y_ofrece_sin_volcar_lista() -> None:
+    """'¿tienen estancia?' (sí/no) → confirma + ofrece, SIN volcar las 5 con precios."""
+    from app.core.orchestrator import procesar_turno
+
+    repo = _Repo(_conv_kinder2())
+    ctx = _leaf(repo, _Haiku("..."), Intent.PREGUNTA_ESTANCIAS)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(mensaje="¿tienen estancia?", session_id="web:lili", canal=None)
+    finally:
+        _exit(ctx)
+    low = r.response.lower()
+    assert "sí" in low and "7:00 a.m. a 7:00 p.m." in r.response  # confirma + el horario
+    assert "detalle" in low or "detallar" in low                  # ofrece ver modalidades
+    assert "$550" not in r.response and "$2,500" not in r.response  # NO volcó precios
+    assert r.response.count("?") == 1                              # una sola pregunta
+
+
+@pytest.mark.asyncio
+async def test_modalidades_estancia_oficiales_sin_afterschool_ni_academias() -> None:
+    """'¿cuáles son las modalidades?' → las 5 con costos correctos, SIN After School
+    ($3,100) ni Academias ($630)."""
+    from app.core.orchestrator import procesar_turno
+
+    repo = _Repo(_conv_kinder2())
+    ctx = _leaf(repo, _Haiku("Te cuento, $3,100 la after school."), Intent.PREGUNTA_ESTANCIAS)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(
+            mensaje="¿cuáles son las modalidades de estancia?", session_id="web:lili", canal=None
+        )
+    finally:
+        _exit(ctx)
+    low = r.response.lower()
+    # Las 5 con sus costos:
+    assert "$550" in r.response and "$1,400" in r.response and "$2,500" in r.response
+    assert "$210" in r.response and "$800" in r.response
+    assert "mañana" in low and "media" in low and "completa" in low
+    assert "express" in low and "academia individual" in low
+    # Lo eliminado NO aparece:
+    assert "$3,100" not in r.response and "after school" not in low
+    assert "$630" not in r.response
 
 
 @pytest.mark.asyncio

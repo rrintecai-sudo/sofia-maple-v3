@@ -14,6 +14,14 @@ log = logging.getLogger(__name__)
 
 CICLO_ACTUAL = "2026-2027"
 
+_NOMBRE_DISPLAY: dict[str, str] = {
+    "manana": "Mañana",
+    "media": "Media",
+    "completa": "Completa",
+    "express": "Express",
+    "academia_individual": "Academia Individual",
+}
+
 
 def _fmt_hora(hhmmss: str | None) -> str | None:
     """'07:00:00' → '7:00 a.m.'; '19:00:00' → '7:00 p.m.'."""
@@ -44,22 +52,24 @@ class EstanciaResult:
     notas: str | None = None
 
     def linea(self) -> str:
-        """Una línea legible con datos REALES de la tabla (horario + costo)."""
+        """Una línea legible con datos REALES de la tabla (horario + costo + qué
+        incluye). Las cifras las emite el CÓDIGO desde la tabla, no Haiku."""
+        display = _NOMBRE_DISPLAY.get(self.nombre, self.nombre.replace("_", " ").title())
         ini = _fmt_hora(self.hora_inicio)
         fin = _fmt_hora(self.hora_fin)
-        if ini and fin:
-            horario = f"{ini} a {fin}"
-        elif ini:
-            horario = f"desde las {ini}"
-        else:
-            horario = "horario según la academia"
         if self.costo_mensual is not None:
             costo = f"${self.costo_mensual:,.0f}/mes"
         elif self.costo_por_dia is not None:
             costo = f"${self.costo_por_dia:,.0f}/día"
         else:
             costo = "costo por confirmar"
-        return f"- {self.nombre.replace('_', ' ').title()}: {horario} — {costo}"
+        partes = [f"- {display}:"]
+        if ini and fin:
+            partes.append(f"{ini} a {fin} —")
+        partes.append(costo)
+        if self.notas:
+            partes.append(f"({self.notas})")
+        return " ".join(partes)
 
 
 async def get_estancias(

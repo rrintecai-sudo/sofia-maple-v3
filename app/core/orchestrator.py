@@ -154,7 +154,23 @@ _EXPLICACION_CITA_INFORMES = (
 )
 
 
-async def _construir_oferta(estado: EstadoConversacion, tipos: set[str]) -> list[str]:
+# "¿cuáles son las modalidades?" / "detállame" / "costos" → lista completa.
+# "¿tienen estancia?" (sí/no) → confirmar + ofrecer, sin volcar la lista.
+_ESTANCIA_LISTA_RE = re.compile(
+    r"\b(?:cu[áa]les|qu[ée]\s+(?:modalidad|opcion)|modalidades|opciones|detall|"
+    r"cu[áa]nto|costos?|precios?|lista|mu[ée]strame|m[áa]ndame|ver\s+las|todas)\b",
+    re.IGNORECASE,
+)
+_ESTANCIA_CONFIRMA = (
+    "🏫 ¡Sí! Tenemos horario extendido de 7:00 a.m. a 7:00 p.m. con varias "
+    "modalidades (mañana, media, completa, por día y academia individual). "
+    "¿Quieres que te detalle las opciones?"
+)
+
+
+async def _construir_oferta(
+    estado: EstadoConversacion, tipos: set[str], mensaje: str = ""
+) -> list[str]:
     """Líneas con las cifras EXACTAS de costo/horario/estancia, emitidas por el
     CÓDIGO desde las tablas. Si no se puede resolver el nivel/grado, emite una
     línea que pide el dato o defiere a Miss Lili — NUNCA un número inventado."""
@@ -191,12 +207,18 @@ async def _construir_oferta(estado: EstadoConversacion, tipos: set[str]) -> list
             lineas.append("🕐 ¿De qué nivel/grado necesitas el horario?")
 
     if "estancias" in tipos:
-        nivel_est = precio_nivel_de_estado(estado)
-        estancias = await get_estancias(nivel=nivel_est)
-        if estancias:
-            lineas.append("🏫 " + render_estancias_bloque(estancias))
+        # Pregunta sí/no ("¿tienen estancia?") → confirma + ofrece; pedido de lista
+        # ("¿cuáles son las modalidades?"/"costos") → vuelca las 5 con sus cifras.
+        pide_lista = bool(_ESTANCIA_LISTA_RE.search(mensaje or ""))
+        if not pide_lista:
+            lineas.append(_ESTANCIA_CONFIRMA)
         else:
-            lineas.append(f"🏫 {_DEFER_LILI}")
+            nivel_est = precio_nivel_de_estado(estado)
+            estancias = await get_estancias(nivel=nivel_est)
+            if estancias:
+                lineas.append("🏫 " + render_estancias_bloque(estancias))
+            else:
+                lineas.append(f"🏫 {_DEFER_LILI}")
 
     return lineas
 
@@ -433,7 +455,9 @@ async def procesar_turno(
         nivel_msg = nivel_buscado_de_mensaje(mensaje)
         if nivel_msg is not None:
             capt.nivel_buscado_actual = nivel_msg
-    lineas_oferta: list[str] = await _construir_oferta(estado, tipos_oferta) if tipos_oferta else []
+    lineas_oferta: list[str] = (
+        await _construir_oferta(estado, tipos_oferta, mensaje) if tipos_oferta else []
+    )
     figuras_oferta: set[str] = set()
     for _ln in lineas_oferta:
         figuras_oferta |= extraer_figuras(_ln)
@@ -628,7 +652,13 @@ async def procesar_turno(
             )
             break
         if info_directa:
-            response_text = "\n\n".join(lineas_oferta) + f"\n\n{_CIERRE_INFO}"
+            cuerpo_info = "\n\n".join(lineas_oferta)
+            # Si el bloque YA termina en pregunta (ej. confirmación de estancia que
+            # ofrece detallar), no anexes el cierre genérico (evita doble pregunta).
+            if cuerpo_info.rstrip().endswith("?"):
+                response_text = cuerpo_info
+            else:
+                response_text = f"{cuerpo_info}\n\n{_CIERRE_INFO}"
             final_report = None
             log.info(
                 "info_directa (datos por código, sin Haiku)",
