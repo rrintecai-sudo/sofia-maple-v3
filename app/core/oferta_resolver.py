@@ -43,6 +43,48 @@ def nivel_buscado_de_mensaje(mensaje: str) -> NivelEducativo | None:
             return nivel
     return None
 
+
+# Grado SUELTO ("3", "1°", "tercero", "4to", "1 a 3") → para la rama de horarios cuando
+# ya se pidió el grado. Mapea al rango/grado válido según el nivel.
+_GRADO_PALABRA = {
+    "primero": 1, "primer": 1, "segundo": 2, "tercero": 3, "tercer": 3,
+    "cuarto": 4, "quinto": 5, "sexto": 6,
+}
+_GRADO_NUM_RE = re.compile(r"\b([1-9])\s*(?:°|º|ro|do|er|to|vo|mo)?\b")
+_RANGO_BAJA_RE = re.compile(r"\b1\s*(?:a|-|al)\s*3\b")
+_RANGO_ALTA_RE = re.compile(r"\b4\s*(?:a|-|al)\s*6\b")
+_MAX_GRADO = {"kinder": 3, "primaria": 6, "secundaria": 3, "maternal": 0}
+_DISPLAY_NIVEL = {"kinder": "Kinder", "primaria": "Primaria", "secundaria": "Secundaria"}
+
+
+def extraer_grado_suelto(mensaje: str, nivel: NivelEducativo | None) -> str | None:
+    """'3'/'1°'/'tercero'/'4to'/'1 a 3' → '3° de Primaria' (canónico, según `nivel`).
+    None si no parsea o no es un grado válido para ese nivel."""
+    if nivel is None:
+        return None
+    nivel_val = nivel.value if hasattr(nivel, "value") else str(nivel)
+    display = _DISPLAY_NIVEL.get(nivel_val)
+    if display is None:
+        return None
+    t = (mensaje or "").lower()
+    g: int | None = None
+    if _RANGO_BAJA_RE.search(t):
+        g = 1
+    elif _RANGO_ALTA_RE.search(t):
+        g = 4
+    else:
+        for pal, n in _GRADO_PALABRA.items():
+            if re.search(rf"\b{pal}\b", t):
+                g = n
+                break
+        if g is None:
+            m = _GRADO_NUM_RE.search(t)
+            if m:
+                g = int(m.group(1))
+    if g is None or not (1 <= g <= _MAX_GRADO.get(nivel_val, 0)):
+        return None
+    return f"{g}° de {display}"
+
 # ============================================================
 # Detección DETERMINÍSTICA de consultas de oferta (keywords) — NO depende del
 # clasificador LLM (que mandó "kinder, costos y horarios" a confuso_otro).

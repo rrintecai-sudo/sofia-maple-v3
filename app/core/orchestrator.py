@@ -46,6 +46,7 @@ from app.core.learning_mode import guardar_feedback
 from app.core.oferta_resolver import (
     detectar_consulta_oferta,
     extraer_figuras,
+    extraer_grado_suelto,
     horario_subnivel_de_estado,
     nivel_buscado_de_mensaje,
     precio_nivel_de_estado,
@@ -224,7 +225,9 @@ async def _construir_oferta(
             h = await get_horario(sub)
             lineas.append(f"🕐 {h.bloque()}" if h else f"🕐 {_DEFER_LILI}")
         elif necesita_grado:
-            # Respeta el NIVEL ya guardado (no decir "Kinder" si dijo Primaria).
+            # Respeta el NIVEL ya guardado (no decir "Kinder" si dijo Primaria) y deja
+            # marcado que el SIGUIENTE grado suelto ("3") resuelve el horario.
+            estado.estado_capturado.pendiente_grado_horario = True
             nivel_act = estado.estado_capturado.nivel_buscado_actual
             nivel_disp = {
                 "kinder": "Kinder", "primaria": "Primaria",
@@ -428,6 +431,21 @@ async def procesar_turno(
     # + día/hora hasta cerrar. Persiste en sofia_conversations.estado_capturado.
     capt = estado.estado_capturado
 
+    # GRADO SUELTO para HORARIOS: si la rama de horarios pidió el grado, un "3"/"4to"/
+    # "1 a 3" lo resuelve → se fija en el hijo y se re-emite el horario (no loop).
+    grado_horario_resuelto = False
+    if capt.pendiente_grado_horario:
+        grado_h = extraer_grado_suelto(mensaje, capt.nivel_buscado_actual)
+        if grado_h:
+            if capt.hijos:
+                capt.hijos[0].grado = grado_h
+            else:
+                from app.core.state import HijoInfo
+
+                capt.hijos = [HijoInfo(nivel=capt.nivel_buscado_actual, grado=grado_h)]
+            capt.pendiente_grado_horario = False
+            grado_horario_resuelto = True
+
     # FLUJO DE VENTA (3 etapas) — el CÓDIGO decide etapa, contador y MOMENTO del empuje;
     # Haiku solo redacta el hint. pide_info_nueva PAUSA el contador (responde el dato y
     # no empuja); continuación lo incrementa; al umbral se ordena el empuje; si el papá
@@ -436,6 +454,7 @@ async def procesar_turno(
     pide_info_nueva = (
         intent_result.intent in _DATA_INTENTS
         or bool(detectar_consulta_oferta(mensaje))
+        or grado_horario_resuelto  # resolver el grado = turno de info (horario)
     )
     es_continuacion = (
         intent_result.intent
@@ -516,6 +535,8 @@ async def procesar_turno(
         tipos_oferta.add("horario")
     if intent_result.intent == Intent.PREGUNTA_ESTANCIAS:
         tipos_oferta.add("estancias")
+    if grado_horario_resuelto:  # el grado suelto re-dispara el horario, ya con el grado
+        tipos_oferta.add("horario")
     # Si el papá nombró el nivel en el mensaje ("para kinder, costos") y el estado
     # aún no lo tiene, fíjalo → la oferta emite SOLO ese nivel, no la tabla completa.
     if tipos_oferta and capt.nivel_buscado_actual is None:
@@ -864,17 +885,17 @@ async def procesar_turno(
     turno_venta = funnel.hint is not None
     en_funnel = capt.stage_venta == "valor" and not en_agendado
     if not coleccion_directa and not info_directa:
-        # En turno de VENTA Haiku escribe SOLO el valor (0 preguntas); la pregunta de
-        # cierre/empuje la pone el CÓDIGO (funnel.cta) → empuje determinístico.
-        if turno_venta:
+        # En VENTA o dentro del FUNNEL Haiku escribe SOLO el valor/respuesta (0
+        # preguntas); la pregunta de cierre/empuje/re-enganche la pone el CÓDIGO →
+        # nunca se cuela el descubrimiento ("¿qué te importa?", "¿ya lo trabajaba?").
+        if turno_venta or en_funnel:
             max_preg = 0
         elif lineas_oferta or capt.discovery_pregunta_hecha:
             max_preg = 0
         else:
             max_preg = settings.max_preguntas_por_turno
         response_text = sanear_texto_libre_haiku(response_text, max_preguntas=max_preg)
-        # En OFERTA o dentro del FUNNEL: NADA de sondeo de descubrimiento
-        # ("¿qué es lo que te importa?"). En VENTA además NADA de precios.
+        # En OFERTA o dentro del FUNNEL: NADA de sondeo de descubrimiento.
         if lineas_oferta or en_funnel:
             response_text = sanear_sondeo(response_text)
         if turno_venta:
@@ -882,7 +903,7 @@ async def procesar_turno(
             if funnel.cta:  # el CÓDIGO cierra con la pregunta de la etapa/empuje
                 response_text = f"{response_text.rstrip()}\n\n{funnel.cta}"
         # Re-enganche ligero en PAUSA (respondió un dato dentro del funnel y quedó sin
-        # pregunta) → no quedar seco; sin sondeo.
+        # pregunta) → hacia la VISITA, nunca descubrimiento.
         elif en_funnel and "?" not in response_text:
             response_text = (
                 f"{response_text.rstrip()}\n\n¿Quieres que te cuente algo más o "

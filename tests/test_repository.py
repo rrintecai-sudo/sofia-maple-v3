@@ -54,6 +54,7 @@ def test_estado_to_row_basic() -> None:
         "opciones_dia_propuestas": [],
         "ultimo_campo_pedido": None,
         "discovery_pregunta_hecha": False,
+        "pendiente_grado_horario": False,
         "stage_venta": "enganche",
         "turnos_valor": 0,
         "handoff_a_lily": False,

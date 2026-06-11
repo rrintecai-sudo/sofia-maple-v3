@@ -131,6 +131,9 @@ class EstadoCapturado(BaseModel):
     # sondeo de Haiku. NO afecta las preguntas de datos del agendado (las emite el
     # código) ni un turno donde el papá pidió algo concreto.
     discovery_pregunta_hecha: bool = False
+    # La rama de horarios pidió el grado (primaria/kinder sin grado). El siguiente
+    # turno con un grado SUELTO ("3", "1°", "4to") lo resuelve y emite el horario.
+    pendiente_grado_horario: bool = False
 
     # Flujo de venta de 3 etapas (el CÓDIGO es dueño; Haiku solo redacta).
     # stage_venta: 'enganche' (inicio) → 'valor' (dando bloques de valor) →

@@ -706,6 +706,50 @@ async def test_horario_primaria_no_dice_kinder() -> None:
     assert "grado" in low                                 # pide el grado de primaria
 
 
+@pytest.mark.asyncio
+async def test_horario_grado_suelto_resuelve_sin_loop() -> None:
+    """Bug: 'primaria → ¿qué grado? → 3' debe resolver el horario, no repetir la
+    pregunta. '3' fija 3° de Primaria y re-emite el horario."""
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import NivelEducativo
+
+    repo = _Repo(_conv(NivelEducativo.PRIMARIA, None))
+    ctx = _leaf(repo, _Haiku("(x)"), Intent.PREGUNTA_HORARIO)
+    _enter(ctx)
+    try:
+        r1 = await procesar_turno(mensaje="¿y el horario?", session_id="web:g", canal=None)
+    finally:
+        _exit(ctx)
+    assert repo._conv.estado_capturado.pendiente_grado_horario is True
+    assert "grado" in r1.response.lower()
+
+    # "3" suelto → resuelve el grado y emite un HORARIO (no repite la pregunta).
+    ctx = _leaf(repo, _Haiku("(x)"), Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO)
+    _enter(ctx)
+    try:
+        r2 = await procesar_turno(mensaje="3", session_id="web:g", canal=None)
+    finally:
+        _exit(ctx)
+    c = repo._conv.estado_capturado
+    assert c.pendiente_grado_horario is False
+    assert c.hijos[0].grado == "3° de Primaria"
+    assert "🕐" in r2.response and "grado" not in r2.response.lower()  # horario, no re-pregunta
+
+
+def test_extraer_grado_suelto_variantes() -> None:
+    from app.core.oferta_resolver import extraer_grado_suelto
+    from app.core.state import NivelEducativo
+
+    p = NivelEducativo.PRIMARIA
+    assert extraer_grado_suelto("3", p) == "3° de Primaria"
+    assert extraer_grado_suelto("4to", p) == "4° de Primaria"
+    assert extraer_grado_suelto("tercero", p) == "3° de Primaria"
+    assert extraer_grado_suelto("1 a 3", p) == "1° de Primaria"
+    assert extraer_grado_suelto("4 a 6", p) == "4° de Primaria"
+    assert extraer_grado_suelto("9", p) is None  # fuera de rango
+    assert extraer_grado_suelto("esta semana", p) is None
+
+
 def test_gate_no_repregunta_edad_si_ya_esta() -> None:
     """Bug 3: edad capturada (en el funnel) → el gate del agendado NO la repregunta."""
     from app.core.appointment_flow import datos_lead_faltantes
