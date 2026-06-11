@@ -54,6 +54,7 @@ from app.core.oferta_resolver import (
 from app.core.output_guards import sanear_sondeo, sanear_texto_libre_haiku
 from app.core.prompt_builder import build_system_blocks
 from app.core.repository import get_repository
+from app.core.sales_funnel import decidir_funnel
 from app.core.state import (
     Canal,
     EstadoConversacion,
@@ -75,6 +76,20 @@ from app.tools.niveles import consultar_edades_de_nivel
 from app.tools.precios import get_precio, get_todos_precios
 
 log = logging.getLogger(__name__)
+
+# FLUJO DE VENTA — intents que piden un DATO específico (costos/horario/estancia/becas/
+# campus/prepa/proceso). Estos PAUSAN el contador del funnel (se responde el dato y NO
+# se empuja). Preguntar por el NIVEL o la METODOLOGÍA es parte del valor (el
+# diferenciador lo responde) → NO pausa.
+_DATA_INTENTS = frozenset({
+    Intent.PREGUNTA_COSTOS,
+    Intent.PREGUNTA_HORARIO,
+    Intent.PREGUNTA_ESTANCIAS,
+    Intent.PREGUNTA_BECAS,
+    Intent.PREGUNTA_CAMPUS,
+    Intent.PREGUNTA_PREPA,
+    Intent.PREGUNTA_PROCESO_ADMISION,
+})
 
 # Intents donde el papá hace una pregunta SUSTANTIVA: durante la colección del
 # agendado, Haiku SÍ responde estos (tiene la info/tools). En cualquier otro intent
@@ -163,40 +178,6 @@ _REORIENTA_GENERAL = (
     "Con gusto te ayudo 😊 Puedo contarte de los niveles, costos, horarios y "
     "estancias, o agendarte una visita. ¿Qué te gustaría saber?"
 )
-
-_NIVEL_DISPLAY_PROACTIVO: dict[str, str] = {
-    "maternal": "Maternal",
-    "kinder": "Kinder",
-    "primaria": "Primaria",
-    "secundaria": "Secundaria",
-}
-
-
-async def _respuesta_proactiva_nivel(estado: EstadoConversacion) -> str:
-    """El papá indicó SOLO el nivel → confirma + colegiatura/inscripción (code-emitida)
-    + ofrece el siguiente paso en UNA línea. Si no se resuelve el precio (primaria sin
-    grado), confirma y pide el grado / ofrece visita — nunca un número inventado."""
-    capt = estado.estado_capturado
-    h = capt.hijo_efectivo()
-    if h is not None and h.grado:
-        display = h.grado  # "2° de Kinder"
-    else:
-        nivel_val = capt.nivel_buscado_actual.value if capt.nivel_buscado_actual else ""
-        display = _NIVEL_DISPLAY_PROACTIVO.get(nivel_val, "ese nivel")
-
-    pn = precio_nivel_de_estado(estado)
-    precio = await get_precio(pn) if pn else None
-    if precio and precio.colegiatura_mensual and precio.inscripcion:
-        return (
-            f"Perfecto, {display} 😊 La colegiatura es ${precio.colegiatura_mensual:,.0f}/mes "
-            f"más inscripción ${precio.inscripcion:,.0f}. ¿Quieres que te cuente horarios y "
-            f"estancias, o prefieres agendar una visita?"
-        )
-    return (
-        f"Perfecto, {display} 😊 ¿En qué grado va tu peque? Con eso te paso la colegiatura "
-        f"exacta — o si prefieres, agendamos una visita."
-    )
-
 
 # "¿cuáles son las modalidades?" / "detállame" / "costos" → lista completa.
 # "¿tienen estancia?" (sí/no) → confirmar + ofrecer, sin volcar la lista.
@@ -438,14 +419,47 @@ async def procesar_turno(
     # + día/hora hasta cerrar. Persiste en sofia_conversations.estado_capturado.
     capt = estado.estado_capturado
 
+    # FLUJO DE VENTA (3 etapas) — el CÓDIGO decide etapa, contador y MOMENTO del empuje;
+    # Haiku solo redacta el hint. pide_info_nueva PAUSA el contador (responde el dato y
+    # no empuja); continuación lo incrementa; al umbral se ordena el empuje; si el papá
+    # CONTINÚA tras el empuje, acepta → entra al agendado existente.
+    nivel_en_msg = nivel_buscado_de_mensaje(mensaje)
+    pide_info_nueva = (
+        intent_result.intent in _DATA_INTENTS
+        or bool(detectar_consulta_oferta(mensaje))
+    )
+    es_continuacion = (
+        intent_result.intent
+        in (Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO, Intent.CONFUSO_OTRO)
+        and not pide_info_nueva
+        and nivel_en_msg is None
+    )
+    funnel = decidir_funnel(
+        capt,
+        es_continuacion=es_continuacion,
+        nivel_en_msg=(nivel_en_msg.value if nivel_en_msg is not None else None),
+        pide_info_nueva=pide_info_nueva,
+        en_agendado=(capt.fase_agendado == FaseAgendado.AGENDANDO),
+        umbral=settings.umbral_empuje,
+    )
+    if nivel_en_msg is not None and capt.nivel_buscado_actual is None:
+        capt.nivel_buscado_actual = nivel_en_msg
+    capt.stage_venta = funnel.stage
+    capt.turnos_valor = funnel.turnos_valor
+
     # Misma regla: la señal CLARA de visita/cita (regex) cuenta siempre; el intent
     # LLM y una expresión temporal solo si el mensaje NO es una consulta de info
-    # ("quiero informes para kinder, costos" → exploración, NO agendar).
-    senal_agendado = quiere_agendar_explicito(mensaje) or (
-        not pide_info_exploratoria
-        and (
-            intent_result.intent == Intent.QUIERE_AGENDAR
-            or contiene_expresion_temporal(mensaje)
+    # ("quiero informes para kinder, costos" → exploración, NO agendar). El papá que
+    # ACEPTA el empuje (funnel) también entra al agendado.
+    senal_agendado = (
+        quiere_agendar_explicito(mensaje)
+        or funnel.entrar_agendado
+        or (
+            not pide_info_exploratoria
+            and (
+                intent_result.intent == Intent.QUIERE_AGENDAR
+                or contiene_expresion_temporal(mensaje)
+            )
         )
     )
     entro_agendado_este_turno = False
@@ -502,30 +516,26 @@ async def procesar_turno(
     lineas_oferta: list[str] = (
         await _construir_oferta(estado, tipos_oferta, mensaje) if tipos_oferta else []
     )
-    # RESPUESTAS PROACTIVAS code-emitidas (Bloque B-3) cuando NO hay consulta de oferta
-    # y Haiku quedaría suelto (se quedaba seco / rebotaba "estoy por acá"). Solo fuera
-    # del agendado y para intents NO sustantivos (esos los contesta Haiku con su info):
-    #   - el papá indicó SOLO el nivel → confirma + costo + ofrece siguiente paso.
+    # RESPUESTAS PROACTIVAS code-emitidas (Bloque B-3) cuando NO hay consulta de oferta,
+    # el FUNNEL no actuó, y Haiku quedaría suelto (se quedaba seco / rebotaba "estoy por
+    # acá"). El nivel suelto ahora lo maneja el FUNNEL (Etapa 1, sin precio). Solo fuera
+    # del agendado y para intents NO sustantivos:
     #   - saludo REPETIDO (no el primero) → reorienta a pedir nivel.
-    #   - confuso sin consulta → línea de reorientación útil.
+    #   - confuso sin consulta ni datos → línea de reorientación útil.
     if (
         not lineas_oferta
         and not en_agendado
+        and funnel.hint is None
+        and not funnel.entrar_agendado
         and intent_result.intent not in _PREGUNTAS_SUSTANTIVAS
     ):
-        nivel_en_msg = nivel_buscado_de_mensaje(mensaje)
-        # ¿La extracción capturó ALGÚN dato del papá este turno? Si sí (nombre, email,
-        # tel, edad, nivel, grado…), NO reorientamos: dejamos que Haiku lo acuse.
+        # ¿La extracción capturó ALGÚN dato del papá este turno? Si sí, NO reorientamos.
         extraccion_con_datos = any([
             extraccion.nombre_papa, extraccion.email_papa, extraccion.telefono,
             extraccion.nivel_buscado, extraccion.nombre_hijo, extraccion.edad_hijo,
             extraccion.grado_hijo, extraccion.escuela_actual, extraccion.diagnostico_hijo,
         ])
-        if nivel_en_msg is not None and not quiere_agendar_explicito(mensaje):
-            if capt.nivel_buscado_actual is None:
-                capt.nivel_buscado_actual = nivel_en_msg
-            lineas_oferta = [await _respuesta_proactiva_nivel(estado)]
-        elif intent_result.intent == Intent.SALUDO_INICIAL and not es_nueva:
+        if intent_result.intent == Intent.SALUDO_INICIAL and not es_nueva:
             lineas_oferta = [_REORIENTA_SALUDO]
         elif intent_result.intent == Intent.CONFUSO_OTRO and not extraccion_con_datos:
             lineas_oferta = [_REORIENTA_GENERAL]
@@ -606,7 +616,16 @@ async def procesar_turno(
 
     # 7ter. Si llamamos tools o detectamos respuesta-corta, inyectamos hints.
     mensaje_para_llm = mensaje
-    if intent_result.intent == Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO and ultimo_assistant_msg:
+    # Hint del FLUJO DE VENTA (Etapa 1 enganche / Etapa 2 valor+empuje): el CÓDIGO
+    # manda el contenido y el momento del empuje; Haiku solo redacta. Tiene prioridad
+    # sobre el hint genérico de respuesta-corta.
+    if funnel.hint:
+        mensaje_para_llm = f"{mensaje_para_llm}\n\n{funnel.hint}"
+    if (
+        funnel.hint is None
+        and intent_result.intent == Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO
+        and ultimo_assistant_msg
+    ):
         ultimo_trunc = ultimo_assistant_msg.strip()[:300]
         mensaje_para_llm += (
             "\n\n[CONTEXTO CRÍTICO: el papá acaba de responder con un mensaje "
@@ -833,18 +852,25 @@ async def procesar_turno(
     # Las preguntas de DATOS del agendado las emite el código aparte, no cuentan.
     # info_directa ya es 100% código (datos + cierre) → no se sanea ni se le quita
     # la pregunta de cierre.
+    turno_venta = funnel.hint is not None
     if not coleccion_directa and not info_directa:
-        if lineas_oferta or capt.discovery_pregunta_hecha:
+        # En turno de VENTA la pregunta (oferta/empuje) es transaccional → se respeta
+        # el tope normal (1), aunque ya se haya gastado el cupo de discovery.
+        if turno_venta:
+            max_preg = settings.max_preguntas_por_turno
+        elif lineas_oferta or capt.discovery_pregunta_hecha:
             max_preg = 0
         else:
             max_preg = settings.max_preguntas_por_turno
         response_text = sanear_texto_libre_haiku(response_text, max_preguntas=max_preg)
-        # Turno de OFERTA: además, NADA de sondeo (ni pregunta ni afirmación tipo
-        # "me gustaría entender qué buscas"). Da el dato y para.
+        # Turno de OFERTA: además, NADA de sondeo. Turno de VENTA: NADA de precios
+        # (el diferenciador/escena nunca lleva número; si Haiku mete un $, se borra).
         if lineas_oferta:
             response_text = sanear_sondeo(response_text)
-        # Si quedó una pregunta de discovery (no fue turno de oferta), gasta el cupo.
-        if not lineas_oferta and not en_agendado and "?" in response_text:
+        if turno_venta:
+            response_text = sanear_cifras_ajenas(response_text, set())
+        # Si quedó una pregunta de discovery (no fue turno de oferta NI venta), gasta cupo.
+        if not lineas_oferta and not turno_venta and not en_agendado and "?" in response_text:
             capt.discovery_pregunta_hecha = True
 
     # OFERTA — el número lo EMITE el código. Saneamos SOLO la parte de Haiku (borra
@@ -963,6 +989,13 @@ async def procesar_turno(
         cost_usd=cost,
         latency_ms=llm_latency,
         model_used=settings.anthropic_model_principal,
+        metadata={
+            "stage_venta": capt.stage_venta,
+            "turnos_valor": capt.turnos_valor,
+            "pregunta_info_nueva": pide_info_nueva,
+            "empuje_inyectado": funnel.empuje,
+            "etapa_hint": "venta" if funnel.hint else None,
+        },
     )
 
     # 13. Persistir estado actualizado

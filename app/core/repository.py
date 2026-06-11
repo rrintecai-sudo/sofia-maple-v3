@@ -181,6 +181,7 @@ class Repository:
         cost_usd: Decimal | None = None,
         latency_ms: int | None = None,
         model_used: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> int:
         payload: dict[str, Any] = {
             "session_id": session_id,
@@ -190,6 +191,8 @@ class Repository:
             "validators_failed": validators_failed or {},
             "regenerations": regenerations,
         }
+        if metadata is not None:
+            payload["metadata"] = metadata
         if user_message is not None:
             payload["user_message"] = user_message
         if intent is not None:

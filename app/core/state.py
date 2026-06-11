@@ -132,6 +132,14 @@ class EstadoCapturado(BaseModel):
     # código) ni un turno donde el papá pidió algo concreto.
     discovery_pregunta_hecha: bool = False
 
+    # Flujo de venta de 3 etapas (el CÓDIGO es dueño; Haiku solo redacta).
+    # stage_venta: 'enganche' (inicio) → 'valor' (dando bloques de valor) →
+    #              'cierre' (en agendado) → 'agendada' (cita creada).
+    # turnos_valor: contador de bloques de valor con continuación del papá; al llegar
+    # a umbral_empuje el código ordena el empuje. Pausa con preguntas de info nueva.
+    stage_venta: str = "enganche"
+    turnos_valor: int = 0
+
     handoff_a_lily: bool = False
     fuente_entrada: str | None = None  # 'dm_redes', 'anuncio_whatsapp', 'referido', 'directo'
     vive_fuera_saltillo: bool = False

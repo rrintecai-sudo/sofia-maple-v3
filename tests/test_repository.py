@@ -54,6 +54,8 @@ def test_estado_to_row_basic() -> None:
         "opciones_dia_propuestas": [],
         "ultimo_campo_pedido": None,
         "discovery_pregunta_hecha": False,
+        "stage_venta": "enganche",
+        "turnos_valor": 0,
         "handoff_a_lily": False,
         "vive_fuera_saltillo": False,
         "clasificacion": "sin_clasificar",

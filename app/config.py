@@ -91,6 +91,9 @@ class Settings(BaseSettings):
     # Tope de preguntas en el texto libre de Haiku (guard de salida). Subir a 2 si
     # se decide permitir dos preguntas por turno.
     max_preguntas_por_turno: int = Field(default=1, ge=1, le=3)
+    # Flujo de venta (3 etapas): nº de bloques de valor con continuación del papá antes
+    # de que el código ordene a Haiku empujar la cita. Default 2 (~3 turnos), tope 3.
+    umbral_empuje: int = Field(default=2, ge=2, le=3)
 
     @property
     def is_production(self) -> bool:

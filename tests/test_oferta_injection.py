@@ -597,25 +597,93 @@ async def test_info_directa_solo_kinder_codigo_completo() -> None:
 
 
 @pytest.mark.asyncio
-async def test_solo_nivel_responde_proactivo_con_costo() -> None:
-    """'segunda de kinder' (solo el nivel) → confirma + costo + ofrece siguiente paso,
-    NO se queda seco ni entra a agendar."""
+async def test_solo_nivel_etapa1_diferenciador_sin_precio() -> None:
+    """FLUJO VENTA Etapa 1: el papá da SOLO el nivel → enganche (diferenciador),
+    stage='valor', turnos_valor=1, SIN precio (aunque Haiku intente meterlo)."""
     from app.core.orchestrator import procesar_turno
     from app.core.state import FaseAgendado, NivelEducativo
 
     repo = _Repo(_conv(None, None))
-    haiku = _Haiku("Perfecto, 2° de Kinder.")  # respuesta seca de Haiku — se bypassa
-    ctx = _leaf(repo, haiku, Intent.CONFUSO_OTRO)
+    # Haiku TERCO que intenta meter precio → el guard de venta lo borra.
+    haiku = _Haiku("Kinder es mágico. La colegiatura es $5,250 al mes. ¿Te cuento más?")
+    ctx = _leaf(repo, haiku, Intent.PREGUNTA_NIVEL)
     _enter(ctx)
     try:
-        r = await procesar_turno(mensaje="segunda de kinder", session_id="web:lili", canal=None)
+        r = await procesar_turno(mensaje="kinder", session_id="web:lili", canal=None)
     finally:
         _exit(ctx)
-    assert repo._conv.estado_capturado.nivel_buscado_actual == NivelEducativo.KINDER
-    assert repo._conv.estado_capturado.fase_agendado == FaseAgendado.EXPLORANDO
-    assert "$5,250" in r.response and "$10,000" in r.response  # costo proactivo
-    low = r.response.lower()
-    assert "horarios" in low and "estancias" in low and "visita" in low  # ofrece siguiente paso
+    c = repo._conv.estado_capturado
+    assert c.nivel_buscado_actual == NivelEducativo.KINDER
+    assert c.fase_agendado == FaseAgendado.EXPLORANDO
+    assert c.stage_venta == "valor" and c.turnos_valor == 1  # arrancó el funnel
+    assert "$5,250" not in r.response and "$" not in r.response  # NUNCA precio en Etapa 1
+
+
+@pytest.mark.asyncio
+async def test_funnel_3_turnos_acepta_rapido_llega_al_agendado() -> None:
+    """Escenario (a): nivel → continuación → continuación tras empuje → agendado."""
+    from app.core.appointment_flow import AppointmentHandlerResult
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import FaseAgendado
+
+    repo = _Repo(_conv(None, None))
+    ctx = _leaf(repo, _Haiku("(redacta)"), Intent.PREGUNTA_NIVEL)
+    _enter(ctx)
+    try:
+        await procesar_turno(mensaje="kinder", session_id="web:f", canal=None)
+    finally:
+        _exit(ctx)
+    assert repo._conv.estado_capturado.turnos_valor == 1
+
+    ctx = _leaf(repo, _Haiku("(redacta)"), Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO)
+    _enter(ctx)
+    try:
+        await procesar_turno(mensaje="sí, cuéntame", session_id="web:f", canal=None)
+    finally:
+        _exit(ctx)
+    assert repo._conv.estado_capturado.turnos_valor == 2  # llegó al umbral → empuje
+
+    # T3: continúa tras el empuje → ACEPTA → entra al agendado (Etapa 3).
+    ctx = _leaf(repo, _Haiku("(redacta)"), Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO)
+    from unittest.mock import AsyncMock, patch
+    ctx.append(patch(
+        "app.core.orchestrator.handle_appointment_intent",
+        AsyncMock(return_value=AppointmentHandlerResult(
+            hint_para_prompt="[día]", mensaje_coleccion="¿Qué día te queda mejor?",
+            acciones=["missing_date"])),
+    ))
+    _enter(ctx)
+    try:
+        r = await procesar_turno(mensaje="esta semana", session_id="web:f", canal=None)
+    finally:
+        _exit(ctx)
+    assert repo._conv.estado_capturado.fase_agendado == FaseAgendado.AGENDANDO
+    assert "qué día" in r.response.lower()
+
+
+@pytest.mark.asyncio
+async def test_funnel_precio_a_media_charla_pausa_y_no_rompe() -> None:
+    """Escenario (c): nivel → preguntan precio → da el precio y el contador NO sube."""
+    from app.core.orchestrator import procesar_turno
+
+    repo = _Repo(_conv(None, None))
+    ctx = _leaf(repo, _Haiku("(redacta)"), Intent.PREGUNTA_NIVEL)
+    _enter(ctx)
+    try:
+        await procesar_turno(mensaje="kinder", session_id="web:c", canal=None)
+    finally:
+        _exit(ctx)
+    assert repo._conv.estado_capturado.turnos_valor == 1
+
+    ctx = _leaf(repo, _Haiku("(redacta)"), Intent.PREGUNTA_COSTOS)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(mensaje="¿y los costos?", session_id="web:c", canal=None)
+    finally:
+        _exit(ctx)
+    # Pausa: el contador NO sube, y da el precio correcto (info_directa).
+    assert repo._conv.estado_capturado.turnos_valor == 1
+    assert "$5,250" in r.response
 
 
 @pytest.mark.asyncio
