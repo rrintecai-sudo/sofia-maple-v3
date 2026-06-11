@@ -224,9 +224,18 @@ async def _construir_oferta(
             h = await get_horario(sub)
             lineas.append(f"🕐 {h.bloque()}" if h else f"🕐 {_DEFER_LILI}")
         elif necesita_grado:
+            # Respeta el NIVEL ya guardado (no decir "Kinder" si dijo Primaria).
+            nivel_act = estado.estado_capturado.nivel_buscado_actual
+            nivel_disp = {
+                "kinder": "Kinder", "primaria": "Primaria",
+            }.get(nivel_act.value if nivel_act else "", "ese nivel")
+            ejemplo = (
+                "1° a 3° o 4° a 6°" if (nivel_act and nivel_act.value == "primaria")
+                else "1°, 2° o 3°"
+            )
             lineas.append(
-                "🕐 El horario depende del grado exacto (Kinder tiene 3 horarios distintos). "
-                "¿En qué grado de Kinder va tu peque?"
+                f"🕐 El horario de {nivel_disp} depende del grado. ¿En qué grado va tu "
+                f"peque ({ejemplo})?"
             )
         else:
             lineas.append("🕐 ¿De qué nivel/grado necesitas el horario?")
@@ -853,24 +862,37 @@ async def procesar_turno(
     # info_directa ya es 100% código (datos + cierre) → no se sanea ni se le quita
     # la pregunta de cierre.
     turno_venta = funnel.hint is not None
+    en_funnel = capt.stage_venta == "valor" and not en_agendado
     if not coleccion_directa and not info_directa:
-        # En turno de VENTA la pregunta (oferta/empuje) es transaccional → se respeta
-        # el tope normal (1), aunque ya se haya gastado el cupo de discovery.
+        # En turno de VENTA Haiku escribe SOLO el valor (0 preguntas); la pregunta de
+        # cierre/empuje la pone el CÓDIGO (funnel.cta) → empuje determinístico.
         if turno_venta:
-            max_preg = settings.max_preguntas_por_turno
+            max_preg = 0
         elif lineas_oferta or capt.discovery_pregunta_hecha:
             max_preg = 0
         else:
             max_preg = settings.max_preguntas_por_turno
         response_text = sanear_texto_libre_haiku(response_text, max_preguntas=max_preg)
-        # Turno de OFERTA: además, NADA de sondeo. Turno de VENTA: NADA de precios
-        # (el diferenciador/escena nunca lleva número; si Haiku mete un $, se borra).
-        if lineas_oferta:
+        # En OFERTA o dentro del FUNNEL: NADA de sondeo de descubrimiento
+        # ("¿qué es lo que te importa?"). En VENTA además NADA de precios.
+        if lineas_oferta or en_funnel:
             response_text = sanear_sondeo(response_text)
         if turno_venta:
             response_text = sanear_cifras_ajenas(response_text, set())
-        # Si quedó una pregunta de discovery (no fue turno de oferta NI venta), gasta cupo.
-        if not lineas_oferta and not turno_venta and not en_agendado and "?" in response_text:
+            if funnel.cta:  # el CÓDIGO cierra con la pregunta de la etapa/empuje
+                response_text = f"{response_text.rstrip()}\n\n{funnel.cta}"
+        # Re-enganche ligero en PAUSA (respondió un dato dentro del funnel y quedó sin
+        # pregunta) → no quedar seco; sin sondeo.
+        elif en_funnel and "?" not in response_text:
+            response_text = (
+                f"{response_text.rstrip()}\n\n¿Quieres que te cuente algo más o "
+                "agendamos una visita? 😊"
+            )
+        # El cupo de discovery NO aplica dentro del funnel.
+        if (
+            not lineas_oferta and not turno_venta and not en_funnel
+            and not en_agendado and "?" in response_text
+        ):
             capt.discovery_pregunta_hecha = True
 
     # OFERTA — el número lo EMITE el código. Saneamos SOLO la parte de Haiku (borra

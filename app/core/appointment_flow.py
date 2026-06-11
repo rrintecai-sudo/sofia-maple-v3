@@ -529,7 +529,10 @@ async def handle_appointment_intent(
             else ""
         )
         resumen_cap = _resumen_capturado(estado, fecha_slot=None, hora_slot=hora_slot)
-        es_reintento = campo_pedido_prev == "dia"  # ya habíamos pedido el día → no repetir igual
+        # "esta semana"/"la siguiente" (respuesta al empuje) NO es un error: re-presenta
+        # las fechas concretas sin "Perdón, no te entendí bien".
+        menciona_semana = bool(re.search(r"\bsemana\b", (mensaje or "").lower()))
+        es_reintento = campo_pedido_prev == "dia" and not menciona_semana
         capt.ultimo_campo_pedido = "dia"
         opciones_hint = (
             f" Ofrece EXACTAMENTE estas fechas, sin inventar otras: {opciones_texto}."

@@ -662,6 +662,65 @@ async def test_funnel_3_turnos_acepta_rapido_llega_al_agendado() -> None:
 
 
 @pytest.mark.asyncio
+async def test_empuje_determinista_sin_descubrimiento() -> None:
+    """Bug 1: en el empuje, Haiku terco mete edad/'¿qué te importa?' → el código las
+    suprime y cierra SIEMPRE con el empuje determinístico."""
+    from app.core.orchestrator import procesar_turno
+
+    repo = _Repo(_conv(None, None))
+    ctx = _leaf(repo, _Haiku("(valor)"), Intent.PREGUNTA_NIVEL)
+    _enter(ctx)
+    try:
+        await procesar_turno(mensaje="kinder", session_id="web:e", canal=None)
+    finally:
+        _exit(ctx)
+    # Empuje: Haiku TERCO con discovery → se borra; el push lo pone el código.
+    haiku = _Haiku("Un día en Kinder es mágico. ¿Qué edad tiene? ¿Qué es lo que te importa?")
+    ctx = _leaf(repo, haiku, Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(mensaje="sí", session_id="web:e", canal=None)
+    finally:
+        _exit(ctx)
+    low = r.response.lower()
+    assert "esta semana o la siguiente" in low            # empuje determinístico
+    assert "qué edad" not in low and "te importa" not in low  # discovery suprimido
+    assert r.response.count("?") == 1                      # una sola pregunta (el empuje)
+
+
+@pytest.mark.asyncio
+async def test_horario_primaria_no_dice_kinder() -> None:
+    """Bug 2: el papá dijo Primaria → la rama de horarios NO debe decir 'Kinder'."""
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import NivelEducativo
+
+    repo = _Repo(_conv(NivelEducativo.PRIMARIA, None))  # primaria sin grado
+    ctx = _leaf(repo, _Haiku("(x)"), Intent.PREGUNTA_HORARIO)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(mensaje="¿y el horario?", session_id="web:h", canal=None)
+    finally:
+        _exit(ctx)
+    low = r.response.lower()
+    assert "primaria" in low and "kinder" not in low      # respeta el nivel guardado
+    assert "grado" in low                                 # pide el grado de primaria
+
+
+def test_gate_no_repregunta_edad_si_ya_esta() -> None:
+    """Bug 3: edad capturada (en el funnel) → el gate del agendado NO la repregunta."""
+    from app.core.appointment_flow import datos_lead_faltantes
+    from app.core.state import HijoInfo, NivelEducativo
+
+    conv = _conv(NivelEducativo.PRIMARIA, None)
+    conv.estado_capturado.hijos = [
+        HijoInfo(nivel=NivelEducativo.PRIMARIA, edad=6, grado="1° de Primaria")
+    ]
+    faltantes = datos_lead_faltantes(conv)
+    assert "edad del hijo" not in faltantes
+    assert "grado escolar del hijo" not in faltantes
+
+
+@pytest.mark.asyncio
 async def test_funnel_precio_a_media_charla_pausa_y_no_rompe() -> None:
     """Escenario (c): nivel → preguntan precio → da el precio y el contador NO sube."""
     from app.core.orchestrator import procesar_turno

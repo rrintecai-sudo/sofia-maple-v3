@@ -24,12 +24,13 @@ STAGE_VALOR = "valor"
 STAGE_CIERRE = "cierre"
 STAGE_AGENDADA = "agendada"
 
-# Diferenciador oficial (modelo BEAR) — copiado de educacion.md, NO inventar.
+# Diferenciador oficial (modelo BEAR) — de educacion.md. NO nombres "BEAR" al papá
+# salvo que lo pregunte; descríbelo.
 _DIFERENCIADOR = (
-    "el modelo BEAR de Maple: no le agregamos más cosas al niño, ordenamos lo que "
-    "importa en el orden en que el cerebro se desarrolla — primero seguridad y "
-    "vínculo, luego autonomía, después pensamiento profundo, al final propósito. "
-    "Aquí tu hijo no solo aprende: se forma."
+    "el modelo de Maple no le agrega más cosas al niño, ordena lo que importa en el "
+    "orden en que el cerebro se desarrolla — primero seguridad y vínculo, luego "
+    "autonomía, después pensamiento profundo, al final propósito. Aquí tu hijo no "
+    "solo aprende: se forma."
 )
 
 _DISPLAY = {
@@ -84,7 +85,13 @@ _REGLA_KINDER = (
     " En Kinder NUNCA digas 'proyectos', 'PBL' ni 'Challenge Based Learning' — usa "
     "'aprendizaje activo' / 'juego intencional'."
 )
-_TONO = " No abras con 'Claro' ni 'Perfecto'. Una sola pregunta en todo el mensaje."
+# El CÓDIGO cierra cada etapa con su pregunta (CTA). Haiku NO pregunta nada → así el
+# empuje es determinístico y no se cuela el descubrimiento viejo (edad/"¿qué te importa?").
+_TONO = (
+    " No abras con 'Claro' ni 'Perfecto', no nombres 'BEAR'. Escribe SOLO el valor "
+    "(1-3 frases cálidas), SIN NINGUNA pregunta — el sistema agrega la pregunta de "
+    "cierre. NO pidas la edad ni el grado, NO preguntes '¿qué es lo que te importa?'."
+)
 
 
 def _kinder_regla(nivel: str) -> str:
@@ -96,26 +103,27 @@ def _hint_etapa1(nivel: str) -> str:
     return (
         f"[ETAPA VENTA — ENGANCHE. El papá busca {display}. Confírmalo en tono cálido "
         f"SIN dar ningún precio. Transmite breve el diferenciador: {_DIFERENCIADOR} "
-        f"{_ESENCIA.get(nivel, '')} Cierra ofreciendo contarle cómo se ve en {display} "
-        f"(ej. '¿te cuento cómo se ve un día en {display}?'). PROHIBIDO mencionar "
-        f"precios, costos o inscripción.{_kinder_regla(nivel)}{_TONO}]"
+        f"{_ESENCIA.get(nivel, '')} PROHIBIDO mencionar precios, costos o inscripción."
+        f"{_kinder_regla(nivel)}{_TONO}]"
     )
 
 
 def _hint_etapa2(nivel: str, empuje: bool) -> str:
     display = _DISPLAY.get(nivel, "ese nivel")
-    push = (
-        " Al final PROPÓN la visita asumiendo el siguiente paso, SIN preguntar "
-        "'¿quieres agendar?' ni urgencia artificial: '¿te acomoda esta semana o la "
-        "siguiente?'."
-        if empuje
-        else ""
-    )
     return (
         f"[ETAPA VENTA — VALOR ({display}). Comparte UNA escena observable, cálida y "
-        f"concreta: {_ESCENA.get(nivel, '')} Sin precios.{push}"
-        f"{_kinder_regla(nivel)}{_TONO}]"
+        f"concreta: {_ESCENA.get(nivel, '')} Sin precios.{_kinder_regla(nivel)}{_TONO}]"
     )
+
+
+def _cta_etapa1(nivel: str) -> str:
+    return f"¿Te cuento cómo se ve un día en {_DISPLAY.get(nivel, 'ese nivel')}? 😊"
+
+
+def _cta_etapa2(empuje: bool) -> str:
+    if empuje:
+        return "Lo mejor es vivirlo en persona. ¿Te acomoda esta semana o la siguiente?"
+    return "¿Quieres que te cuente algo más de cómo trabajamos?"
 
 
 @dataclass
@@ -123,6 +131,7 @@ class FunnelDecision:
     """Resultado de la máquina de venta para este turno."""
 
     hint: str | None  # instrucción+contenido para Haiku (None = el funnel no actúa)
+    cta: str | None  # pregunta de cierre EMITIDA POR CÓDIGO (se anexa a la respuesta)
     entrar_agendado: bool  # el papá aceptó el empuje → pasar a Etapa 3 (agendado)
     stage: str  # nuevo stage_venta a persistir
     turnos_valor: int  # nuevo contador a persistir
@@ -149,29 +158,35 @@ def decidir_funnel(
 
     # Cita ya agendada o en pleno agendado → funnel apagado (anti-insistencia).
     if capt.cita_agendada:
-        return FunnelDecision(None, False, STAGE_AGENDADA, tv, False)
+        return FunnelDecision(None, None, False, STAGE_AGENDADA, tv, False)
     if en_agendado:
-        return FunnelDecision(None, False, STAGE_CIERRE, tv, False)
+        return FunnelDecision(None, None, False, STAGE_CIERRE, tv, False)
 
     # Pregunta de info nueva → PAUSA: ni incrementa ni empuja ni inyecta hint.
     if pide_info_nueva:
-        return FunnelDecision(None, False, stage, tv, False)
+        return FunnelDecision(None, None, False, stage, tv, False)
 
     # El papá da el nivel → Etapa 1 (diferenciador, sin precio). Arranca el contador.
     if nivel_en_msg is not None:
-        return FunnelDecision(_hint_etapa1(nivel_en_msg), False, STAGE_VALOR, 1, False)
+        return FunnelDecision(
+            _hint_etapa1(nivel_en_msg), _cta_etapa1(nivel_en_msg),
+            False, STAGE_VALOR, 1, False,
+        )
 
     # Continuación dentro del funnel (ya en 'valor').
     if stage == STAGE_VALOR and es_continuacion:
         # Si ya se ofreció el empuje (tv >= umbral) y el papá CONTINÚA → acepta → cierre.
         if tv >= umbral:
-            return FunnelDecision(None, True, STAGE_CIERRE, tv, False)
+            return FunnelDecision(None, None, True, STAGE_CIERRE, tv, False)
         nivel = capt.nivel_buscado_actual.value if capt.nivel_buscado_actual else None
         if nivel is None:
-            return FunnelDecision(None, False, stage, tv, False)
+            return FunnelDecision(None, None, False, stage, tv, False)
         nuevo_tv = tv + 1
         empuje = nuevo_tv >= umbral
-        return FunnelDecision(_hint_etapa2(nivel, empuje), False, STAGE_VALOR, nuevo_tv, empuje)
+        return FunnelDecision(
+            _hint_etapa2(nivel, empuje), _cta_etapa2(empuje),
+            False, STAGE_VALOR, nuevo_tv, empuje,
+        )
 
     # Nada que hacer (el caller deja que Haiku/otra rama responda).
-    return FunnelDecision(None, False, stage, tv, False)
+    return FunnelDecision(None, None, False, stage, tv, False)
