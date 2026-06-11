@@ -445,10 +445,11 @@ async def test_discovery_solo_una_pregunta_en_la_conversacion() -> None:
     conv.estado_capturado.discovery_pregunta_hecha = True  # ya gastó el cupo
     repo = _Repo(conv)
     haiku = _Haiku("Qué bien. ¿En qué año escolar va tu peque?")  # otro sondeo
-    ctx = _leaf(repo, haiku, Intent.SALUDO_INICIAL)
+    # Intent que SÍ pasa por Haiku (no saludo/confuso, que ahora los reorienta el código).
+    ctx = _leaf(repo, haiku, Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO)
     _enter(ctx)
     try:
-        r = await procesar_turno(mensaje="hola", session_id="web:lili", canal=None)
+        r = await procesar_turno(mensaje="ajá cuéntame", session_id="web:lili", canal=None)
     finally:
         _exit(ctx)
     assert "?" not in r.response  # cupo gastado → sin más preguntas de sondeo
@@ -460,10 +461,10 @@ async def test_primera_discovery_marca_flag() -> None:
 
     repo = _Repo(_conv(None, None))
     haiku = _Haiku("Qué gusto que escribas. ¿Para qué ciclo buscas?")
-    ctx = _leaf(repo, haiku, Intent.SALUDO_INICIAL)
+    ctx = _leaf(repo, haiku, Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO)
     _enter(ctx)
     try:
-        r = await procesar_turno(mensaje="hola", session_id="web:lili", canal=None)
+        r = await procesar_turno(mensaje="ajá cuéntame", session_id="web:lili", canal=None)
     finally:
         _exit(ctx)
     assert r.response.count("?") == 1  # se permite la primera
@@ -593,6 +594,66 @@ async def test_info_directa_solo_kinder_codigo_completo() -> None:
     assert "no solo aprende" not in r.response.lower()
     assert "qué es lo que más te importa" not in r.response.lower()
     assert "$4,900" not in r.response  # ni el de maternal ni la tabla de otros niveles
+
+
+@pytest.mark.asyncio
+async def test_solo_nivel_responde_proactivo_con_costo() -> None:
+    """'segunda de kinder' (solo el nivel) → confirma + costo + ofrece siguiente paso,
+    NO se queda seco ni entra a agendar."""
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import FaseAgendado, NivelEducativo
+
+    repo = _Repo(_conv(None, None))
+    haiku = _Haiku("Perfecto, 2° de Kinder.")  # respuesta seca de Haiku — se bypassa
+    ctx = _leaf(repo, haiku, Intent.CONFUSO_OTRO)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(mensaje="segunda de kinder", session_id="web:lili", canal=None)
+    finally:
+        _exit(ctx)
+    assert repo._conv.estado_capturado.nivel_buscado_actual == NivelEducativo.KINDER
+    assert repo._conv.estado_capturado.fase_agendado == FaseAgendado.EXPLORANDO
+    assert "$5,250" in r.response and "$10,000" in r.response  # costo proactivo
+    low = r.response.lower()
+    assert "horarios" in low and "estancias" in low and "visita" in low  # ofrece siguiente paso
+
+
+@pytest.mark.asyncio
+async def test_saludo_repetido_reorienta_sin_estoy_por_aca() -> None:
+    """Saludo REPETIDO (ya hubo turno) → reorienta a pedir nivel, no rebota seco."""
+    from app.core.orchestrator import procesar_turno
+
+    conv = _conv(None, None)
+    repo = _Repo(conv)
+    repo._messages.append({"role": "assistant", "content": "¡Hola!"})  # ya no es nueva
+    haiku = _Haiku("¡Hey! 👋 Estoy por acá.")  # rebote seco — se bypassa
+    ctx = _leaf(repo, haiku, Intent.SALUDO_INICIAL)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(mensaje="Hola", session_id="web:lili", canal=None)
+    finally:
+        _exit(ctx)
+    low = r.response.lower()
+    assert "nivel" in low and "?" in r.response          # reorienta a pedir nivel
+    assert "estoy por acá" not in low                     # sin rebote seco
+
+
+@pytest.mark.asyncio
+async def test_confuso_sin_datos_reorienta() -> None:
+    """Confuso sin consulta ni datos → línea de reorientación útil (no Haiku suelto)."""
+    from app.core.orchestrator import procesar_turno
+
+    repo = _Repo(_conv(None, None))
+    haiku = _Haiku("ehh...")  # Haiku suelto — se bypassa
+    ctx = _leaf(repo, haiku, Intent.CONFUSO_OTRO)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(mensaje="mmm pues no sé", session_id="web:lili", canal=None)
+    finally:
+        _exit(ctx)
+    low = r.response.lower()
+    assert "niveles" in low and "costos" in low and "visita" in low
+    assert "ehh" not in low
 
 
 def test_kid_visit_no_es_cita_agendable_solo_informes() -> None:

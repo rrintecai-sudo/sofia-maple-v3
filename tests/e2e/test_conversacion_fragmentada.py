@@ -381,7 +381,9 @@ async def test_nombre_inventado_se_bloquea() -> None:
     await repo.insert_message("whatsapp:x", "assistant", "¡Hola! ¿En qué te ayudo?")
 
     anthropic = _fake_anthropic(["Hola María, con gusto te ayudo con la información."])
-    classify = AsyncMock(return_value=_intent(Intent.CONFUSO_OTRO))
+    # Intent sustantivo (pregunta general) → Haiku CORRE (un confuso_otro sin datos
+    # ahora lo reorienta el código). Aquí queremos ejercitar el validator de nombre.
+    classify = AsyncMock(return_value=_intent(Intent.PREGUNTA_GENERAL_MAPLE))
     extract = AsyncMock(return_value=ExtraccionTurno())
 
     from app.core.orchestrator import procesar_turno

@@ -153,6 +153,50 @@ _EXPLICACION_CITA_INFORMES = (
     "instalaciones (dura ~1 hora)."
 )
 
+# Reorientación code-emitida cuando Haiku no tiene una consulta concreta que responder
+# (Bloque B-3) — útil y breve, sin sondeo ni monólogo.
+_REORIENTA_SALUDO = (
+    "¡Hola! 😊 ¿Para qué nivel te interesa información — maternal, kinder, primaria "
+    "o secundaria?"
+)
+_REORIENTA_GENERAL = (
+    "Con gusto te ayudo 😊 Puedo contarte de los niveles, costos, horarios y "
+    "estancias, o agendarte una visita. ¿Qué te gustaría saber?"
+)
+
+_NIVEL_DISPLAY_PROACTIVO: dict[str, str] = {
+    "maternal": "Maternal",
+    "kinder": "Kinder",
+    "primaria": "Primaria",
+    "secundaria": "Secundaria",
+}
+
+
+async def _respuesta_proactiva_nivel(estado: EstadoConversacion) -> str:
+    """El papá indicó SOLO el nivel → confirma + colegiatura/inscripción (code-emitida)
+    + ofrece el siguiente paso en UNA línea. Si no se resuelve el precio (primaria sin
+    grado), confirma y pide el grado / ofrece visita — nunca un número inventado."""
+    capt = estado.estado_capturado
+    h = capt.hijo_efectivo()
+    if h is not None and h.grado:
+        display = h.grado  # "2° de Kinder"
+    else:
+        nivel_val = capt.nivel_buscado_actual.value if capt.nivel_buscado_actual else ""
+        display = _NIVEL_DISPLAY_PROACTIVO.get(nivel_val, "ese nivel")
+
+    pn = precio_nivel_de_estado(estado)
+    precio = await get_precio(pn) if pn else None
+    if precio and precio.colegiatura_mensual and precio.inscripcion:
+        return (
+            f"Perfecto, {display} 😊 La colegiatura es ${precio.colegiatura_mensual:,.0f}/mes "
+            f"más inscripción ${precio.inscripcion:,.0f}. ¿Quieres que te cuente horarios y "
+            f"estancias, o prefieres agendar una visita?"
+        )
+    return (
+        f"Perfecto, {display} 😊 ¿En qué grado va tu peque? Con eso te paso la colegiatura "
+        f"exacta — o si prefieres, agendamos una visita."
+    )
+
 
 # "¿cuáles son las modalidades?" / "detállame" / "costos" → lista completa.
 # "¿tienen estancia?" (sí/no) → confirmar + ofrecer, sin volcar la lista.
@@ -458,6 +502,34 @@ async def procesar_turno(
     lineas_oferta: list[str] = (
         await _construir_oferta(estado, tipos_oferta, mensaje) if tipos_oferta else []
     )
+    # RESPUESTAS PROACTIVAS code-emitidas (Bloque B-3) cuando NO hay consulta de oferta
+    # y Haiku quedaría suelto (se quedaba seco / rebotaba "estoy por acá"). Solo fuera
+    # del agendado y para intents NO sustantivos (esos los contesta Haiku con su info):
+    #   - el papá indicó SOLO el nivel → confirma + costo + ofrece siguiente paso.
+    #   - saludo REPETIDO (no el primero) → reorienta a pedir nivel.
+    #   - confuso sin consulta → línea de reorientación útil.
+    if (
+        not lineas_oferta
+        and not en_agendado
+        and intent_result.intent not in _PREGUNTAS_SUSTANTIVAS
+    ):
+        nivel_en_msg = nivel_buscado_de_mensaje(mensaje)
+        # ¿La extracción capturó ALGÚN dato del papá este turno? Si sí (nombre, email,
+        # tel, edad, nivel, grado…), NO reorientamos: dejamos que Haiku lo acuse.
+        extraccion_con_datos = any([
+            extraccion.nombre_papa, extraccion.email_papa, extraccion.telefono,
+            extraccion.nivel_buscado, extraccion.nombre_hijo, extraccion.edad_hijo,
+            extraccion.grado_hijo, extraccion.escuela_actual, extraccion.diagnostico_hijo,
+        ])
+        if nivel_en_msg is not None and not quiere_agendar_explicito(mensaje):
+            if capt.nivel_buscado_actual is None:
+                capt.nivel_buscado_actual = nivel_en_msg
+            lineas_oferta = [await _respuesta_proactiva_nivel(estado)]
+        elif intent_result.intent == Intent.SALUDO_INICIAL and not es_nueva:
+            lineas_oferta = [_REORIENTA_SALUDO]
+        elif intent_result.intent == Intent.CONFUSO_OTRO and not extraccion_con_datos:
+            lineas_oferta = [_REORIENTA_GENERAL]
+
     figuras_oferta: set[str] = set()
     for _ln in lineas_oferta:
         figuras_oferta |= extraer_figuras(_ln)
