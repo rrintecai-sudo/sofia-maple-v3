@@ -144,6 +144,15 @@ _DEFER_LILI = "Ese dato te lo confirma Miss Lili en la cita 😊"
 # pregunta, transaccional (no sondeo).
 _CIERRE_INFO = "¿Quieres saber algo más o agendamos una visita? 😊"
 
+# Explicación FIJA de la cita de informes, code-emitida en el PRIMER turno del
+# agendado (no es sondeo: le decimos al papá qué va a recibir). Va ANTES de la
+# pregunta del día.
+_EXPLICACION_CITA_INFORMES = (
+    "Con gusto. La visita es una cita de informes: una conversación con nuestro "
+    "equipo donde te contamos cómo trabajamos, resuelves tus dudas y conoces las "
+    "instalaciones (dura ~1 hora)."
+)
+
 
 async def _construir_oferta(estado: EstadoConversacion, tipos: set[str]) -> list[str]:
     """Líneas con las cifras EXACTAS de costo/horario/estancia, emitidas por el
@@ -373,8 +382,10 @@ async def procesar_turno(
             or contiene_expresion_temporal(mensaje)
         )
     )
+    entro_agendado_este_turno = False
     if capt.fase_agendado == FaseAgendado.EXPLORANDO and senal_agendado:
         capt.fase_agendado = FaseAgendado.AGENDANDO
+        entro_agendado_este_turno = True  # 1er turno → explicar qué es la cita
         log.info("agendado_fase EXPLORANDO→AGENDANDO", extra={"session_id": session_id})
     en_agendado = capt.fase_agendado == FaseAgendado.AGENDANDO
 
@@ -606,6 +617,10 @@ async def procesar_turno(
     for intento in range(max_regen + 1):
         if coleccion_directa:
             response_text = appointment_handler.mensaje_coleccion  # type: ignore[union-attr]
+            # PRIMER turno del agendado: explica BREVE qué es la cita de informes
+            # (code-emitido, no Haiku) antes de la pregunta del día. No es sondeo.
+            if entro_agendado_este_turno:
+                response_text = f"{_EXPLICACION_CITA_INFORMES}\n\n{response_text}"
             final_report = None
             log.info(
                 "coleccion_directa (pregunta por código, sin Haiku)",

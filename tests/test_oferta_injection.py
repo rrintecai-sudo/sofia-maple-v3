@@ -358,11 +358,20 @@ async def test_visita_dispara_agendado_no_sondeo() -> None:
         r = await procesar_turno(
             mensaje="quiero conocer el colegio", session_id="web:lili", canal=None
         )
+        # Turno 2 (la hora) NO debe repetir la explicación de la cita de informes.
+        r2 = await procesar_turno(
+            mensaje="el jueves", session_id="web:lili", canal=None
+        )
     finally:
         _exit(ctx)
     assert repo._conv.estado_capturado.fase_agendado == FaseAgendado.AGENDANDO  # disparó agendar
-    assert "qué día" in r.response.lower()                       # avanza a agendar
+    # 1er turno: EXPLICA qué es la cita de informes Y pregunta el día, sin sondear.
+    assert "cita de informes" in r.response.lower()
+    assert "conoces las instalaciones" in r.response.lower()
+    assert "qué día" in r.response.lower()
     assert "más te importa" not in r.response.lower()            # NO sondeo
+    # Turno siguiente: NO repite la explicación.
+    assert "cita de informes" not in r2.response.lower()
 
 
 @pytest.mark.asyncio
