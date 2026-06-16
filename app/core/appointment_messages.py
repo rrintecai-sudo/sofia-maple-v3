@@ -123,16 +123,34 @@ def _join_o(partes: list[str]) -> str:
     return ", ".join(partes[:-1]) + f" o {partes[-1]}"
 
 
-def formato_opciones_dia(fechas: list[datetime]) -> str:
-    """[jueves 11, viernes 12, lunes 15 (mismo mes)] → 'jueves 11, viernes 12 o
-    lunes 15 de junio'. Si cruzan meses, repite el mes por fecha."""
+def _etiqueta_relativa(f: datetime, now: datetime | None) -> str:
+    """'hoy'/'mañana' si la fecha cae hoy/mañana respecto a `now`, si no ''."""
+    if now is None:
+        return ""
+    hoy = _to_monterrey(now).date()
+    d = f.date()
+    if d == hoy:
+        return "hoy, "
+    if (d - hoy).days == 1:
+        return "mañana, "
+    return ""
+
+
+def formato_opciones_dia(fechas: list[datetime], now: datetime | None = None) -> str:
+    """[jueves 11, viernes 12, lunes 15] → 'jueves 11, viernes 12 o lunes 15 de junio'.
+    Si una fecha es hoy/mañana, la etiqueta ('hoy, lunes 15')."""
     if not fechas:
         return ""
     mismo_mes = len({(f.year, f.month) for f in fechas}) == 1
     if mismo_mes:
-        partes = [f"{_DIAS_ES[f.weekday()]} {f.day}" for f in fechas]
+        partes = [
+            f"{_etiqueta_relativa(f, now)}{_DIAS_ES[f.weekday()]} {f.day}" for f in fechas
+        ]
         return f"{_join_o(partes)} de {_MESES_ES[fechas[0].month - 1]}"
-    partes = [f"{_DIAS_ES[f.weekday()]} {f.day} de {_MESES_ES[f.month - 1]}" for f in fechas]
+    partes = [
+        f"{_etiqueta_relativa(f, now)}{_DIAS_ES[f.weekday()]} {f.day} de {_MESES_ES[f.month - 1]}"
+        for f in fechas
+    ]
     return _join_o(partes)
 
 

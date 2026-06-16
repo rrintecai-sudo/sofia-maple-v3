@@ -80,17 +80,72 @@ _ESCENA = {
     ),
 }
 
+# Contenido POR GRADO (de la KB / documents_maple — base de Ceci). Puntos OBLIGATORIOS
+# que Sofía debe transmitir; Haiku los redacta cálido (no recita, pero NO omite).
+_CONTENIDO_GRADO: dict[str, dict[str, str]] = {
+    "1° de Kinder": {
+        "enganche": (
+            "aprendizaje muy activo y juego intencional; se desarrolla lenguaje, "
+            "autonomía, motricidad, convivencia, escucha y seguridad personal, siempre "
+            "respetando su etapa (no aprender como niños grandes antes de tiempo); aquí "
+            "no se trabaja desde miedo ni presión"
+        ),
+        "escena": (
+            "se nota cuando empieza a seguir rutinas, participar, hablar más, explorar "
+            "con confianza y hacer pequeñas cosas por sí mismo — un niño seguro sí puede "
+            "aprender"
+        ),
+    },
+    "2° de Kinder": {
+        "enganche": (
+            "ya sostienen mejor las rutinas, participan más y ganan mucha seguridad; el "
+            "aprendizaje sigue activo y por juego intencional, y se desarrolla más "
+            "independencia, lenguaje, atención y autonomía"
+        ),
+        "escena": (
+            "se nota cuando explica más lo que piensa, participa con más intención, "
+            "resuelve pequeñas situaciones y necesita menos ayuda; no buscamos niños que "
+            "solo respondan correcto, sino que entiendan, participen y se atrevan a pensar"
+        ),
+    },
+    "3° de Kinder": {
+        "enganche": (
+            "es el cierre de la etapa y se trabaja mucho la preparación para primaria; se "
+            "fortalece autonomía, atención, lenguaje, convivencia y seguridad, con más "
+            "estructura y responsabilidades acordes a su edad"
+        ),
+        "escena": (
+            "los papás empiezan a notar 'ya me explica mejor', 'ya resuelve más solo', "
+            "'ya sigue rutinas con más seguridad'; primero construimos bases sólidas antes "
+            "de pedir rendimiento"
+        ),
+    },
+    "1° de Primaria": {
+        "enganche": (
+            "empezamos bases académicas más sólidas, siempre conectadas con comprensión y "
+            "pensamiento (no solo memorizar): entender, investigar, participar y explicar "
+            "cómo pensó algo, cuidando la parte emocional y la autonomía"
+        ),
+        "escena": (
+            "se nota cuando deja de decir 'no sé', empieza a explicarte cómo resolvió algo "
+            "y se atreve más a pensar por sí mismo"
+        ),
+    },
+}
+
 # Kinder: jamás 'proyectos/PBL/Challenge Based Learning'.
 _REGLA_KINDER = (
     " En Kinder NUNCA digas 'proyectos', 'PBL' ni 'Challenge Based Learning' — usa "
     "'aprendizaje activo' / 'juego intencional'."
 )
 # El CÓDIGO cierra cada etapa con su pregunta (CTA). Haiku NO pregunta nada → así el
-# empuje es determinístico y no se cuela el descubrimiento viejo (edad/"¿qué te importa?").
+# empuje es determinístico y no se cuela el descubrimiento. PERO tiene LIBERTAD para
+# redactar cálido y natural sobre los puntos de la base (no recitar, no omitir).
 _TONO = (
-    " No abras con 'Claro' ni 'Perfecto', no nombres 'BEAR'. Escribe SOLO el valor "
-    "(1-3 frases cálidas), SIN NINGUNA pregunta — el sistema agrega la pregunta de "
-    "cierre. NO pidas la edad ni el grado, NO preguntes '¿qué es lo que te importa?'."
+    " No abras con 'Claro' ni 'Perfecto', no nombres 'BEAR' ni etiquetas tipo "
+    "'Concepto: descripción'. Redáctalo con TUS palabras, cálido y natural (2-4 frases) "
+    "— no recites textual, pero NO omitas los puntos importantes. SIN NINGUNA pregunta "
+    "(el sistema agrega la de cierre). NO pidas edad/grado, NO preguntes '¿qué te importa?'."
 )
 
 
@@ -98,31 +153,45 @@ def _kinder_regla(nivel: str) -> str:
     return _REGLA_KINDER if nivel == "kinder" else ""
 
 
-def _hint_etapa1(nivel: str) -> str:
-    display = _DISPLAY.get(nivel, "ese nivel")
+def _display_grado(nivel: str, grado: str | None) -> str:
+    """'2° de Kinder' si hay grado canónico; si no, el nivel ('Kinder')."""
+    if grado:
+        return grado
+    return _DISPLAY.get(nivel, "ese nivel")
+
+
+def _hint_etapa1(nivel: str, grado: str | None = None) -> str:
+    display = _display_grado(nivel, grado)
+    cont = (_CONTENIDO_GRADO.get(grado or "", {}).get("enganche")) or _ESENCIA.get(nivel, "")
     return (
-        f"[ETAPA VENTA — ENGANCHE. El papá busca {display}. Confírmalo en tono cálido "
-        f"SIN dar ningún precio. Transmite breve el diferenciador: {_DIFERENCIADOR} "
-        f"{_ESENCIA.get(nivel, '')} PROHIBIDO mencionar precios, costos o inscripción."
+        f"[ETAPA VENTA — ENGANCHE. El papá busca {display}. Confírmalo cálido SIN dar "
+        f"ningún precio. Transmite el diferenciador: {_DIFERENCIADOR} Puntos OBLIGATORIOS "
+        f"de {display}: {cont}. PROHIBIDO mencionar precios, costos o inscripción."
         f"{_kinder_regla(nivel)}{_TONO}]"
     )
 
 
-def _hint_etapa2(nivel: str, empuje: bool) -> str:
-    display = _DISPLAY.get(nivel, "ese nivel")
+def _hint_etapa2(nivel: str, empuje: bool, grado: str | None = None) -> str:
+    display = _display_grado(nivel, grado)
+    escena = (_CONTENIDO_GRADO.get(grado or "", {}).get("escena")) or _ESCENA.get(nivel, "")
     return (
-        f"[ETAPA VENTA — VALOR ({display}). Comparte UNA escena observable, cálida y "
-        f"concreta: {_ESCENA.get(nivel, '')} Sin precios.{_kinder_regla(nivel)}{_TONO}]"
+        f"[ETAPA VENTA — VALOR ({display}). Comparte cálido una escena/los puntos de "
+        f"{display}: {escena}. Sin precios.{_kinder_regla(nivel)}{_TONO}]"
     )
 
 
-def _cta_etapa1(nivel: str) -> str:
-    return f"¿Te cuento cómo se ve un día en {_DISPLAY.get(nivel, 'ese nivel')}? 😊"
+def _cta_etapa1(nivel: str, grado: str | None = None) -> str:
+    return f"¿Te cuento cómo se ve un día en {_display_grado(nivel, grado)}? 😊"
 
 
 def _cta_etapa2(empuje: bool) -> str:
     if empuje:
-        return "Lo mejor es vivirlo en persona. ¿Te acomoda esta semana o la siguiente?"
+        # Explícito: una VISITA al colegio para conocerlo en persona (no ambiguo).
+        return (
+            "Lo mejor es que lo conozcas en persona: te invito a una visita al colegio "
+            "para que lo veas, sientas el ambiente y resuelvas tus dudas. ¿Te acomoda "
+            "esta semana o la siguiente?"
+        )
     return "¿Quieres que te cuente algo más de cómo trabajamos?"
 
 
@@ -162,6 +231,10 @@ def decidir_funnel(
     if en_agendado:
         return FunnelDecision(None, None, False, STAGE_CIERRE, tv, False)
 
+    # Grado canónico capturado ("2° de Kinder") → contenido específico de ese grado.
+    h = capt.hijo_efectivo()
+    grado = h.grado if (h and h.grado) else None
+
     # Pregunta de info nueva → PAUSA: ni incrementa ni empuja ni inyecta hint.
     if pide_info_nueva:
         return FunnelDecision(None, None, False, stage, tv, False)
@@ -169,7 +242,7 @@ def decidir_funnel(
     # El papá da el nivel → Etapa 1 (diferenciador, sin precio). Arranca el contador.
     if nivel_en_msg is not None:
         return FunnelDecision(
-            _hint_etapa1(nivel_en_msg), _cta_etapa1(nivel_en_msg),
+            _hint_etapa1(nivel_en_msg, grado), _cta_etapa1(nivel_en_msg, grado),
             False, STAGE_VALOR, 1, False,
         )
 
@@ -184,7 +257,7 @@ def decidir_funnel(
         nuevo_tv = tv + 1
         empuje = nuevo_tv >= umbral
         return FunnelDecision(
-            _hint_etapa2(nivel, empuje), _cta_etapa2(empuje),
+            _hint_etapa2(nivel, empuje, grado), _cta_etapa2(empuje),
             False, STAGE_VALOR, nuevo_tv, empuje,
         )
 

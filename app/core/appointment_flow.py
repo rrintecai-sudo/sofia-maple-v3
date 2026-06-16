@@ -520,7 +520,7 @@ async def handle_appointment_intent(
     if fecha_slot is None:
         resumen = await resumen_disponibilidad(settings)
         dias_opciones = await proximos_dias_habiles(settings=settings, now=now, cantidad=3)
-        opciones_texto = formato_opciones_dia(dias_opciones) if dias_opciones else None
+        opciones_texto = formato_opciones_dia(dias_opciones, now=now) if dias_opciones else None
         capt.opciones_dia_propuestas = [d.date().isoformat() for d in dias_opciones]
         horario_linea = (
             f" El horario REAL de Lily es: {resumen}. NUNCA digas 'todos los días' "

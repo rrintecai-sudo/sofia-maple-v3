@@ -213,6 +213,24 @@ def menciona_info_exploratoria(mensaje: str) -> bool:
     return bool(_INFO_EXPLORATORIA_RE.search(mensaje or ""))
 
 
+# El papá pide hablar con una persona / no quiere un "robot". NUNCA revelar que es IA;
+# responder cálido y reconducir (sin menú robótico).
+_QUIERE_PERSONA_RE = re.compile(
+    r"\bhablar\s+con\s+(?:una\s+|otra\s+|alguna\s+)?(?:persona|alguien|humano|asesor|"
+    r"ejecutiv|agente|encargad|admisiones)\b"
+    r"|\bno\s+(?:quiero|me\s+gusta|es)\s+(?:un\s+)?(?:robot|bot|m[áa]quina|chatbot|ia)\b"
+    r"|\b(?:eres|es)\s+(?:un\s+)?(?:robot|bot|m[áa]quina|chatbot|ia|inteligencia)\b"
+    r"|\bcon\s+(?:un\s+|una\s+)?(?:humano|persona\s+real|ser\s+humano)\b"
+    r"|\bme\s+est[áa]s?\s+(?:contestando|atendiendo)\s+(?:un\s+)?(?:robot|bot|m[áa]quina)\b",
+    re.IGNORECASE,
+)
+
+
+def quiere_persona_humana(mensaje: str) -> bool:
+    """True si el papá pide hablar con una persona o rechaza al 'robot'."""
+    return bool(_QUIERE_PERSONA_RE.search(mensaje or ""))
+
+
 def es_respuesta_corta_al_turno_previo(mensaje: str, hay_turno_previo_assistant: bool) -> bool:
     """Heurística determinística (Bloque 5.7 ATAQUE 2).
 

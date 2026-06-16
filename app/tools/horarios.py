@@ -50,10 +50,13 @@ class HorarioResult:
         return f"{self.nivel}: {self.hora_inicio} a {self.hora_fin} ({self.dias})"
 
     def bloque(self) -> str:
-        """Bloque de inyección legible: '2° de Kinder: 9:00 a.m. a 2:00 p.m. (lun a viernes)'."""
+        """Frase CONVERSACIONAL (sin etiqueta 'Horario de X:')."""
         display = _NIVEL_DISPLAY.get(self.nivel, self.nivel)
         dias = "lunes a viernes" if self.dias in ("L-V", "lun-vie") else self.dias
-        return f"Horario de {display}: {_fmt_hora(self.hora_inicio)} a {_fmt_hora(self.hora_fin)} ({dias})."
+        return (
+            f"En {display} las clases son de {_fmt_hora(self.hora_inicio)} a "
+            f"{_fmt_hora(self.hora_fin)}, de {dias}."
+        )
 
 
 async def get_horario(

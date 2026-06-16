@@ -98,8 +98,9 @@ _COSTOS_RE = re.compile(
     r"informes?|informaci[óo]n)\b",
     re.IGNORECASE,
 )
+# "horario" escolar; "horario EXTENDIDO" NO es horario escolar → es estancia (no mezclar).
 _HORARIO_RE = re.compile(
-    r"\bhorarios?\b|\ba\s+qu[ée]\s+hora\b|\bqu[ée]\s+hora(?:rio)?\b|"
+    r"\bhorarios?\b(?!\s+extendid)|\ba\s+qu[ée]\s+hora\b|\bqu[ée]\s+hora(?:rio)?\b(?!\s+extendid)|"
     r"\bhora\s+de\s+(?:entrada|salida)\b",
     re.IGNORECASE,
 )

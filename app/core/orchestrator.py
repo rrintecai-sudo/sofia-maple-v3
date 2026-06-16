@@ -41,6 +41,7 @@ from app.core.intent_classifier import (
     es_respuesta_corta_al_turno_previo,
     menciona_info_exploratoria,
     quiere_agendar_explicito,
+    quiere_persona_humana,
 )
 from app.core.learning_mode import guardar_feedback
 from app.core.oferta_resolver import (
@@ -179,6 +180,35 @@ _REORIENTA_GENERAL = (
     "Con gusto te ayudo 😊 Puedo contarte de los niveles, costos, horarios y "
     "estancias, o agendarte una visita. ¿Qué te gustaría saber?"
 )
+_REORIENTA_GENERAL_ALT = (
+    "Dime qué te interesa — niveles, costos, horarios, estancias o agendar una "
+    "visita — y lo vemos enseguida 😊"
+)
+
+# Papá pide hablar con una persona / no quiere un "robot": NUNCA revelar que es IA;
+# cálido y reconducir, sin menú robótico.
+_RESPUESTA_PERSONA = (
+    "Soy Sofía, del equipo de admisiones de Maple 😊 Estoy aquí para acompañarte en "
+    "todo este proceso. Cuéntame, ¿qué te gustaría saber o para qué nivel buscas?"
+)
+_RESPUESTA_PERSONA_ALT = (
+    "Aquí sigo contigo, soy Sofía de admisiones de Maple 😊 Con gusto te acompaño — "
+    "dime en qué te ayudo y lo vemos juntos."
+)
+
+
+def _variar_respuesta(texto: str) -> str:
+    """Evita repetir IDÉNTICO el mensaje anterior: usa una variante del bloque fijo
+    o antepone un conector natural."""
+    alt = {
+        _REORIENTA_GENERAL: _REORIENTA_GENERAL_ALT,
+        _REORIENTA_GENERAL_ALT: _REORIENTA_GENERAL,
+        _RESPUESTA_PERSONA: _RESPUESTA_PERSONA_ALT,
+        _RESPUESTA_PERSONA_ALT: _RESPUESTA_PERSONA,
+    }.get(texto.strip())
+    if alt:
+        return alt
+    return "Como te comentaba, " + texto.lstrip()
 
 # "¿cuáles son las modalidades?" / "detállame" / "costos" → lista completa.
 # "¿tienen estancia?" (sí/no) → confirmar + ofrecer, sin volcar la lista.
@@ -552,6 +582,15 @@ async def procesar_turno(
     # del agendado y para intents NO sustantivos:
     #   - saludo REPETIDO (no el primero) → reorienta a pedir nivel.
     #   - confuso sin consulta ni datos → línea de reorientación útil.
+    # Papá pide hablar con una PERSONA / rechaza al "robot" → respuesta CÁLIDA (sin
+    # menú robótico, sin revelar IA). Alta prioridad; no aplica en plena colección.
+    if (
+        not lineas_oferta
+        and capt.fase_agendado != FaseAgendado.AGENDANDO
+        and quiere_persona_humana(mensaje)
+    ):
+        lineas_oferta = [_RESPUESTA_PERSONA]
+
     if (
         not lineas_oferta
         and not en_agendado
@@ -996,6 +1035,17 @@ async def procesar_turno(
                     ),
                 },
             )
+
+    # 10ter. ANTI-DUPLICADO: nunca enviar IDÉNTICO el mensaje del turno anterior
+    # (se veían dos veces el menú o el bloque de estancias). Varía y avanza. No aplica
+    # al cierre D.4 (ese mensaje es único por cita).
+    if (
+        not _es_cierre
+        and ultimo_assistant_msg
+        and response_text.strip() == ultimo_assistant_msg.strip()
+    ):
+        response_text = _variar_respuesta(response_text)
+        log.info("anti_duplicado_aplicado", extra={"session_id": session_id})
 
     # 11. Persistir respuesta del assistant
     await _persist_assistant_message(

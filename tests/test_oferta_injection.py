@@ -750,6 +750,77 @@ def test_extraer_grado_suelto_variantes() -> None:
     assert extraer_grado_suelto("esta semana", p) is None
 
 
+@pytest.mark.asyncio
+async def test_quiere_persona_responde_calido_sin_menu() -> None:
+    """Bug 2: 'no quiero un robot' → respuesta cálida (Sofía/admisiones), sin menú."""
+    from app.core.orchestrator import procesar_turno
+
+    repo = _Repo(_conv(None, None))
+    ctx = _leaf(repo, _Haiku("(x)"), Intent.CONFUSO_OTRO)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(
+            mensaje="puedo hablar con otra persona y no con un robot",
+            session_id="web:p", canal=None,
+        )
+    finally:
+        _exit(ctx)
+    low = r.response.lower()
+    assert "sofía" in low and "admisiones" in low
+    assert "puedo contarte de los niveles" not in low  # NO el menú robótico
+
+
+@pytest.mark.asyncio
+async def test_anti_duplicado_no_repite_identico() -> None:
+    """Bug 1: dos turnos que darían el MISMO menú → el 2º varía."""
+    from app.core.orchestrator import procesar_turno
+
+    repo = _Repo(_conv(None, None))
+    ctx = _leaf(repo, _Haiku("(x)"), Intent.CONFUSO_OTRO)
+    _enter(ctx)
+    try:
+        r1 = await procesar_turno(mensaje="mmm", session_id="web:d", canal=None)
+        r2 = await procesar_turno(mensaje="ehh", session_id="web:d", canal=None)
+    finally:
+        _exit(ctx)
+    assert r1.response != r2.response  # no idéntico
+
+
+@pytest.mark.asyncio
+async def test_horario_extendido_solo_estancias_no_escolar() -> None:
+    """Bug 4: 'horario extendido' = estancias; NO mezcla el horario escolar."""
+    from app.core.orchestrator import procesar_turno
+
+    repo = _Repo(_conv_kinder2())
+    ctx = _leaf(repo, _Haiku("(x)"), Intent.PREGUNTA_ESTANCIAS)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(
+            mensaje="háblame del horario extendido", session_id="web:he", canal=None
+        )
+    finally:
+        _exit(ctx)
+    assert "🏫" in r.response                        # estancias
+    assert "las clases son de" not in r.response.lower()  # NO el horario escolar
+
+
+def test_funnel_usa_contenido_por_grado() -> None:
+    """Bugs 5/6: '2° de Kinder' → el hint trae el contenido del GRADO (rutinas)."""
+    from app.core.sales_funnel import decidir_funnel
+    from app.core.state import EstadoCapturado, HijoInfo, NivelEducativo
+
+    capt = EstadoCapturado(
+        nivel_buscado_actual=NivelEducativo.KINDER,
+        hijos=[HijoInfo(nivel=NivelEducativo.KINDER, grado="2° de Kinder")],
+    )
+    d = decidir_funnel(
+        capt, es_continuacion=False, nivel_en_msg="kinder",
+        pide_info_nueva=False, en_agendado=False, umbral=2,
+    )
+    assert "2° de Kinder" in d.hint
+    assert "rutinas" in d.hint.lower()  # punto obligatorio del grado
+
+
 def test_gate_no_repregunta_edad_si_ya_esta() -> None:
     """Bug 3: edad capturada (en el funnel) → el gate del agendado NO la repregunta."""
     from app.core.appointment_flow import datos_lead_faltantes

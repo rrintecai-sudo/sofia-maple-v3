@@ -55,15 +55,19 @@ class PrecioResult:
         return "\n".join(lines)
 
     def bloque_costos(self) -> str:
-        """Bloque de inyección con los datos REALES (colegiatura + inscripción)."""
+        """Frase CONVERSACIONAL con los datos REALES (sin etiqueta 'Concepto:')."""
         cole = self.colegiatura_mensual or Decimal("0")
-        partes = [
-            f"Colegiatura {self.nivel}: ${cole:,.0f} al mes "
-            f"({self.num_colegiaturas} al año, ago-jun)."
-        ]
+        disp = {
+            "kinder": "Kinder", "maternal": "Maternal", "secundaria": "Secundaria",
+            "primaria_baja": "Primaria", "primaria_alta": "Primaria",
+        }.get(self.nivel, self.nivel.replace("_", " ").title())
+        frase = (
+            f"La colegiatura de {disp} es de ${cole:,.0f} al mes "
+            f"({self.num_colegiaturas} colegiaturas al año, de agosto a junio)"
+        )
         if self.inscripcion is not None:
-            partes.append(f"Inscripción: ${self.inscripcion:,.0f}.")
-        return " ".join(partes)
+            frase += f", más una inscripción de ${self.inscripcion:,.0f}"
+        return frase + "."
 
 
 async def get_todos_precios(
