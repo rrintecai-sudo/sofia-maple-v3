@@ -159,6 +159,24 @@ class TurnResult:
     regenerations: int = 0
 
 
+# ¿El mensaje es una PREGUNTA de contenido? (interrogativo o frase de "qué hacen/se
+# fortalece/cómo es"). Sirve para que una pregunta tras el empuje NO se tome como
+# aceptación de la visita.
+_INTERROGATIVO_RE = re.compile(
+    r"\?"
+    r"|^\s*(?:qu[eé]|c[oó]mo|cu[aá]l(?:es)?|cu[aá]nt\w*|cu[aá]ndo|d[oó]nde|"
+    r"por\s+qu[eé]|para\s+qu[eé])\b"
+    r"|\bse\s+fortalece\b|\bc[oó]mo\s+(?:es|son|funciona|trabajan)\b"
+    r"|\bqu[eé]\s+(?:hacen|trabajan|ven|aprenden|pasa|incluye|tal)\b"
+    r"|\by\s+(?:el|la|los|las|de|en)\b",
+    re.IGNORECASE,
+)
+
+
+def _es_interrogativo(mensaje: str) -> bool:
+    return bool(_INTERROGATIVO_RE.search((mensaje or "").strip()))
+
+
 _DEFER_LILI = "Ese dato te lo confirma Miss Lili en la cita 😊"
 
 # Línea fija de cierre para turnos de info (code-emitida, corta y cálida). Una sola
@@ -198,6 +216,11 @@ _RESPUESTA_PERSONA = (
 _RESPUESTA_PERSONA_ALT = (
     "Aquí sigo contigo, soy Sofía de admisiones de Maple 😊 Con gusto te acompaño — "
     "dime en qué te ayudo y lo vemos juntos."
+)
+
+# Re-oferta de la visita tras responder contenido en la etapa de VALOR (aún no agendado).
+_REOFERTA_VALOR = (
+    "¿Te animas a conocerlo en una visita? Puede ser esta semana o la siguiente 😊"
 )
 
 
@@ -512,11 +535,32 @@ async def procesar_turno(
         or bool(detectar_consulta_oferta(mensaje))
         or grado_horario_resuelto  # resolver el grado = turno de info (horario)
     )
+    # ¿El mensaje parsea como FECHA/HORA válida? (precedencia: la fecha/hora gana).
+    es_fecha_valida = capt.cita_fecha_slot is None and mensaje_resuelve_fecha(
+        mensaje, capt.opciones_dia_propuestas, now
+    )
+    es_hora_valida = (
+        capt.cita_fecha_slot is not None
+        and capt.cita_hora_slot is None
+        and mensaje_resuelve_hora(mensaje, capt.ultimo_campo_pedido)
+    )
+    # PREGUNTA DE CONTENIDO del grado: interrogativa, hay nivel (msg o estado), NO es
+    # fecha/hora, NO es DATA, NO es agendar explícito. Así una pregunta tras el empuje
+    # ("que se fortalece?") NO se toma como aceptar la visita.
+    es_contenido_pregunta = (
+        not es_fecha_valida
+        and not es_hora_valida
+        and not pide_info_nueva
+        and not quiere_agendar_explicito(mensaje)
+        and (nivel_en_msg is not None or capt.nivel_buscado_actual is not None)
+        and _es_interrogativo(mensaje)
+    )
     es_continuacion = (
         intent_result.intent
         in (Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO, Intent.CONFUSO_OTRO)
         and not pide_info_nueva
         and nivel_en_msg is None
+        and not es_contenido_pregunta  # una pregunta de contenido NO acepta la visita
     )
     funnel = decidir_funnel(
         capt,
@@ -622,6 +666,7 @@ async def procesar_turno(
         and not en_agendado
         and funnel.hint is None
         and not funnel.entrar_agendado
+        and not es_contenido_pregunta  # una pregunta de contenido la responde el grado
         and intent_result.intent not in _PREGUNTAS_SUSTANTIVAS
     ):
         # ¿La extracción capturó ALGÚN dato del papá este turno? Si sí, NO reorientamos.
@@ -661,37 +706,35 @@ async def procesar_turno(
     pausa_info_agendado = False
     reoferta_visita: str | None = None
     hint_pausa_contenido: str | None = None
+    en_agendando = capt.fase_agendado == FaseAgendado.AGENDANDO
+
+    # (A) DATA (costos/horario/estancia) DURANTE el agendado (paso día/hora): da el dato
+    # por código + re-oferta, sin colectar fecha. (La fecha/hora válida ya ganó arriba.)
     if (
-        capt.fase_agendado == FaseAgendado.AGENDANDO
+        en_agendando
         and (capt.cita_fecha_slot is None or capt.cita_hora_slot is None)
-        and not quiere_agendar_explicito(mensaje)  # "quiero agendar para primaria" NO pausa
+        and not quiere_agendar_explicito(mensaje)
         and not entro_agendado_este_turno
+        and bool(tipos_oferta)
+        and not es_fecha_valida
+        and not es_hora_valida
     ):
-        es_fecha = capt.cita_fecha_slot is None and mensaje_resuelve_fecha(
-            mensaje, capt.opciones_dia_propuestas, now
-        )
-        es_hora = (
-            capt.cita_fecha_slot is not None
-            and capt.cita_hora_slot is None
-            and mensaje_resuelve_hora(mensaje, capt.ultimo_campo_pedido)
-        )
-        if not es_fecha and not es_hora:
-            info_keyword = (
-                bool(tipos_oferta)
-                or nivel_en_msg is not None
-                or intent_result.intent in _DATA_INTENTS
-            )
-            nivel_c = nivel_en_msg or capt.nivel_buscado_actual
-            # Solo pauso si TENGO algo que responder: DATA, o un nivel para el contenido.
-            puede_responder = bool(tipos_oferta) or (nivel_c is not None)
-            if (info_keyword or capt.nivel_buscado_actual is not None) and puede_responder:
-                pausa_info_agendado = True
-                reoferta_visita = _reoferta_visita(capt)
-                if not tipos_oferta and nivel_c is not None:  # contenido de grado (no DATA)
-                    h0 = capt.hijo_efectivo()
-                    grado_c = h0.grado if (h0 and h0.grado) else None
-                    hint_pausa_contenido = hint_contenido(nivel_c.value, grado_c)
-                log.info("pausa_info_en_agendado", extra={"session_id": session_id})
+        pausa_info_agendado = True
+        reoferta_visita = _reoferta_visita(capt)
+        log.info("pausa_data_en_agendado", extra={"session_id": session_id})
+
+    # (B) PREGUNTA DE CONTENIDO del grado (en VALOR o AGENDADO): Haiku responde el
+    # contenido del grado + re-oferta. NUNCA se toma como aceptar la visita. Usa el
+    # nivel del estado si el mensaje no lo trae (caso "Que se fortalece").
+    elif es_contenido_pregunta:
+        nivel_c = nivel_en_msg or capt.nivel_buscado_actual
+        if nivel_c is not None:
+            h0 = capt.hijo_efectivo()
+            grado_c = h0.grado if (h0 and h0.grado) else None
+            hint_pausa_contenido = hint_contenido(nivel_c.value, grado_c)
+            reoferta_visita = _reoferta_visita(capt) if en_agendando else _REOFERTA_VALOR
+            pausa_info_agendado = en_agendando  # skip del handler solo si ya está agendando
+            log.info("pausa_contenido_grado", extra={"session_id": session_id})
 
     appointment_handler: AppointmentHandlerResult | None = None
     if en_agendado and not pausa_info_agendado:

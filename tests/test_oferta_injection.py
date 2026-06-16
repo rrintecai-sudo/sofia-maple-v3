@@ -831,8 +831,9 @@ def _conv_agendando_secundaria():
 
 @pytest.mark.asyncio
 async def test_pausa_info_en_agendado_contenido_grado_no_avanza_a_hora() -> None:
-    """T5: 'primero de secundaria' (pregunta de contenido) en el paso del día NO se trata
-    como fecha; PAUSA, responde contenido y re-ofrece. NO avanza a hora."""
+    """T5 REAL: 'Que se fortalece en primero de secundaria' (pregunta de contenido) en
+    el paso del día NO se trata como fecha; PAUSA, responde contenido y re-ofrece. NO
+    avanza a hora; 'primero' NO matchea el ordinal (frase de grado)."""
     from app.core.orchestrator import procesar_turno
     from app.core.state import FaseAgendado
 
@@ -841,7 +842,7 @@ async def test_pausa_info_en_agendado_contenido_grado_no_avanza_a_hora() -> None
     _enter(ctx)
     try:
         r = await procesar_turno(
-            mensaje="primero de secundaria", session_id="web:p5", canal=None
+            mensaje="Que se fortalece en primero de secundaria", session_id="web:p5", canal=None
         )
     finally:
         _exit(ctx)
@@ -849,6 +850,43 @@ async def test_pausa_info_en_agendado_contenido_grado_no_avanza_a_hora() -> None
     assert c.cita_fecha_slot is None and c.cita_hora_slot is None  # NO avanzó
     assert c.fase_agendado == FaseAgendado.AGENDANDO               # sigue la cita en proceso
     assert "seguimos con tu visita" in r.response.lower()          # re-oferta de la visita
+
+
+@pytest.mark.asyncio
+async def test_pregunta_contenido_tras_empuje_no_acepta_la_visita() -> None:
+    """EL BUG REAL (sesión baa48e3d): tras el empuje (stage=valor, tv=2), 'que se
+    fortalece?' NO debe tomarse como aceptar la visita ni explicar la cita: responde
+    contenido del grado + re-oferta, y NO entra a AGENDANDO."""
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import FaseAgendado
+
+    repo = _Repo(_conv(None, None))
+    # T0 nivel secundaria → Etapa 1
+    ctx = _leaf(repo, _Haiku("(contenido)"), Intent.PREGUNTA_NIVEL)
+    _enter(ctx)
+    try:
+        await procesar_turno(mensaje="primero de secundaria", session_id="web:bug", canal=None)
+    finally:
+        _exit(ctx)
+    # T1 "si" → empuje (tv=2)
+    ctx = _leaf(repo, _Haiku("(contenido)"), Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO)
+    _enter(ctx)
+    try:
+        await procesar_turno(mensaje="si", session_id="web:bug", canal=None)
+    finally:
+        _exit(ctx)
+    assert repo._conv.estado_capturado.turnos_valor == 2
+    # T2 "que se fortalece?" → contenido + re-oferta, NO entra a agendado
+    ctx = _leaf(repo, _Haiku("En secundaria se fortalece el pensamiento crítico…"), Intent.CONFUSO_OTRO)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(mensaje="que se fortalece?", session_id="web:bug", canal=None)
+    finally:
+        _exit(ctx)
+    c = repo._conv.estado_capturado
+    assert c.fase_agendado == FaseAgendado.EXPLORANDO       # NO entró a agendado
+    assert "cita de informes" not in r.response.lower()     # NO explicó la cita
+    assert "visita" in r.response.lower()                   # re-ofreció la visita
 
 
 @pytest.mark.asyncio
