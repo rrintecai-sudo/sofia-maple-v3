@@ -131,6 +131,60 @@ _CONTENIDO_GRADO: dict[str, dict[str, str]] = {
             "y se atreve más a pensar por sí mismo"
         ),
     },
+    "2° de Primaria": {
+        "enganche": (
+            "se consolidan bases académicas más fuertes: leer con más comprensión, escribir "
+            "con más soltura, resolver explicando los procesos y conectar lo aprendido con "
+            "situaciones reales; no buscamos repetición, sino comprensión"
+        ),
+        "escena": (
+            "se nota cuando ya no solo da la respuesta, sino que explica cómo llegó a ella y "
+            "conecta lo que aprende con su vida"
+        ),
+    },
+    "3° de Primaria": {
+        "enganche": (
+            "ya se nota mucho más la independencia y el pensamiento crítico: empiezan a "
+            "argumentar, explicar procesos, tomar iniciativa y conectar lo aprendido con la "
+            "vida real; hay más profundidad académica"
+        ),
+        "escena": (
+            "se nota cuando argumenta, explica sus procesos y toma más iniciativa por sí mismo"
+        ),
+    },
+    "1° de Secundaria": {
+        "enganche": (
+            "es una etapa más profunda y retadora: se fortalece muchísimo el pensamiento "
+            "crítico, la organización, el análisis y la capacidad de argumentar; se trabaja "
+            "con proyectos, debate, investigación y análisis de temas reales"
+        ),
+        "escena": (
+            "se nota cuando organiza mejor su trabajo, argumenta con criterio y analiza los "
+            "temas en vez de solo memorizarlos"
+        ),
+    },
+    "2° de Secundaria": {
+        "enganche": (
+            "se afina mucho la autonomía: el alumno empieza a gestionar mejor su tiempo, sus "
+            "responsabilidades, su organización y su forma de trabajar y participar; hay más "
+            "profundidad y análisis"
+        ),
+        "escena": (
+            "se nota cuando gestiona mejor su tiempo y responsabilidades, y trabaja con más "
+            "independencia"
+        ),
+    },
+    "3° de Secundaria": {
+        "enganche": (
+            "es el cierre de la etapa, con más madurez académica y personal: buscamos que "
+            "salga con más criterio, independencia, capacidad para resolver, claridad para "
+            "expresar lo que piensa y seguridad para tomar decisiones"
+        ),
+        "escena": (
+            "se nota cuando resuelve con criterio propio, expresa con claridad lo que piensa "
+            "y decide con más seguridad"
+        ),
+    },
 }
 
 # Kinder: jamás 'proyectos/PBL/Challenge Based Learning'.
@@ -182,6 +236,21 @@ def _hint_etapa2(nivel: str, empuje: bool, grado: str | None = None) -> str:
 
 def _cta_etapa1(nivel: str, grado: str | None = None) -> str:
     return f"¿Te cuento cómo se ve un día en {_display_grado(nivel, grado)}? 😊"
+
+
+def hint_contenido(nivel: str, grado: str | None = None) -> str:
+    """Hint para que Haiku RESPONDA una pregunta de contenido del grado (p.ej. durante
+    una pausa del agendado). Usa el contenido del grado de la KB; sin precios, sin
+    pregunta (el sistema agrega la re-oferta de la visita)."""
+    display = _display_grado(nivel, grado)
+    cont = _CONTENIDO_GRADO.get(grado or "", {})
+    puntos = (cont.get("enganche") or _ESENCIA.get(nivel, ""))
+    escena = (cont.get("escena") or _ESCENA.get(nivel, ""))
+    return (
+        f"[CONTENIDO {display}. El papá pregunta sobre {display}. Respóndele cálido y "
+        f"concreto con estos puntos (redáctalos con tus palabras, no omitas lo "
+        f"importante): {puntos}; {escena}. Sin precios.{_kinder_regla(nivel)}{_TONO}]"
+    )
 
 
 def _cta_etapa2(empuje: bool) -> str:

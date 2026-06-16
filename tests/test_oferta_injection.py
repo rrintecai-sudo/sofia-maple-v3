@@ -821,6 +821,81 @@ def test_funnel_usa_contenido_por_grado() -> None:
     assert "rutinas" in d.hint.lower()  # punto obligatorio del grado
 
 
+def _conv_agendando_secundaria():
+    from app.core.state import FaseAgendado, NivelEducativo
+    c = _conv(NivelEducativo.SECUNDARIA, "1° de Secundaria")
+    c.estado_capturado.fase_agendado = FaseAgendado.AGENDANDO
+    c.estado_capturado.opciones_dia_propuestas = ["2026-06-17", "2026-06-18", "2026-06-19"]
+    return c
+
+
+@pytest.mark.asyncio
+async def test_pausa_info_en_agendado_contenido_grado_no_avanza_a_hora() -> None:
+    """T5: 'primero de secundaria' (pregunta de contenido) en el paso del día NO se trata
+    como fecha; PAUSA, responde contenido y re-ofrece. NO avanza a hora."""
+    from app.core.orchestrator import procesar_turno
+    from app.core.state import FaseAgendado
+
+    repo = _Repo(_conv_agendando_secundaria())
+    ctx = _leaf(repo, _Haiku("Contenido de secundaria redactado."), Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(
+            mensaje="primero de secundaria", session_id="web:p5", canal=None
+        )
+    finally:
+        _exit(ctx)
+    c = repo._conv.estado_capturado
+    assert c.cita_fecha_slot is None and c.cita_hora_slot is None  # NO avanzó
+    assert c.fase_agendado == FaseAgendado.AGENDANDO               # sigue la cita en proceso
+    assert "seguimos con tu visita" in r.response.lower()          # re-oferta de la visita
+
+
+@pytest.mark.asyncio
+async def test_pausa_contenido_sin_nivel_en_msg_usa_nivel_estado() -> None:
+    """T4: 'Que se fortalece' (sin nivel en el mensaje) usa nivel_buscado_actual del
+    estado para responder contenido, NO 'no te entendí'."""
+    from app.core.orchestrator import procesar_turno
+
+    repo = _Repo(_conv_agendando_secundaria())
+    ctx = _leaf(repo, _Haiku("En secundaria se fortalece el pensamiento crítico…"), Intent.CONFUSO_OTRO)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(mensaje="Que se fortalece", session_id="web:p4", canal=None)
+    finally:
+        _exit(ctx)
+    low = r.response.lower()
+    assert "no te entendí" not in low
+    assert "seguimos con tu visita" in low  # respondió contenido + re-oferta
+
+
+@pytest.mark.asyncio
+async def test_pausa_costos_en_agendado_da_dato_y_reoferta() -> None:
+    """Costos en agendado (paso día) → pausa: emite el dato + re-oferta de fechas."""
+    from app.core.orchestrator import procesar_turno
+
+    repo = _Repo(_conv_agendando_secundaria())
+    ctx = _leaf(repo, _Haiku("(x)"), Intent.PREGUNTA_COSTOS)
+    _enter(ctx)
+    try:
+        r = await procesar_turno(mensaje="¿cuánto cuesta?", session_id="web:pc", canal=None)
+    finally:
+        _exit(ctx)
+    assert "$5,250" in r.response and "💰" in r.response
+    assert "seguimos con tu visita" in r.response.lower()
+    assert repo._conv.estado_capturado.cita_fecha_slot is None  # no avanzó
+
+
+def test_secundaria_grado_en_contenido() -> None:
+    """1° de Secundaria YA tiene contenido por grado (no genérico)."""
+    from app.core.sales_funnel import _CONTENIDO_GRADO
+
+    for g in ("1° de Secundaria", "2° de Secundaria", "3° de Secundaria",
+              "2° de Primaria", "3° de Primaria"):
+        assert g in _CONTENIDO_GRADO
+    assert "argumentar" in _CONTENIDO_GRADO["1° de Secundaria"]["enganche"]
+
+
 def test_gate_no_repregunta_edad_si_ya_esta() -> None:
     """Bug 3: edad capturada (en el funnel) → el gate del agendado NO la repregunta."""
     from app.core.appointment_flow import datos_lead_faltantes

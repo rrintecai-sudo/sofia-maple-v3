@@ -438,6 +438,13 @@ _ORDINAL_OPCION: list[tuple] = [
     (re.compile(r"\b(?:el\s+)?(?:tercer[oa]?|3[°º]|la\s+tercera|[úu]ltim[oa])\b", re.IGNORECASE), 2),
 ]
 
+# Ordinal/número seguido de "de {nivel}" = grado, NO una opción de fecha.
+_GRADO_EN_FRASE_RE = re.compile(
+    r"\b(?:primer[oa]?|segund[oa]|tercer[oa]?|cuart[oa]|quint[oa]|sext[oa]|[1-9][°º]?)\s+"
+    r"de\s+(?:kinder|k[íi]nder|preescolar|primaria|secundaria)\b",
+    re.IGNORECASE,
+)
+
 
 def elegir_opcion_dia(mensaje: str, opciones_iso: list[str] | None) -> str | None:
     """Matchea la respuesta del papá contra las fechas OFRECIDAS (ISO). Reconoce:
@@ -450,9 +457,12 @@ def elegir_opcion_dia(mensaje: str, opciones_iso: list[str] | None) -> str | Non
         fechas = [date.fromisoformat(o) for o in opciones_iso]
     except (ValueError, TypeError):
         return None
+    # Defensa: un ordinal en FRASE DE GRADO ("primero DE secundaria") NO es elegir la
+    # "primera opción" — es una pregunta de contenido. Ignora ordinales en ese caso.
+    frase_grado = bool(_GRADO_EN_FRASE_RE.search(t))
     # 1) ordinal ("el primero", "la segunda", "el último")
     for rx, idx in _ORDINAL_OPCION:
-        if rx.search(t):
+        if not frase_grado and rx.search(t):
             if idx == 2 and "últim" in t:
                 return fechas[-1].isoformat()
             if idx < len(fechas):
@@ -464,14 +474,41 @@ def elegir_opcion_dia(mensaje: str, opciones_iso: list[str] | None) -> str | Non
             for f in fechas:
                 if f.weekday() == dow:
                     return f.isoformat()
-    # 3) número de día del mes ("11", "el 12")
-    m = re.search(r"\b(\d{1,2})\b", t)
-    if m:
-        dom = int(m.group(1))
-        for f in fechas:
-            if f.day == dom:
-                return f.isoformat()
+    # 3) número de día del mes ("11", "el 12") — pero NO si es frase de grado.
+    if not frase_grado:
+        m = re.search(r"\b(\d{1,2})\b", t)
+        if m:
+            dom = int(m.group(1))
+            for f in fechas:
+                if f.day == dom:
+                    return f.isoformat()
     return None
+
+
+def mensaje_resuelve_fecha(
+    mensaje: str, opciones_iso: list[str] | None, now: datetime | None = None
+) -> bool:
+    """True si el mensaje parsea como una FECHA válida (opción/explícita/relativa/
+    'esta semana'). Mismas vías que el handler — para decidir la precedencia: una
+    fecha válida le gana a la pausa de info."""
+    if extraer_fecha_explicita(mensaje, now):
+        return True
+    if elegir_opcion_dia(mensaje, opciones_iso):
+        return True
+    if extraer_fecha_relativa(mensaje, now):
+        return True
+    if extraer_proximo_dia_semana(mensaje, now):
+        return True
+    return bool(re.search(r"\bsemana\b", (mensaje or "").lower()))
+
+
+def mensaje_resuelve_hora(mensaje: str, campo_pedido_prev: str | None) -> bool:
+    """True si el mensaje parsea como una HORA válida (en el paso de la hora)."""
+    if extraer_hora_simple(mensaje):
+        return True
+    if campo_pedido_prev == "hora" and extraer_hora_de_numero_suelto(mensaje):
+        return True
+    return False
 
 
 def _build_system_prompt(now: datetime) -> str:

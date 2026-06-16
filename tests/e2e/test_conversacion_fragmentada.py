@@ -2400,9 +2400,9 @@ async def test_camino_produccion_codigo_dueno_de_la_coleccion() -> None:
 
 
 @pytest.mark.asyncio
-async def test_pregunta_sustantiva_mid_coleccion_haiku_contesta_codigo_retoma() -> None:
-    """Pregunta de FONDO en mitad de la colección: Haiku contesta, el CÓDIGO RETOMA
-    con la pregunta del campo, y el slot del turno previo PERSISTE."""
+async def test_pregunta_costos_mid_coleccion_pausa_da_dato_y_reofrece() -> None:
+    """Pregunta de COSTOS en mitad de la colección (paso hora): PAUSA → emite el dato
+    correcto por código y RE-OFRECE la visita pidiendo la hora; el slot del día PERSISTE."""
     from app.core.orchestrator import procesar_turno
 
     repo = _nuevo_repo_explorando("web:mid")
@@ -2410,21 +2410,19 @@ async def test_pregunta_sustantiva_mid_coleccion_haiku_contesta_codigo_retoma() 
     create_appt = AsyncMock(side_effect=lambda **kw: 33 + create_appt.await_count)
     intents = {
         "quiero agendar": Intent.QUIERE_AGENDAR,
-        "cuánto cuesta?": Intent.PREGUNTA_COSTOS,  # sustantiva, MID-colección
+        "cuánto cuesta?": Intent.PREGUNTA_COSTOS,  # DATA, MID-colección
     }
     leaf = _leaf_produccion(repo, haiku, create_appt, intents)
     _enter(leaf)
     try:
         await procesar_turno(mensaje="quiero agendar", session_id="web:mid", canal=None, now=_NOW_MIE)
         await procesar_turno(mensaje="hoy", session_id="web:mid", canal=None, now=_NOW_MIE)  # día
-        # Mid-colección el papá pregunta costos (sustantiva):
         r = await procesar_turno(mensaje="cuánto cuesta?", session_id="web:mid", canal=None, now=_NOW_MIE)
     finally:
         _exit(leaf)
 
     capt = repo._conv.estado_capturado
-    # El día del turno previo PERSISTIÓ (no se perdió por la pregunta sustantiva).
-    assert capt.cita_fecha_slot == "2026-06-03"
-    # Haiku contestó (su texto aparece) Y el código RETOMÓ con la pregunta del campo.
-    assert haiku.llamadas >= 1                       # Haiku se invocó para la sustantiva
-    assert "qué hora" in r.response.lower()           # el código retomó pidiendo la hora
+    assert capt.cita_fecha_slot == "2026-06-03"   # el día PERSISTE (no se perdió)
+    assert capt.cita_hora_slot is None            # NO avanzó: sigue faltando la hora
+    assert "💰" in r.response                       # dato de costos emitido por código
+    assert "a qué hora" in r.response.lower()       # re-oferta pidiendo la hora de ese día

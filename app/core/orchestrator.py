@@ -28,7 +28,11 @@ from typing import Any
 
 from app.adapters.anthropic_client import get_anthropic
 from app.config import get_settings
-from app.core.appointment_extractor import contiene_expresion_temporal
+from app.core.appointment_extractor import (
+    contiene_expresion_temporal,
+    mensaje_resuelve_fecha,
+    mensaje_resuelve_hora,
+)
 from app.core.appointment_flow import (
     AppointmentHandlerResult,
     handle_appointment_intent,
@@ -56,7 +60,7 @@ from app.core.oferta_resolver import (
 from app.core.output_guards import sanear_sondeo, sanear_texto_libre_haiku
 from app.core.prompt_builder import build_system_blocks
 from app.core.repository import get_repository
-from app.core.sales_funnel import decidir_funnel
+from app.core.sales_funnel import decidir_funnel, hint_contenido
 from app.core.state import (
     Canal,
     EstadoConversacion,
@@ -195,6 +199,28 @@ _RESPUESTA_PERSONA_ALT = (
     "Aquí sigo contigo, soy Sofía de admisiones de Maple 😊 Con gusto te acompaño — "
     "dime en qué te ayudo y lo vemos juntos."
 )
+
+
+def _reoferta_visita(capt: Any) -> str:
+    """Re-oferta de continuar la visita tras una pausa de info en el agendado, según el
+    paso: si ya hay día → pide la HORA de ese día; si no → re-ofrece las fechas."""
+    from app.core.appointment_extractor import fecha_humana_solo_dia
+    from app.core.appointment_messages import formato_opciones_dia
+
+    if getattr(capt, "cita_fecha_slot", None) and not getattr(capt, "cita_hora_slot", None):
+        dia = fecha_humana_solo_dia(capt.cita_fecha_slot) or "ese día"
+        return f"Cuando quieras seguimos con tu visita 😊 ¿A qué hora del {dia} te viene bien?"
+    ops = getattr(capt, "opciones_dia_propuestas", None)
+    if ops:
+        try:
+            fechas = [datetime.fromisoformat(o) for o in ops]
+            txt = formato_opciones_dia(fechas)
+            return (
+                f"Cuando quieras seguimos con tu visita 😊 ¿Qué día te queda mejor: {txt}?"
+            )
+        except (ValueError, TypeError):
+            pass
+    return "Cuando quieras seguimos con tu visita 😊 ¿Qué día te queda mejor?"
 
 
 def _variar_respuesta(texto: str) -> str:
@@ -627,8 +653,48 @@ async def procesar_turno(
     # determinístico corre CADA turno (no solo cuando el intent dispara). Así
     # colecta los slots de día/hora + 6 datos de forma fragmentada y cierra solo
     # cuando los tiene TODOS — el cierre lo decide el código, no Haiku.
+    # PAUSA DE INFO EN AGENDADO: si el papá pregunta info/contenido mientras hay cita en
+    # proceso (paso día/hora), NO lo enruto como respuesta de fecha. PRECEDENCIA: una
+    # FECHA/HORA válida le GANA a la pausa (nunca brincar una fecha buena por mencionar
+    # un grado). Si no parsea como fecha/hora y es info nueva (o hay nivel en estado para
+    # responder contenido del grado), pauso: respondo y re-ofrezco la visita.
+    pausa_info_agendado = False
+    reoferta_visita: str | None = None
+    hint_pausa_contenido: str | None = None
+    if (
+        capt.fase_agendado == FaseAgendado.AGENDANDO
+        and (capt.cita_fecha_slot is None or capt.cita_hora_slot is None)
+        and not quiere_agendar_explicito(mensaje)  # "quiero agendar para primaria" NO pausa
+        and not entro_agendado_este_turno
+    ):
+        es_fecha = capt.cita_fecha_slot is None and mensaje_resuelve_fecha(
+            mensaje, capt.opciones_dia_propuestas, now
+        )
+        es_hora = (
+            capt.cita_fecha_slot is not None
+            and capt.cita_hora_slot is None
+            and mensaje_resuelve_hora(mensaje, capt.ultimo_campo_pedido)
+        )
+        if not es_fecha and not es_hora:
+            info_keyword = (
+                bool(tipos_oferta)
+                or nivel_en_msg is not None
+                or intent_result.intent in _DATA_INTENTS
+            )
+            nivel_c = nivel_en_msg or capt.nivel_buscado_actual
+            # Solo pauso si TENGO algo que responder: DATA, o un nivel para el contenido.
+            puede_responder = bool(tipos_oferta) or (nivel_c is not None)
+            if (info_keyword or capt.nivel_buscado_actual is not None) and puede_responder:
+                pausa_info_agendado = True
+                reoferta_visita = _reoferta_visita(capt)
+                if not tipos_oferta and nivel_c is not None:  # contenido de grado (no DATA)
+                    h0 = capt.hijo_efectivo()
+                    grado_c = h0.grado if (h0 and h0.grado) else None
+                    hint_pausa_contenido = hint_contenido(nivel_c.value, grado_c)
+                log.info("pausa_info_en_agendado", extra={"session_id": session_id})
+
     appointment_handler: AppointmentHandlerResult | None = None
-    if en_agendado:
+    if en_agendado and not pausa_info_agendado:
         try:
             appointment_handler = await handle_appointment_intent(
                 mensaje, estado, ultimo_assistant=ultimo_assistant_msg, now=now
@@ -690,8 +756,11 @@ async def procesar_turno(
     # sobre el hint genérico de respuesta-corta.
     if funnel.hint:
         mensaje_para_llm = f"{mensaje_para_llm}\n\n{funnel.hint}"
+    elif hint_pausa_contenido:  # pausa en agendado: Haiku responde el contenido del grado
+        mensaje_para_llm = f"{mensaje_para_llm}\n\n{hint_pausa_contenido}"
     if (
         funnel.hint is None
+        and hint_pausa_contenido is None
         and intent_result.intent == Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO
         and ultimo_assistant_msg
     ):
@@ -795,7 +864,9 @@ async def procesar_turno(
     # estancias y NO va a agendar), la respuesta la EMITE el CÓDIGO completa: bloque
     # de datos + una línea fija de cierre. Haiku NO se invoca → sin saludo duplicado,
     # sin monólogo de venta, sin sondeo. (En agendado la oferta se maneja distinto.)
-    info_directa = bool(lineas_oferta) and not en_agendado
+    # Dispara también en una PAUSA de info dentro del agendado (DATA: costos/horario/
+    # estancia) → emite el dato y re-ofrece la visita, sin perder la cita.
+    info_directa = bool(lineas_oferta) and (not en_agendado or pausa_info_agendado)
 
     llm_started = time.perf_counter()
     for intento in range(max_regen + 1):
@@ -813,12 +884,13 @@ async def procesar_turno(
             break
         if info_directa:
             cuerpo_info = "\n\n".join(lineas_oferta)
-            # Si el bloque YA termina en pregunta (ej. confirmación de estancia que
-            # ofrece detallar), no anexes el cierre genérico (evita doble pregunta).
+            # En pausa de agendado, cierra RE-OFRECIENDO la visita; si no, el cierre
+            # genérico (salvo que el bloque ya termine en pregunta).
+            cierre = reoferta_visita if pausa_info_agendado else _CIERRE_INFO
             if cuerpo_info.rstrip().endswith("?"):
                 response_text = cuerpo_info
             else:
-                response_text = f"{cuerpo_info}\n\n{_CIERRE_INFO}"
+                response_text = f"{cuerpo_info}\n\n{cierre}"
             final_report = None
             log.info(
                 "info_directa (datos por código, sin Haiku)",
@@ -921,12 +993,15 @@ async def procesar_turno(
     # Las preguntas de DATOS del agendado las emite el código aparte, no cuentan.
     # info_directa ya es 100% código (datos + cierre) → no se sanea ni se le quita
     # la pregunta de cierre.
-    turno_venta = funnel.hint is not None
+    # Turno de VENTA (funnel) o de CONTENIDO en pausa de agendado: Haiku redacta el
+    # valor/contenido; la pregunta de cierre la pone el CÓDIGO (CTA / re-oferta).
+    turno_venta = funnel.hint is not None or hint_pausa_contenido is not None
+    cta_codigo = funnel.cta or (reoferta_visita if hint_pausa_contenido else None)
     en_funnel = capt.stage_venta == "valor" and not en_agendado
     if not coleccion_directa and not info_directa:
-        # En VENTA o dentro del FUNNEL Haiku escribe SOLO el valor/respuesta (0
-        # preguntas); la pregunta de cierre/empuje/re-enganche la pone el CÓDIGO →
-        # nunca se cuela el descubrimiento ("¿qué te importa?", "¿ya lo trabajaba?").
+        # En VENTA/CONTENIDO o dentro del FUNNEL Haiku escribe SOLO el valor (0
+        # preguntas); la pregunta de cierre la pone el CÓDIGO → nunca se cuela el
+        # descubrimiento ("¿qué te importa?", "¿ya lo trabajaba?").
         if turno_venta or en_funnel:
             max_preg = 0
         elif lineas_oferta or capt.discovery_pregunta_hecha:
@@ -934,13 +1009,13 @@ async def procesar_turno(
         else:
             max_preg = settings.max_preguntas_por_turno
         response_text = sanear_texto_libre_haiku(response_text, max_preguntas=max_preg)
-        # En OFERTA o dentro del FUNNEL: NADA de sondeo de descubrimiento.
-        if lineas_oferta or en_funnel:
+        # En OFERTA/FUNNEL/CONTENIDO: NADA de sondeo de descubrimiento.
+        if lineas_oferta or en_funnel or hint_pausa_contenido:
             response_text = sanear_sondeo(response_text)
         if turno_venta:
             response_text = sanear_cifras_ajenas(response_text, set())
-            if funnel.cta:  # el CÓDIGO cierra con la pregunta de la etapa/empuje
-                response_text = f"{response_text.rstrip()}\n\n{funnel.cta}"
+            if cta_codigo:  # el CÓDIGO cierra con la pregunta de la etapa/re-oferta
+                response_text = f"{response_text.rstrip()}\n\n{cta_codigo}"
         # Re-enganche ligero en PAUSA (respondió un dato dentro del funnel y quedó sin
         # pregunta) → hacia la VISITA, nunca descubrimiento.
         elif en_funnel and "?" not in response_text:
