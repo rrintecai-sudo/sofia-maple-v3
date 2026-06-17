@@ -123,6 +123,20 @@ def _join_o(partes: list[str]) -> str:
     return ", ".join(partes[:-1]) + f" o {partes[-1]}"
 
 
+def prep_dia(dia: str) -> str:
+    """Preposición correcta antes de `dia`: 'del miércoles 17' pero 'de hoy, miércoles
+    17' / 'de mañana, jueves 18' (la etiqueta hoy/mañana no admite 'del')."""
+    d = (dia or "").lower().lstrip()
+    return "de" if d.startswith(("hoy", "mañana")) else "del"
+
+
+def art_dia(dia: str) -> str:
+    """Artículo correcto antes de `dia`: 'el miércoles 17' pero '' para 'hoy,…'/'mañana,…'
+    (decir 'el hoy' es agramatical). Devuelve 'el ' o '' (listo para concatenar)."""
+    d = (dia or "").lower().lstrip()
+    return "" if d.startswith(("hoy", "mañana")) else "el "
+
+
 def _etiqueta_relativa(f: datetime, now: datetime | None) -> str:
     """'hoy'/'mañana' si la fecha cae hoy/mañana respecto a `now`, si no ''."""
     if now is None:
@@ -180,7 +194,11 @@ def render_pregunta_campo(
         else:
             base = ("¿Qué día te queda mejor para tu visita?" + linea_horario).strip()
     elif campo == "hora":
-        base = f"¿A qué hora del {dia} te viene bien?" if dia else "¿A qué hora te viene bien?"
+        base = (
+            f"¿A qué hora {prep_dia(dia)} {dia} te viene bien?"
+            if dia
+            else "¿A qué hora te viene bien?"
+        )
         if horas_libres:
             base = f"{base} Ese día tenemos disponibles: {horas_libres}."
         else:

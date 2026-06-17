@@ -38,7 +38,11 @@ from app.core.appointment_extractor import (
     fecha_humana_solo_dia,
     motivo_ajuste_fecha_relativa,
 )
-from app.core.appointment_messages import formato_opciones_dia, render_pregunta_campo
+from app.core.appointment_messages import (
+    art_dia,
+    formato_opciones_dia,
+    render_pregunta_campo,
+)
 from app.core.campus_resolver import resolve_campus_from_estado
 from app.core.state import EstadoCapturado, EstadoConversacion, NivelEducativo
 from app.core.state_extractor import extraer_grado_simple
@@ -627,7 +631,7 @@ async def handle_appointment_intent(
         )
         return AppointmentHandlerResult(
             hint_para_prompt=_instruccion_un_campo(
-                f"a qué HORA le queda mejor el {dia_resuelto}",
+                f"a qué HORA le queda mejor {art_dia(dia_resuelto)}{dia_resuelto}",
                 resumen_cap,
                 extra=(
                     f" Usa EXACTAMENTE ese día ({dia_resuelto}); NO lo recalcules ni "
@@ -640,7 +644,7 @@ async def handle_appointment_intent(
                 horas_libres=horas_libres,
                 reintento=es_reintento,
                 motivo=(
-                    f"{motivo_fecha}, te propongo el {dia_resuelto}."
+                    f"{motivo_fecha}, te propongo {art_dia(dia_resuelto)}{dia_resuelto}."
                     if motivo_fecha
                     else None
                 ),

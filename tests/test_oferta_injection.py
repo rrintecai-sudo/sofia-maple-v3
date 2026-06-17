@@ -1041,6 +1041,45 @@ def test_etiqueta_hoy_manana_en_paso_hora() -> None:
     assert fecha_humana_solo_dia("2026-06-17") == "miércoles 17 de junio"
 
 
+def test_concordancia_de_hoy_no_del_hoy() -> None:
+    """Defecto 1: 'del hoy' es agramatical. Con etiqueta hoy/mañana, la pregunta de hora
+    usa 'de hoy,…' y deja caer el artículo ('hoy,…' no 'el hoy,…')."""
+    from app.core.appointment_messages import art_dia, prep_dia, render_pregunta_campo
+
+    assert prep_dia("hoy, miércoles 17 de junio") == "de"
+    assert prep_dia("mañana, jueves 18 de junio") == "de"
+    assert prep_dia("jueves 25 de junio") == "del"
+    assert art_dia("hoy, miércoles 17") == "" and art_dia("jueves 25") == "el "
+    # Mensaje code-emitido (no redactado por Haiku) debe leer natural.
+    msg = render_pregunta_campo("hora", dia="hoy, miércoles 17 de junio")
+    assert "de hoy, miércoles 17" in msg and "del hoy" not in msg
+    msg2 = render_pregunta_campo("hora", dia="jueves 25 de junio")
+    assert "del jueves 25" in msg2
+
+
+def test_beats_sin_patron_etiqueta_dos_puntos() -> None:
+    """Defecto 2 (Gaby 3): ningún beat lleva ':' — el patrón 'Etiqueta: lista' hacía que
+    Haiku escupiera 'La parte emocional:' / 'El liderazgo:'."""
+    from app.core.sales_funnel import _BEATS, _BEATS_NIVEL
+
+    for fuente in (_BEATS, _BEATS_NIVEL):
+        for grado, beats in fuente.items():
+            for b in beats:
+                assert ":" not in b, f"{grado} tiene beat con ':' → {b!r}"
+
+
+def test_recap_nombra_facetas_vistas() -> None:
+    """Defecto 3: al agotar beats, el recap NOMBRA las facetas ya vistas (reconoce la
+    pregunta) en vez de saltar directo a la re-oferta. None si no hay nada que nombrar."""
+    from app.core.sales_funnel import _beats_de, recap_beats_vistos
+
+    recap = recap_beats_vistos(_beats_de("1° de Secundaria", "secundaria"))
+    assert recap and recap.startswith("Ya te conté ")
+    # Nombra facetas reconocibles del grado.
+    assert "pensamiento crítico" in recap or "proyectos" in recap
+    assert recap_beats_vistos([]) is None
+
+
 def test_etiqueta_hoy_manana_en_confirmacion() -> None:
     """Ajuste 3 (Gaby 9): la confirmación etiqueta 'hoy'/'mañana' según `now` en hora
     de Saltillo (America/Monterrey)."""

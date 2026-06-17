@@ -65,7 +65,7 @@ from app.core.output_guards import (
 )
 from app.core.prompt_builder import build_system_blocks
 from app.core.repository import get_repository
-from app.core.sales_funnel import decidir_funnel, hint_contenido
+from app.core.sales_funnel import decidir_funnel, hint_contenido, recap_beats_vistos
 from app.core.state import (
     Canal,
     EstadoConversacion,
@@ -234,11 +234,14 @@ def _reoferta_visita(capt: Any, now: datetime | None = None) -> str:
     paso: si ya hay día → pide la HORA de ese día; si no → re-ofrece las fechas.
     `now` etiqueta hoy/mañana (hora de Saltillo) en el día, igual que la propuesta."""
     from app.core.appointment_extractor import fecha_humana_solo_dia
-    from app.core.appointment_messages import formato_opciones_dia
+    from app.core.appointment_messages import formato_opciones_dia, prep_dia
 
     if getattr(capt, "cita_fecha_slot", None) and not getattr(capt, "cita_hora_slot", None):
         dia = fecha_humana_solo_dia(capt.cita_fecha_slot, now) or "ese día"
-        return f"Cuando quieras seguimos con tu visita 😊 ¿A qué hora del {dia} te viene bien?"
+        return (
+            f"Cuando quieras seguimos con tu visita 😊 ¿A qué hora {prep_dia(dia)} {dia} "
+            f"te viene bien?"
+        )
     ops = getattr(capt, "opciones_dia_propuestas", None)
     if ops:
         try:
@@ -756,8 +759,14 @@ async def procesar_turno(
                 hint_pausa_contenido = hint_c
                 capt.beats_venta_usados.extend(beats_c)
                 log.info("pausa_contenido_grado", extra={"session_id": session_id})
-            else:  # beats agotados → reduce con gracia: solo re-oferta (code-emitida)
-                lineas_oferta = [reoferta_visita]
+            else:  # beats agotados → reconoce la pregunta (recap de lo visto) + re-oferta
+                recap = recap_beats_vistos(capt.beats_venta_usados)
+                if recap:
+                    lineas_oferta = [
+                        f"{recap}, y eso lo terminas de sentir en persona. {reoferta_visita}"
+                    ]
+                else:
+                    lineas_oferta = [reoferta_visita]
                 log.info("pausa_contenido_agotado_reoferta", extra={"session_id": session_id})
 
     appointment_handler: AppointmentHandlerResult | None = None

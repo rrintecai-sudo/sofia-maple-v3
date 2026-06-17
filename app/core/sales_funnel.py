@@ -47,67 +47,69 @@ _DISPLAY = {
 # IMPORTANTE: cada beat de un grado es una FACETA DISTINTA (académico / autonomía /
 # socioemocional / un ejemplo concreto / lo observable en casa). Así, escoja la rotación
 # 1 o 2 que escoja, el mensaje se siente FRESCO y nunca repite la misma idea entre turnos.
+# Beats en PROSA conversacional, SIN el patrón 'Etiqueta: lista' (los dos puntos hacían
+# que Haiku escupiera 'La parte emocional:' / 'El liderazgo:', prohibido por Gaby pto 3).
 _BEATS: dict[str, list[str]] = {
     "1° de Kinder": [
-        "el aprendizaje entra por juego intencional: cantar, manipular y explorar, sin presión",
-        "gana autonomía en su día: guardar sus cosas, lavarse las manos, pedir lo que necesita",
-        "cuidamos lo emocional: que se sienta seguro, visto y acompañado al separarse de ti",
+        "el aprendizaje entra por juego intencional, cantando, manipulando y explorando, sin presión",
+        "empieza a hacer cosas por sí mismo, como guardar lo suyo, lavarse las manos y pedir lo que necesita",
+        "cuidamos que se sienta seguro y acompañado cuando se separa de ti",
         "un día combina rincones, movimiento, cuento y trabajo en grupos pequeños",
         "se nota cuando llega contándote algo que descubrió y quiere repetirlo en casa",
     ],
     "2° de Kinder": [
-        "afianza el lenguaje: arma frases más largas y te explica lo que piensa",
+        "afianza el lenguaje y ya arma frases más largas para explicarte lo que piensa",
         "sostiene rutinas y normas con menos recordatorios, mucho más independiente",
-        "convive mejor: espera turnos, comparte y resuelve roces con palabras, no con golpes",
+        "convive mejor, espera turnos, comparte y resuelve roces hablando en vez de con golpes",
         "el aprendizaje sigue por juego, ahora con retos más largos y atención sostenida",
         "se nota cuando deja de pedir ayuda para todo y empieza a proponer sus propias ideas",
     ],
     "3° de Kinder": [
-        "es el puente a primaria: consolidamos lectura inicial, números y trazo, sin acelerar",
-        "madura su autonomía: termina lo que empieza, organiza sus cosas y se concentra más tiempo",
+        "es el puente a primaria, donde consolidamos lectura inicial, números y trazo, sin acelerar",
+        "madura su autonomía, termina lo que empieza, organiza sus cosas y se concentra más tiempo",
         "fortalece la seguridad para hablar en grupo y sostener lo que piensa",
         "un día mezcla trabajo en mesa, juego con intención y momentos de exploración",
         "los papás notan 'ya me explica mejor' y 'ya resuelve más solo'",
     ],
     "1° de Primaria": [
-        "asentamos bases reales: leer comprendiendo y operar entendiendo el porqué, no de memoria",
+        "asentamos bases reales, leyendo con comprensión y operando con entendimiento, no de memoria",
         "buscamos que investigue y te explique cómo pensó algo",
-        "cuidamos la transición emocional: que el salto a primaria no lo viva con miedo",
-        "el trabajo se conecta con su vida: medir, comparar y contar cosas reales",
+        "cuidamos la transición emocional para que el salto a primaria no lo viva con miedo",
+        "el trabajo se conecta con su vida, midiendo, comparando y contando cosas reales",
         "se nota cuando deja de decir 'no sé' y empieza a explicarte cómo resolvió algo",
     ],
     "2° de Primaria": [
         "consolidamos lectura con más comprensión y escritura con soltura",
         "resuelve explicando el proceso, no solo dando el resultado",
-        "gana autonomía en su trabajo: organiza, revisa y corrige lo suyo",
+        "gana autonomía en su trabajo y ya organiza, revisa y corrige lo suyo",
         "conecta lo aprendido con proyectos y situaciones reales",
         "se nota cuando ya no solo da la respuesta, sino que explica cómo llegó a ella",
     ],
     "3° de Primaria": [
-        "más profundidad académica: textos más largos y problemas de varios pasos",
-        "despega el pensamiento crítico: compara, cuestiona y propone",
+        "gana profundidad académica con textos más largos y problemas de varios pasos",
+        "despega el pensamiento crítico y empieza a comparar, cuestionar y proponer",
         "toma iniciativa y se hace cargo de sus responsabilidades sin que se lo recuerden",
         "trabaja proyectos donde investiga un tema y lo presenta al grupo",
         "se nota cuando defiende una idea con razones y decide por sí mismo",
     ],
     "1° de Secundaria": [
-        "el salto es a pensamiento crítico: analizar, cuestionar fuentes y formar opinión propia",
-        "trabaja por proyectos: investiga un tema real, lo desarrolla y lo defiende ante el grupo",
-        "afianza organización y autonomía: gestiona sus tiempos, entregas y materiales solo",
-        "acompañamos la parte emocional de la edad: identidad, vínculos y manejar la frustración",
-        "se abren espacios de liderazgo: coordinar equipos, exponer y tomar la iniciativa",
+        "el salto es hacia el pensamiento crítico, donde aprende a analizar, cuestionar fuentes y formar su propia opinión",
+        "trabaja por proyectos, investigando un tema real, desarrollándolo y defendiéndolo ante el grupo",
+        "afianza su organización y autonomía, gestionando sus tiempos, entregas y materiales solo",
+        "acompañamos la parte emocional de la edad, su identidad, sus vínculos y cómo maneja la frustración",
+        "se abren espacios para que ejerza liderazgo, coordine equipos, exponga y tome la iniciativa",
     ],
     "2° de Secundaria": [
-        "profundiza el análisis: relaciona temas y sostiene su postura con datos",
-        "afina la autonomía: organiza su tiempo y responsabilidades con poca supervisión",
-        "madura en lo emocional: más conciencia de sí mismo, sus relaciones y sus decisiones",
-        "los proyectos suben de nivel: más investigación, trabajo en equipo y exposición",
+        "profundiza el análisis, relaciona temas y sostiene su postura con datos",
+        "afina su autonomía y organiza su tiempo y responsabilidades con poca supervisión",
+        "madura en lo emocional, con más conciencia de sí mismo, de sus relaciones y de sus decisiones",
+        "los proyectos suben de nivel, con más investigación, trabajo en equipo y exposición",
         "se nota cuando trabaja con independencia y se hace responsable de sus resultados",
     ],
     "3° de Secundaria": [
-        "es el cierre de etapa: madurez para textos, análisis y proyectos complejos",
-        "consolida autonomía total: planea, ejecuta y rinde cuentas de su trabajo",
-        "trabaja madurez emocional y vocación: claridad sobre quién es y hacia dónde va",
+        "es el cierre de etapa, con madurez para textos, análisis y proyectos complejos",
+        "consolida una autonomía total, planea, ejecuta y rinde cuentas de su trabajo",
+        "trabaja su madurez emocional y vocación, con más claridad sobre quién es y hacia dónde va",
         "desarrolla liderazgo y voz propia para exponer y coordinar a otros",
         "se nota cuando decide con seguridad y expresa con claridad lo que piensa",
     ],
@@ -117,7 +119,7 @@ _BEATS: dict[str, list[str]] = {
 # no repetir entre sí ni con los beats por grado.
 _BEATS_NIVEL: dict[str, list[str]] = {
     "maternal": [
-        "el foco es vínculo, seguridad y confianza: la base de todo lo que viene después",
+        "el foco es el vínculo, la seguridad y la confianza, que son la base de todo lo que viene después",
         "estimulamos lenguaje, movimiento y exploración con todos sus sentidos",
         "se nota cuando llega más curioso, más conectado contigo y con palabras nuevas",
     ],
@@ -211,6 +213,50 @@ def hint_contenido(
     """Pausa de contenido del grado → 1-2 beats NO usados (sin diferenciador, ya se dio
     en el enganche). Devuelve (hint, beats_usados)."""
     return construir_contenido_grado(nivel, grado, usados, n=n, incluir_diferenciador=False)
+
+
+# Faceta (etiqueta legible) por palabra clave — para el RECAP cuando ya no quedan beats
+# nuevos: nombra lo YA visto sin re-explicarlo. Orden = orden natural de lectura.
+_FACETAS_RECAP: list[tuple[str, tuple[str, ...]]] = [
+    ("lo académico", (
+        "académic", "lectura", "leer", "ley", "número", "operar", "operando", "texto",
+        "comprensión", "trazo", "escritura",
+    )),
+    ("el pensamiento crítico", (
+        "pensamiento crítico", "analiz", "análisis", "cuestiona", "compar",
+    )),
+    ("los proyectos", ("proyecto", "investig", "defend", "presenta al grupo", "expon")),
+    ("la autonomía", (
+        "autonomía", "organiz", "responsabilidad", "independ", "su tiempo", "por sí mismo",
+        "iniciativa",
+    )),
+    ("lo emocional", (
+        "emocional", "vínculo", "frustración", "seguro", "seguridad", "identidad",
+        "acompañ", "confianza",
+    )),
+    ("la convivencia", ("convive", "comparte", "turnos", "roces")),
+    ("el liderazgo", ("liderazgo", "coordin", "equipos")),
+    ("el juego y la exploración", ("juego intencional", "explor", "rincones")),
+]
+
+
+def recap_beats_vistos(usados: list[str], *, maximo: int = 4) -> str | None:
+    """Cuando se AGOTAN los beats: nombra (sin re-explicar) las FACETAS ya vistas, para
+    RECONOCER la pregunta del papá en vez de saltar directo a la re-oferta. Devuelve algo
+    como 'Ya te conté lo académico, lo emocional y el liderazgo'. None si no reconoce
+    ninguna faceta (el caller cae a la re-oferta simple)."""
+    if not usados:
+        return None
+    texto = " ".join(usados).lower()
+    vistas: list[str] = []
+    for etiqueta, claves in _FACETAS_RECAP:
+        if etiqueta not in vistas and any(k in texto for k in claves):
+            vistas.append(etiqueta)
+    if not vistas:
+        return None
+    vistas = vistas[:maximo]
+    cuerpo = vistas[0] if len(vistas) == 1 else ", ".join(vistas[:-1]) + f" y {vistas[-1]}"
+    return f"Ya te conté {cuerpo}"
 
 
 def _cta_etapa2(empuje: bool) -> str:
