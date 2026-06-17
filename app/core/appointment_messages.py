@@ -211,13 +211,15 @@ def render_registration_message(
     fecha_hora: datetime,
     campus: CampusResult | None,
     canal: str | None = None,
+    now: datetime | None = None,
 ) -> str:
     """Mensaje que Sofía envía cuando la cita queda REGISTRADA como pendiente.
 
     Texto oficial de Gaby (reunión 27-may). Determinístico — NO depende del LLM.
-    El link de Maps se renderiza según `canal` (FIX 2).
+    El link de Maps se renderiza según `canal` (FIX 2). Si la fecha es hoy/mañana,
+    se etiqueta ("hoy, miércoles 17 de junio") usando `now` (hora de Saltillo).
     """
-    dia = formato_dia_fecha(fecha_hora)
+    dia = _etiqueta_relativa(fecha_hora, now) + formato_dia_fecha(fecha_hora)
     hora = formato_hora(fecha_hora)
     nombre_campus = campus.nombre if campus else "nuestro campus"
     direccion = campus.direccion_legible() if campus else "te paso la dirección por separado"

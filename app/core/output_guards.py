@@ -66,6 +66,21 @@ def limpiar_listas_rotas(texto: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", txt).strip()
 
 
+def recortar_oraciones(texto: str, maximo: int = 4) -> str:
+    """Cap REAL de longitud: deja las primeras `maximo` oraciones COMPLETAS (terminadas
+    en . ! ? … o emoji de cierre) — nunca corta a media frase. Para turnos de venta/
+    contenido donde Haiku se pasa de largo."""
+    t = (texto or "").strip()
+    if not t:
+        return t
+    # Oraciones: bloque hasta un terminador (incluyéndolo y emojis/comillas pegados).
+    oraciones = re.findall(r"[^.!?…]*[.!?…]+[\"'»)\s]*|\S[^.!?…]*$", t)
+    oraciones = [o for o in oraciones if o.strip()]
+    if len(oraciones) <= maximo:
+        return t
+    return "".join(oraciones[:maximo]).strip()
+
+
 def sanear_sondeo(texto: str) -> str:
     """Elimina ORACIONES de sondeo afirmativo ('me gustaría entender qué buscas...').
     Para usar en turnos de OFERTA: da el dato y para, sin pescar info."""

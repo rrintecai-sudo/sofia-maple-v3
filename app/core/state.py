@@ -142,6 +142,9 @@ class EstadoCapturado(BaseModel):
     # a umbral_empuje el código ordena el empuje. Pausa con preguntas de info nueva.
     stage_venta: str = "enganche"
     turnos_valor: int = 0
+    # Ideas/beats de venta YA dichos en la sesión (no repetir). Compartido por el funnel
+    # y la pausa de contenido. Cada turno consume 1-2 beats no usados.
+    beats_venta_usados: list[str] = Field(default_factory=list)
 
     handoff_a_lily: bool = False
     fuente_entrada: str | None = None  # 'dm_redes', 'anuncio_whatsapp', 'referido', 'directo'

@@ -925,13 +925,106 @@ async def test_pausa_costos_en_agendado_da_dato_y_reoferta() -> None:
 
 
 def test_secundaria_grado_en_contenido() -> None:
-    """1° de Secundaria YA tiene contenido por grado (no genérico)."""
-    from app.core.sales_funnel import _CONTENIDO_GRADO
+    """1° de Secundaria YA tiene beats por grado (no genérico)."""
+    from app.core.sales_funnel import _BEATS, _beats_de
 
     for g in ("1° de Secundaria", "2° de Secundaria", "3° de Secundaria",
               "2° de Primaria", "3° de Primaria"):
-        assert g in _CONTENIDO_GRADO
-    assert "argumentar" in _CONTENIDO_GRADO["1° de Secundaria"]["enganche"]
+        assert _BEATS.get(g), f"{g} sin beats"
+    beats_1sec = " ".join(_beats_de("1° de Secundaria", "secundaria"))
+    assert "argumentar" in beats_1sec
+
+
+def test_recorte_cap_4_oraciones() -> None:
+    """Ajuste 1 (LONGITUD): el cap REAL recorta a 4 oraciones COMPLETAS, sin cortar
+    a media frase. Mensajes de 5+ frases nunca llegan al papá."""
+    from app.core.output_guards import recortar_oraciones
+
+    largo = "Una. Dos! ¿Tres? Cuatro. Cinco. Seis."
+    out = recortar_oraciones(largo, maximo=4)
+    assert out == "Una. Dos! ¿Tres? Cuatro."
+    # 4 o menos: intacto, no corta a media frase.
+    assert recortar_oraciones("Una. Dos.", 4) == "Una. Dos."
+
+
+def test_beat_diferenciador_siempre_en_enganche() -> None:
+    """Ajuste 2 — CONDICIÓN 1: el beat del diferenciador ('se forma') SIEMPRE va en
+    el enganche, aunque la rotación de beats no usados elija otros."""
+    from app.core.sales_funnel import decidir_funnel
+    from app.core.state import EstadoCapturado, HijoInfo, NivelEducativo
+
+    capt = EstadoCapturado(
+        nivel_buscado_actual=NivelEducativo.SECUNDARIA,
+        hijos=[HijoInfo(nivel=NivelEducativo.SECUNDARIA, grado="1° de Secundaria")],
+    )
+    d = decidir_funnel(
+        capt, es_continuacion=False, nivel_en_msg="secundaria",
+        pide_info_nueva=False, en_agendado=False, umbral=2, beats_usados=[],
+    )
+    assert "se forma" in d.hint  # diferenciador presente en el enganche
+
+
+def test_segundo_turno_no_repite_beat() -> None:
+    """Ajuste 2 — CONDICIÓN 2: el segundo turno de contenido NO repite el beat del
+    primero (beats_venta_usados compartido entre funnel y pausa de contenido)."""
+    from app.core.sales_funnel import decidir_funnel, hint_contenido
+    from app.core.state import EstadoCapturado, HijoInfo, NivelEducativo
+
+    capt = EstadoCapturado(
+        nivel_buscado_actual=NivelEducativo.SECUNDARIA,
+        hijos=[HijoInfo(nivel=NivelEducativo.SECUNDARIA, grado="1° de Secundaria")],
+    )
+    d1 = decidir_funnel(
+        capt, es_continuacion=False, nivel_en_msg="secundaria",
+        pide_info_nueva=False, en_agendado=False, umbral=2, beats_usados=[],
+    )
+    usados = list(d1.beats_usados or [])
+    # Camino funnel (Etapa 2)
+    capt.stage_venta, capt.turnos_valor = "valor", 1
+    d2 = decidir_funnel(
+        capt, es_continuacion=True, nivel_en_msg=None,
+        pide_info_nueva=False, en_agendado=False, umbral=2, beats_usados=usados,
+    )
+    assert not (set(usados) & set(d2.beats_usados or [])), "Etapa 2 repitió beat"
+    # Camino pausa de contenido (hint_contenido) comparte beats_usados
+    usados += d2.beats_usados or []
+    _, beats_c = hint_contenido("secundaria", "1° de Secundaria", usados)
+    assert not (set(usados) & set(beats_c)), "pausa de contenido repitió beat"
+
+
+def test_beats_agotados_degrada_con_gracia() -> None:
+    """Ajuste 2 — CONDICIÓN 3: cuando se agotan los beats, NO hay error ni mensaje
+    vacío — hint_contenido devuelve (None, [])."""
+    from app.core.sales_funnel import _beats_de, hint_contenido
+
+    todos = _beats_de("1° de Secundaria", "secundaria")
+    hint, beats = hint_contenido("secundaria", "1° de Secundaria", list(todos))
+    assert hint is None and beats == []
+
+
+def test_etiqueta_hoy_manana_en_confirmacion() -> None:
+    """Ajuste 3 (Gaby 9): la confirmación etiqueta 'hoy'/'mañana' según `now` en hora
+    de Saltillo (America/Monterrey)."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.core.appointment_messages import render_registration_message
+
+    mty = ZoneInfo("America/Monterrey")
+    now = datetime(2026, 6, 17, 9, 0, tzinfo=mty)  # miércoles 17
+    hoy = render_registration_message(
+        fecha_hora=datetime(2026, 6, 17, 11, 0, tzinfo=mty), campus=None, canal="web", now=now
+    )
+    assert "📅 Día: hoy, miércoles 17" in hoy
+    manana = render_registration_message(
+        fecha_hora=datetime(2026, 6, 18, 11, 0, tzinfo=mty), campus=None, canal="web", now=now
+    )
+    assert "📅 Día: mañana, jueves 18" in manana
+    # fecha lejana: sin etiqueta
+    lejos = render_registration_message(
+        fecha_hora=datetime(2026, 6, 25, 11, 0, tzinfo=mty), campus=None, canal="web", now=now
+    )
+    assert "📅 Día: jueves 25" in lejos and "hoy" not in lejos.split("\n")[2]
 
 
 def test_gate_no_repregunta_edad_si_ya_esta() -> None:

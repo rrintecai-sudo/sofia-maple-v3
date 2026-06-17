@@ -29,6 +29,7 @@ from typing import Any
 from app.adapters.anthropic_client import get_anthropic
 from app.config import get_settings
 from app.core.appointment_extractor import (
+    TZ_MONTERREY,
     contiene_expresion_temporal,
     mensaje_resuelve_fecha,
     mensaje_resuelve_hora,
@@ -57,7 +58,11 @@ from app.core.oferta_resolver import (
     precio_nivel_de_estado,
     sanear_cifras_ajenas,
 )
-from app.core.output_guards import sanear_sondeo, sanear_texto_libre_haiku
+from app.core.output_guards import (
+    recortar_oraciones,
+    sanear_sondeo,
+    sanear_texto_libre_haiku,
+)
 from app.core.prompt_builder import build_system_blocks
 from app.core.repository import get_repository
 from app.core.sales_funnel import decidir_funnel, hint_contenido
@@ -361,6 +366,10 @@ async def procesar_turno(
     started = time.perf_counter()
     settings = get_settings()
     repo = get_repository()
+    # `now` en hora de Saltillo (America/Monterrey, UTC-6) cuando el caller no lo pasa —
+    # los webhooks no lo mandan. Así el etiquetado hoy/mañana se calcula bien (no en UTC).
+    if now is None:
+        now = datetime.now(TZ_MONTERREY)
 
     # 1. Cargar o crear estado
     estado = await repo.get_conversation(session_id)
@@ -569,11 +578,14 @@ async def procesar_turno(
         pide_info_nueva=pide_info_nueva,
         en_agendado=(capt.fase_agendado == FaseAgendado.AGENDANDO),
         umbral=settings.umbral_empuje,
+        beats_usados=capt.beats_venta_usados,
     )
     if nivel_en_msg is not None and capt.nivel_buscado_actual is None:
         capt.nivel_buscado_actual = nivel_en_msg
     capt.stage_venta = funnel.stage
     capt.turnos_valor = funnel.turnos_valor
+    if funnel.beats_usados:  # marca las ideas dichas para no repetirlas
+        capt.beats_venta_usados.extend(funnel.beats_usados)
 
     # Misma regla: la señal CLARA de visita/cita (regex) cuenta siempre; el intent
     # LLM y una expresión temporal solo si el mensaje NO es una consulta de info
@@ -680,6 +692,11 @@ async def procesar_turno(
         elif intent_result.intent == Intent.CONFUSO_OTRO and not extraccion_con_datos:
             lineas_oferta = [_REORIENTA_GENERAL]
 
+    # FUNNEL gracia: Etapa 2 con beats AGOTADOS (hint None pero hay CTA de empuje) →
+    # se reduce con gracia emitiendo solo la CTA por código (sin Haiku ni mensaje vacío).
+    if not lineas_oferta and funnel.hint is None and funnel.cta and not en_agendado:
+        lineas_oferta = [funnel.cta]
+
     figuras_oferta: set[str] = set()
     for _ln in lineas_oferta:
         figuras_oferta |= extraer_figuras(_ln)
@@ -731,10 +748,16 @@ async def procesar_turno(
         if nivel_c is not None:
             h0 = capt.hijo_efectivo()
             grado_c = h0.grado if (h0 and h0.grado) else None
-            hint_pausa_contenido = hint_contenido(nivel_c.value, grado_c)
+            hint_c, beats_c = hint_contenido(nivel_c.value, grado_c, capt.beats_venta_usados)
             reoferta_visita = _reoferta_visita(capt) if en_agendando else _REOFERTA_VALOR
             pausa_info_agendado = en_agendando  # skip del handler solo si ya está agendando
-            log.info("pausa_contenido_grado", extra={"session_id": session_id})
+            if hint_c:  # hay beats nuevos → Haiku redacta el contenido
+                hint_pausa_contenido = hint_c
+                capt.beats_venta_usados.extend(beats_c)
+                log.info("pausa_contenido_grado", extra={"session_id": session_id})
+            else:  # beats agotados → reduce con gracia: solo re-oferta (code-emitida)
+                lineas_oferta = [reoferta_visita]
+                log.info("pausa_contenido_agotado_reoferta", extra={"session_id": session_id})
 
     appointment_handler: AppointmentHandlerResult | None = None
     if en_agendado and not pausa_info_agendado:
@@ -876,6 +899,14 @@ async def procesar_turno(
     # 9. Llamar a Anthropic con loop de validación + regeneración
     anthropic = get_anthropic()
     max_regen = settings.max_regenerations_per_turn if settings.enable_validators else 0
+    # TECHO de longitud para turnos de VENTA/CONTENIDO (Haiku se pasa de largo): ~220
+    # tokens. El cap REAL es el recorte a 4 oraciones (abajo).
+    es_turno_breve = (
+        funnel.hint is not None
+        or hint_pausa_contenido is not None
+        or (capt.stage_venta == "valor" and capt.fase_agendado != FaseAgendado.AGENDANDO)
+    )
+    max_tokens_turno = 220 if es_turno_breve else 600
     response_text = ""
     final_report: ValidationReport | None = None
     regenerations = 0
@@ -945,7 +976,7 @@ async def procesar_turno(
                 system_blocks=system_blocks,
                 messages=messages_llm + extra_messages,
                 model=settings.anthropic_model_principal,
-                max_tokens=600,
+                max_tokens=max_tokens_turno,
                 temperature=0.55,
             )
         except Exception as exc:
@@ -1057,6 +1088,9 @@ async def procesar_turno(
             response_text = sanear_sondeo(response_text)
         if turno_venta:
             response_text = sanear_cifras_ajenas(response_text, set())
+            # CAP REAL de longitud: recorta a 4 oraciones COMPLETAS (nunca a media
+            # frase) ANTES de anexar la CTA del código.
+            response_text = recortar_oraciones(response_text, maximo=4)
             if cta_codigo:  # el CÓDIGO cierra con la pregunta de la etapa/re-oferta
                 response_text = f"{response_text.rstrip()}\n\n{cta_codigo}"
         # Re-enganche ligero en PAUSA (respondió un dato dentro del funnel y quedó sin
@@ -1127,6 +1161,7 @@ async def procesar_turno(
                 fecha_hora=fecha_dt,
                 campus=appointment_handler.campus,
                 canal=estado.canal.value,  # FIX 2: Maps clickeable según canal
+                now=now,  # etiqueta hoy/mañana en la confirmación
             )
             # PASO 1: el CÓDIGO cierra la fase pegajosa al crear la cita. El
             # appointment_id es el RESULTADO de completar los slots, no un

@@ -40,151 +40,85 @@ _DISPLAY = {
     "secundaria": "Secundaria",
 }
 
-# Esencia por nivel (Etapa 1) — condensada de educacion.md.
-_ESENCIA = {
-    "maternal": (
-        "En maternal el foco es vínculo, seguridad, exploración y lenguaje — la base "
-        "que después le da sentido a lo académico."
-    ),
-    "kinder": (
-        "En kinder se construye el amor por aprender, con aprendizaje activo y juego "
-        "intencional."
-    ),
-    "primaria": (
-        "En primaria se combinan bases académicas sólidas con pensamiento crítico y "
-        "proyectos reales."
-    ),
-    "secundaria": (
-        "En secundaria el foco es que el adolescente se conozca: guía emocional, "
-        "pensamiento crítico, debate y carácter."
-    ),
+# Contenido POR GRADO como BEATS cortos (de la KB / documents_maple — base de Ceci).
+# Cada turno de contenido inyecta 1-2 beats NO USADOS (rastreados en estado) → mensajes
+# cortos y sin repetir ideas. El diferenciador va SIEMPRE en el enganche (aparte, nunca
+# se "agota"). Grados sin lista caen a _BEATS_NIVEL.
+_BEATS: dict[str, list[str]] = {
+    "1° de Kinder": [
+        "el aprendizaje es muy activo y por juego intencional, respetando su etapa",
+        "se desarrolla lenguaje, autonomía, motricidad, convivencia y seguridad personal",
+        "se nota cuando empieza a seguir rutinas, participar, explorar con confianza y hacer cosas por sí mismo",
+        "no trabajamos desde miedo ni presión: un niño seguro sí puede aprender",
+    ],
+    "2° de Kinder": [
+        "ya sostienen mejor las rutinas, participan más y ganan mucha seguridad",
+        "el aprendizaje sigue activo y por juego intencional, con más independencia, lenguaje y atención",
+        "se nota cuando explica más lo que piensa, participa con intención y necesita menos ayuda",
+        "no buscamos que solo respondan correcto, sino que entiendan y se atrevan a pensar",
+    ],
+    "3° de Kinder": [
+        "es el cierre de la etapa y se trabaja mucho la preparación para primaria",
+        "se fortalece autonomía, atención, lenguaje, convivencia y seguridad, con más estructura",
+        "los papás notan 'ya me explica mejor', 'ya resuelve más solo', 'ya sigue rutinas con seguridad'",
+        "primero construimos bases sólidas, antes de pedir rendimiento",
+    ],
+    "1° de Primaria": [
+        "empezamos bases académicas más sólidas, conectadas con comprensión (no solo memorizar)",
+        "buscamos que entienda, investigue, participe y explique cómo pensó algo",
+        "cuidamos la parte emocional y la autonomía, con aprendizaje activo ligado a situaciones reales",
+        "se nota cuando deja de decir 'no sé' y empieza a explicarte cómo resolvió algo",
+    ],
+    "2° de Primaria": [
+        "se consolidan bases académicas más fuertes: leer con más comprensión y escribir con soltura",
+        "resuelven explicando los procesos y conectan lo aprendido con situaciones reales",
+        "no buscamos repetición, sino comprensión",
+        "se nota cuando ya no solo da la respuesta, sino que explica cómo llegó a ella",
+    ],
+    "3° de Primaria": [
+        "se nota mucho más la independencia y el pensamiento crítico",
+        "empiezan a argumentar, explicar procesos y tomar iniciativa",
+        "hay más profundidad académica, conectada con la vida real",
+        "se nota cuando argumenta y toma iniciativa por sí mismo",
+    ],
+    "1° de Secundaria": [
+        "es una etapa más profunda y retadora: se fortalece pensamiento crítico, organización y análisis",
+        "se trabaja con proyectos, debate, investigación y análisis de temas reales",
+        "se busca capacidad de argumentar, no aprendizaje de memoria",
+        "se nota cuando organiza mejor su trabajo y argumenta con criterio",
+    ],
+    "2° de Secundaria": [
+        "se afina mucho la autonomía: gestionar mejor su tiempo, responsabilidades y organización",
+        "mejora su forma de trabajar y participar, con más profundidad y análisis",
+        "se nota cuando trabaja con más independencia",
+    ],
+    "3° de Secundaria": [
+        "es el cierre de la etapa, con más madurez académica y personal",
+        "buscamos más criterio, independencia y capacidad para resolver",
+        "más claridad para expresar lo que piensa y seguridad para decidir",
+        "se nota cuando resuelve con criterio propio y decide con más seguridad",
+    ],
 }
 
-# Escena observable por nivel (Etapa 2) — copiadas de educacion.md ("lo notas en casa…").
-_ESCENA = {
-    "maternal": (
-        "Lo notas en casa: tu hijo llega más curioso, más conectado contigo, con "
-        "palabras nuevas que él mismo busca usar."
-    ),
-    "kinder": (
-        "Lo notas en casa cuando tu hijo deja de esperar instrucciones para todo y "
-        "empieza a proponer — te dice 'mira lo que hice' antes de que le preguntes."
-    ),
-    "primaria": (
-        "Lo notas en casa cuando deja de pedirte la respuesta y empieza a explicarte "
-        "lo que él piensa, con sus propias palabras."
-    ),
-    "secundaria": (
-        "Lo notas cuando sostiene una opinión propia sin agresión y sin necesitar la "
-        "aprobación de todos — te plantea un argumento que no habías considerado."
-    ),
-}
-
-# Contenido POR GRADO (de la KB / documents_maple — base de Ceci). Puntos OBLIGATORIOS
-# que Sofía debe transmitir; Haiku los redacta cálido (no recita, pero NO omite).
-_CONTENIDO_GRADO: dict[str, dict[str, str]] = {
-    "1° de Kinder": {
-        "enganche": (
-            "aprendizaje muy activo y juego intencional; se desarrolla lenguaje, "
-            "autonomía, motricidad, convivencia, escucha y seguridad personal, siempre "
-            "respetando su etapa (no aprender como niños grandes antes de tiempo); aquí "
-            "no se trabaja desde miedo ni presión"
-        ),
-        "escena": (
-            "se nota cuando empieza a seguir rutinas, participar, hablar más, explorar "
-            "con confianza y hacer pequeñas cosas por sí mismo — un niño seguro sí puede "
-            "aprender"
-        ),
-    },
-    "2° de Kinder": {
-        "enganche": (
-            "ya sostienen mejor las rutinas, participan más y ganan mucha seguridad; el "
-            "aprendizaje sigue activo y por juego intencional, y se desarrolla más "
-            "independencia, lenguaje, atención y autonomía"
-        ),
-        "escena": (
-            "se nota cuando explica más lo que piensa, participa con más intención, "
-            "resuelve pequeñas situaciones y necesita menos ayuda; no buscamos niños que "
-            "solo respondan correcto, sino que entiendan, participen y se atrevan a pensar"
-        ),
-    },
-    "3° de Kinder": {
-        "enganche": (
-            "es el cierre de la etapa y se trabaja mucho la preparación para primaria; se "
-            "fortalece autonomía, atención, lenguaje, convivencia y seguridad, con más "
-            "estructura y responsabilidades acordes a su edad"
-        ),
-        "escena": (
-            "los papás empiezan a notar 'ya me explica mejor', 'ya resuelve más solo', "
-            "'ya sigue rutinas con más seguridad'; primero construimos bases sólidas antes "
-            "de pedir rendimiento"
-        ),
-    },
-    "1° de Primaria": {
-        "enganche": (
-            "empezamos bases académicas más sólidas, siempre conectadas con comprensión y "
-            "pensamiento (no solo memorizar): entender, investigar, participar y explicar "
-            "cómo pensó algo, cuidando la parte emocional y la autonomía"
-        ),
-        "escena": (
-            "se nota cuando deja de decir 'no sé', empieza a explicarte cómo resolvió algo "
-            "y se atreve más a pensar por sí mismo"
-        ),
-    },
-    "2° de Primaria": {
-        "enganche": (
-            "se consolidan bases académicas más fuertes: leer con más comprensión, escribir "
-            "con más soltura, resolver explicando los procesos y conectar lo aprendido con "
-            "situaciones reales; no buscamos repetición, sino comprensión"
-        ),
-        "escena": (
-            "se nota cuando ya no solo da la respuesta, sino que explica cómo llegó a ella y "
-            "conecta lo que aprende con su vida"
-        ),
-    },
-    "3° de Primaria": {
-        "enganche": (
-            "ya se nota mucho más la independencia y el pensamiento crítico: empiezan a "
-            "argumentar, explicar procesos, tomar iniciativa y conectar lo aprendido con la "
-            "vida real; hay más profundidad académica"
-        ),
-        "escena": (
-            "se nota cuando argumenta, explica sus procesos y toma más iniciativa por sí mismo"
-        ),
-    },
-    "1° de Secundaria": {
-        "enganche": (
-            "es una etapa más profunda y retadora: se fortalece muchísimo el pensamiento "
-            "crítico, la organización, el análisis y la capacidad de argumentar; se trabaja "
-            "con proyectos, debate, investigación y análisis de temas reales"
-        ),
-        "escena": (
-            "se nota cuando organiza mejor su trabajo, argumenta con criterio y analiza los "
-            "temas en vez de solo memorizarlos"
-        ),
-    },
-    "2° de Secundaria": {
-        "enganche": (
-            "se afina mucho la autonomía: el alumno empieza a gestionar mejor su tiempo, sus "
-            "responsabilidades, su organización y su forma de trabajar y participar; hay más "
-            "profundidad y análisis"
-        ),
-        "escena": (
-            "se nota cuando gestiona mejor su tiempo y responsabilidades, y trabaja con más "
-            "independencia"
-        ),
-    },
-    "3° de Secundaria": {
-        "enganche": (
-            "es el cierre de la etapa, con más madurez académica y personal: buscamos que "
-            "salga con más criterio, independencia, capacidad para resolver, claridad para "
-            "expresar lo que piensa y seguridad para tomar decisiones"
-        ),
-        "escena": (
-            "se nota cuando resuelve con criterio propio, expresa con claridad lo que piensa "
-            "y decide con más seguridad"
-        ),
-    },
+# Fallback por NIVEL (grados sin lista, p.ej. maternal).
+_BEATS_NIVEL: dict[str, list[str]] = {
+    "maternal": [
+        "el foco es vínculo, seguridad, exploración y lenguaje",
+        "es la base que después le da sentido a lo académico",
+        "se nota cuando llega más curioso, más conectado contigo y con palabras nuevas",
+    ],
+    "kinder": [
+        "el aprendizaje es activo y por juego intencional",
+        "se nota cuando deja de esperar instrucciones para todo y empieza a proponer",
+    ],
+    "primaria": [
+        "bases académicas sólidas conectadas con comprensión y pensamiento",
+        "se nota cuando deja de pedirte la respuesta y empieza a explicarte lo que piensa",
+    ],
+    "secundaria": [
+        "guía emocional, pensamiento crítico y carácter",
+        "se nota cuando sostiene una opinión propia y argumenta con criterio",
+    ],
 }
 
 # Kinder: jamás 'proyectos/PBL/Challenge Based Learning'.
@@ -197,9 +131,8 @@ _REGLA_KINDER = (
 # redactar cálido y natural sobre los puntos de la base (no recitar, no omitir).
 _TONO = (
     " No abras con 'Claro' ni 'Perfecto', no nombres 'BEAR' ni etiquetas tipo "
-    "'Concepto: descripción'. Redáctalo con TUS palabras, cálido y natural (2-4 frases) "
-    "— no recites textual, pero NO omitas los puntos importantes. SIN NINGUNA pregunta "
-    "(el sistema agrega la de cierre). NO pidas edad/grado, NO preguntes '¿qué te importa?'."
+    "'Concepto: descripción'. MÁXIMO 2-4 frases, cálidas y naturales — breve. SIN "
+    "NINGUNA pregunta (el sistema agrega la de cierre). NO pidas edad/grado."
 )
 
 
@@ -214,43 +147,53 @@ def _display_grado(nivel: str, grado: str | None) -> str:
     return _DISPLAY.get(nivel, "ese nivel")
 
 
-def _hint_etapa1(nivel: str, grado: str | None = None) -> str:
-    display = _display_grado(nivel, grado)
-    cont = (_CONTENIDO_GRADO.get(grado or "", {}).get("enganche")) or _ESENCIA.get(nivel, "")
-    return (
-        f"[ETAPA VENTA — ENGANCHE. El papá busca {display}. Confírmalo cálido SIN dar "
-        f"ningún precio. Transmite el diferenciador: {_DIFERENCIADOR} Puntos OBLIGATORIOS "
-        f"de {display}: {cont}. PROHIBIDO mencionar precios, costos o inscripción."
-        f"{_kinder_regla(nivel)}{_TONO}]"
-    )
+def _beats_de(grado: str | None, nivel: str) -> list[str]:
+    return _BEATS.get(grado or "") or _BEATS_NIVEL.get(nivel) or []
 
 
-def _hint_etapa2(nivel: str, empuje: bool, grado: str | None = None) -> str:
+def _elegir_beats(grado: str | None, nivel: str, usados: list[str], n: int) -> list[str]:
+    """Hasta `n` beats NO usados del grado/nivel (en orden). [] si se agotaron."""
+    libres = [b for b in _beats_de(grado, nivel) if b not in (usados or [])]
+    return libres[: max(0, n)]
+
+
+def construir_contenido_grado(
+    nivel: str,
+    grado: str | None,
+    usados: list[str],
+    *,
+    n: int = 2,
+    incluir_diferenciador: bool = False,
+) -> tuple[str | None, list[str]]:
+    """Devuelve (hint, beats_usados): hint con el diferenciador (si aplica, SIEMPRE) +
+    1-2 beats NO usados; Haiku lo redacta breve. (None, []) si no quedan beats ni hay
+    diferenciador (caller reduce con gracia)."""
+    beats = _elegir_beats(grado, nivel, usados, n)
+    partes: list[str] = []
+    if incluir_diferenciador:
+        partes.append(_DIFERENCIADOR)  # el diferenciador SIEMPRE va en el enganche
+    partes.extend(beats)
+    if not partes:
+        return None, []
     display = _display_grado(nivel, grado)
-    escena = (_CONTENIDO_GRADO.get(grado or "", {}).get("escena")) or _ESCENA.get(nivel, "")
-    return (
-        f"[ETAPA VENTA — VALOR ({display}). Comparte cálido una escena/los puntos de "
-        f"{display}: {escena}. Sin precios.{_kinder_regla(nivel)}{_TONO}]"
+    hint = (
+        f"[CONTENIDO {display} — el papá quiere saber de {display}. Redáctalo cálido y "
+        f"BREVE (máx 1-2 ideas, 2-4 frases) con TUS palabras: {' '.join(partes)} Sin "
+        f"precios.{_kinder_regla(nivel)}{_TONO}]"
     )
+    return hint, beats
 
 
 def _cta_etapa1(nivel: str, grado: str | None = None) -> str:
     return f"¿Te cuento cómo se ve un día en {_display_grado(nivel, grado)}? 😊"
 
 
-def hint_contenido(nivel: str, grado: str | None = None) -> str:
-    """Hint para que Haiku RESPONDA una pregunta de contenido del grado (p.ej. durante
-    una pausa del agendado). Usa el contenido del grado de la KB; sin precios, sin
-    pregunta (el sistema agrega la re-oferta de la visita)."""
-    display = _display_grado(nivel, grado)
-    cont = _CONTENIDO_GRADO.get(grado or "", {})
-    puntos = (cont.get("enganche") or _ESENCIA.get(nivel, ""))
-    escena = (cont.get("escena") or _ESCENA.get(nivel, ""))
-    return (
-        f"[CONTENIDO {display}. El papá pregunta sobre {display}. Respóndele cálido y "
-        f"concreto con estos puntos (redáctalos con tus palabras, no omitas lo "
-        f"importante): {puntos}; {escena}. Sin precios.{_kinder_regla(nivel)}{_TONO}]"
-    )
+def hint_contenido(
+    nivel: str, grado: str | None, usados: list[str], *, n: int = 2
+) -> tuple[str | None, list[str]]:
+    """Pausa de contenido del grado → 1-2 beats NO usados (sin diferenciador, ya se dio
+    en el enganche). Devuelve (hint, beats_usados)."""
+    return construir_contenido_grado(nivel, grado, usados, n=n, incluir_diferenciador=False)
 
 
 def _cta_etapa2(empuje: bool) -> str:
@@ -274,6 +217,7 @@ class FunnelDecision:
     stage: str  # nuevo stage_venta a persistir
     turnos_valor: int  # nuevo contador a persistir
     empuje: bool  # se inyectó la instrucción de empuje este turno
+    beats_usados: list[str] | None = None  # beats consumidos (a marcar en estado)
 
 
 def decidir_funnel(
@@ -284,15 +228,18 @@ def decidir_funnel(
     pide_info_nueva: bool,
     en_agendado: bool,
     umbral: int,
+    beats_usados: list[str] | None = None,
 ) -> FunnelDecision:
     """Decide la etapa + el contador para este turno.
 
     - `es_continuacion`: el papá NO trae pregunta nueva (responde "sí/ajá/ok").
     - `nivel_en_msg`: nivel mencionado en el mensaje ('kinder'…) o None.
     - `pide_info_nueva`: el papá pregunta algo concreto → PAUSA el contador.
+    - `beats_usados`: ideas ya dichas en la sesión (no repetir).
     """
     stage = capt.stage_venta or STAGE_ENGANCHE
     tv = capt.turnos_valor
+    usados = beats_usados if beats_usados is not None else []
 
     # Cita ya agendada o en pleno agendado → funnel apagado (anti-insistencia).
     if capt.cita_agendada:
@@ -308,11 +255,14 @@ def decidir_funnel(
     if pide_info_nueva:
         return FunnelDecision(None, None, False, stage, tv, False)
 
-    # El papá da el nivel → Etapa 1 (diferenciador, sin precio). Arranca el contador.
+    # El papá da el nivel → Etapa 1 (diferenciador SIEMPRE + 1 beat). Arranca el contador.
     if nivel_en_msg is not None:
+        hint, beats = construir_contenido_grado(
+            nivel_en_msg, grado, usados, n=1, incluir_diferenciador=True
+        )
         return FunnelDecision(
-            _hint_etapa1(nivel_en_msg, grado), _cta_etapa1(nivel_en_msg, grado),
-            False, STAGE_VALOR, 1, False,
+            hint, _cta_etapa1(nivel_en_msg, grado),
+            False, STAGE_VALOR, 1, False, beats_usados=beats,
         )
 
     # Continuación dentro del funnel (ya en 'valor').
@@ -325,9 +275,11 @@ def decidir_funnel(
             return FunnelDecision(None, None, False, stage, tv, False)
         nuevo_tv = tv + 1
         empuje = nuevo_tv >= umbral
+        # Etapa 2: 1-2 beats NO usados. Si se agotaron → hint None → solo la CTA (gracia).
+        hint, beats = construir_contenido_grado(nivel, grado, usados, n=2)
         return FunnelDecision(
-            _hint_etapa2(nivel, empuje, grado), _cta_etapa2(empuje),
-            False, STAGE_VALOR, nuevo_tv, empuje,
+            hint, _cta_etapa2(empuje), False, STAGE_VALOR, nuevo_tv, empuje,
+            beats_usados=beats,
         )
 
     # Nada que hacer (el caller deja que Haiku/otra rama responda).

@@ -57,6 +57,7 @@ def test_estado_to_row_basic() -> None:
         "pendiente_grado_horario": False,
         "stage_venta": "enganche",
         "turnos_valor": 0,
+        "beats_venta_usados": [],
         "handoff_a_lily": False,
         "vive_fuera_saltillo": False,
         "clasificacion": "sin_clasificar",
