@@ -229,20 +229,21 @@ _REOFERTA_VALOR = (
 )
 
 
-def _reoferta_visita(capt: Any) -> str:
+def _reoferta_visita(capt: Any, now: datetime | None = None) -> str:
     """Re-oferta de continuar la visita tras una pausa de info en el agendado, según el
-    paso: si ya hay día → pide la HORA de ese día; si no → re-ofrece las fechas."""
+    paso: si ya hay día → pide la HORA de ese día; si no → re-ofrece las fechas.
+    `now` etiqueta hoy/mañana (hora de Saltillo) en el día, igual que la propuesta."""
     from app.core.appointment_extractor import fecha_humana_solo_dia
     from app.core.appointment_messages import formato_opciones_dia
 
     if getattr(capt, "cita_fecha_slot", None) and not getattr(capt, "cita_hora_slot", None):
-        dia = fecha_humana_solo_dia(capt.cita_fecha_slot) or "ese día"
+        dia = fecha_humana_solo_dia(capt.cita_fecha_slot, now) or "ese día"
         return f"Cuando quieras seguimos con tu visita 😊 ¿A qué hora del {dia} te viene bien?"
     ops = getattr(capt, "opciones_dia_propuestas", None)
     if ops:
         try:
             fechas = [datetime.fromisoformat(o) for o in ops]
-            txt = formato_opciones_dia(fechas)
+            txt = formato_opciones_dia(fechas, now)
             return (
                 f"Cuando quieras seguimos con tu visita 😊 ¿Qué día te queda mejor: {txt}?"
             )
@@ -737,7 +738,7 @@ async def procesar_turno(
         and not es_hora_valida
     ):
         pausa_info_agendado = True
-        reoferta_visita = _reoferta_visita(capt)
+        reoferta_visita = _reoferta_visita(capt, now)
         log.info("pausa_data_en_agendado", extra={"session_id": session_id})
 
     # (B) PREGUNTA DE CONTENIDO del grado (en VALOR o AGENDADO): Haiku responde el
@@ -749,7 +750,7 @@ async def procesar_turno(
             h0 = capt.hijo_efectivo()
             grado_c = h0.grado if (h0 and h0.grado) else None
             hint_c, beats_c = hint_contenido(nivel_c.value, grado_c, capt.beats_venta_usados)
-            reoferta_visita = _reoferta_visita(capt) if en_agendando else _REOFERTA_VALOR
+            reoferta_visita = _reoferta_visita(capt, now) if en_agendando else _REOFERTA_VALOR
             pausa_info_agendado = en_agendando  # skip del handler solo si ya está agendando
             if hint_c:  # hay beats nuevos → Haiku redacta el contenido
                 hint_pausa_contenido = hint_c

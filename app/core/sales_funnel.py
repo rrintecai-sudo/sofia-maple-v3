@@ -44,80 +44,97 @@ _DISPLAY = {
 # Cada turno de contenido inyecta 1-2 beats NO USADOS (rastreados en estado) → mensajes
 # cortos y sin repetir ideas. El diferenciador va SIEMPRE en el enganche (aparte, nunca
 # se "agota"). Grados sin lista caen a _BEATS_NIVEL.
+# IMPORTANTE: cada beat de un grado es una FACETA DISTINTA (académico / autonomía /
+# socioemocional / un ejemplo concreto / lo observable en casa). Así, escoja la rotación
+# 1 o 2 que escoja, el mensaje se siente FRESCO y nunca repite la misma idea entre turnos.
 _BEATS: dict[str, list[str]] = {
     "1° de Kinder": [
-        "el aprendizaje es muy activo y por juego intencional, respetando su etapa",
-        "se desarrolla lenguaje, autonomía, motricidad, convivencia y seguridad personal",
-        "se nota cuando empieza a seguir rutinas, participar, explorar con confianza y hacer cosas por sí mismo",
-        "no trabajamos desde miedo ni presión: un niño seguro sí puede aprender",
+        "el aprendizaje entra por juego intencional: cantar, manipular y explorar, sin presión",
+        "gana autonomía en su día: guardar sus cosas, lavarse las manos, pedir lo que necesita",
+        "cuidamos lo emocional: que se sienta seguro, visto y acompañado al separarse de ti",
+        "un día combina rincones, movimiento, cuento y trabajo en grupos pequeños",
+        "se nota cuando llega contándote algo que descubrió y quiere repetirlo en casa",
     ],
     "2° de Kinder": [
-        "ya sostienen mejor las rutinas, participan más y ganan mucha seguridad",
-        "el aprendizaje sigue activo y por juego intencional, con más independencia, lenguaje y atención",
-        "se nota cuando explica más lo que piensa, participa con intención y necesita menos ayuda",
-        "no buscamos que solo respondan correcto, sino que entiendan y se atrevan a pensar",
+        "afianza el lenguaje: arma frases más largas y te explica lo que piensa",
+        "sostiene rutinas y normas con menos recordatorios, mucho más independiente",
+        "convive mejor: espera turnos, comparte y resuelve roces con palabras, no con golpes",
+        "el aprendizaje sigue por juego, ahora con retos más largos y atención sostenida",
+        "se nota cuando deja de pedir ayuda para todo y empieza a proponer sus propias ideas",
     ],
     "3° de Kinder": [
-        "es el cierre de la etapa y se trabaja mucho la preparación para primaria",
-        "se fortalece autonomía, atención, lenguaje, convivencia y seguridad, con más estructura",
-        "los papás notan 'ya me explica mejor', 'ya resuelve más solo', 'ya sigue rutinas con seguridad'",
-        "primero construimos bases sólidas, antes de pedir rendimiento",
+        "es el puente a primaria: consolidamos lectura inicial, números y trazo, sin acelerar",
+        "madura su autonomía: termina lo que empieza, organiza sus cosas y se concentra más tiempo",
+        "fortalece la seguridad para hablar en grupo y sostener lo que piensa",
+        "un día mezcla trabajo en mesa, juego con intención y momentos de exploración",
+        "los papás notan 'ya me explica mejor' y 'ya resuelve más solo'",
     ],
     "1° de Primaria": [
-        "empezamos bases académicas más sólidas, conectadas con comprensión (no solo memorizar)",
-        "buscamos que entienda, investigue, participe y explique cómo pensó algo",
-        "cuidamos la parte emocional y la autonomía, con aprendizaje activo ligado a situaciones reales",
+        "asentamos bases reales: leer comprendiendo y operar entendiendo el porqué, no de memoria",
+        "buscamos que investigue y te explique cómo pensó algo",
+        "cuidamos la transición emocional: que el salto a primaria no lo viva con miedo",
+        "el trabajo se conecta con su vida: medir, comparar y contar cosas reales",
         "se nota cuando deja de decir 'no sé' y empieza a explicarte cómo resolvió algo",
     ],
     "2° de Primaria": [
-        "se consolidan bases académicas más fuertes: leer con más comprensión y escribir con soltura",
-        "resuelven explicando los procesos y conectan lo aprendido con situaciones reales",
-        "no buscamos repetición, sino comprensión",
+        "consolidamos lectura con más comprensión y escritura con soltura",
+        "resuelve explicando el proceso, no solo dando el resultado",
+        "gana autonomía en su trabajo: organiza, revisa y corrige lo suyo",
+        "conecta lo aprendido con proyectos y situaciones reales",
         "se nota cuando ya no solo da la respuesta, sino que explica cómo llegó a ella",
     ],
     "3° de Primaria": [
-        "se nota mucho más la independencia y el pensamiento crítico",
-        "empiezan a argumentar, explicar procesos y tomar iniciativa",
-        "hay más profundidad académica, conectada con la vida real",
-        "se nota cuando argumenta y toma iniciativa por sí mismo",
+        "más profundidad académica: textos más largos y problemas de varios pasos",
+        "despega el pensamiento crítico: compara, cuestiona y propone",
+        "toma iniciativa y se hace cargo de sus responsabilidades sin que se lo recuerden",
+        "trabaja proyectos donde investiga un tema y lo presenta al grupo",
+        "se nota cuando defiende una idea con razones y decide por sí mismo",
     ],
     "1° de Secundaria": [
-        "es una etapa más profunda y retadora: se fortalece pensamiento crítico, organización y análisis",
-        "se trabaja con proyectos, debate, investigación y análisis de temas reales",
-        "se busca capacidad de argumentar, no aprendizaje de memoria",
-        "se nota cuando organiza mejor su trabajo y argumenta con criterio",
+        "el salto es a pensamiento crítico: analizar, cuestionar fuentes y formar opinión propia",
+        "trabaja por proyectos: investiga un tema real, lo desarrolla y lo defiende ante el grupo",
+        "afianza organización y autonomía: gestiona sus tiempos, entregas y materiales solo",
+        "acompañamos la parte emocional de la edad: identidad, vínculos y manejar la frustración",
+        "se abren espacios de liderazgo: coordinar equipos, exponer y tomar la iniciativa",
     ],
     "2° de Secundaria": [
-        "se afina mucho la autonomía: gestionar mejor su tiempo, responsabilidades y organización",
-        "mejora su forma de trabajar y participar, con más profundidad y análisis",
-        "se nota cuando trabaja con más independencia",
+        "profundiza el análisis: relaciona temas y sostiene su postura con datos",
+        "afina la autonomía: organiza su tiempo y responsabilidades con poca supervisión",
+        "madura en lo emocional: más conciencia de sí mismo, sus relaciones y sus decisiones",
+        "los proyectos suben de nivel: más investigación, trabajo en equipo y exposición",
+        "se nota cuando trabaja con independencia y se hace responsable de sus resultados",
     ],
     "3° de Secundaria": [
-        "es el cierre de la etapa, con más madurez académica y personal",
-        "buscamos más criterio, independencia y capacidad para resolver",
-        "más claridad para expresar lo que piensa y seguridad para decidir",
-        "se nota cuando resuelve con criterio propio y decide con más seguridad",
+        "es el cierre de etapa: madurez para textos, análisis y proyectos complejos",
+        "consolida autonomía total: planea, ejecuta y rinde cuentas de su trabajo",
+        "trabaja madurez emocional y vocación: claridad sobre quién es y hacia dónde va",
+        "desarrolla liderazgo y voz propia para exponer y coordinar a otros",
+        "se nota cuando decide con seguridad y expresa con claridad lo que piensa",
     ],
 }
 
-# Fallback por NIVEL (grados sin lista, p.ej. maternal).
+# Fallback por NIVEL (grados sin lista, p.ej. maternal). También facetas distintas para
+# no repetir entre sí ni con los beats por grado.
 _BEATS_NIVEL: dict[str, list[str]] = {
     "maternal": [
-        "el foco es vínculo, seguridad, exploración y lenguaje",
-        "es la base que después le da sentido a lo académico",
+        "el foco es vínculo, seguridad y confianza: la base de todo lo que viene después",
+        "estimulamos lenguaje, movimiento y exploración con todos sus sentidos",
         "se nota cuando llega más curioso, más conectado contigo y con palabras nuevas",
     ],
     "kinder": [
-        "el aprendizaje es activo y por juego intencional",
+        "el aprendizaje entra por juego intencional, respetando su etapa",
+        "crece en autonomía, lenguaje y convivencia, sin presión ni miedo",
         "se nota cuando deja de esperar instrucciones para todo y empieza a proponer",
     ],
     "primaria": [
-        "bases académicas sólidas conectadas con comprensión y pensamiento",
+        "bases académicas sólidas conectadas con comprensión, no con memoria",
+        "crecen el pensamiento, la autonomía y el trabajo con situaciones reales",
         "se nota cuando deja de pedirte la respuesta y empieza a explicarte lo que piensa",
     ],
     "secundaria": [
-        "guía emocional, pensamiento crítico y carácter",
-        "se nota cuando sostiene una opinión propia y argumenta con criterio",
+        "pensamiento crítico, proyectos y madurez personal en una etapa retadora",
+        "acompañamos lo emocional y el carácter, no solo lo académico",
+        "se nota cuando sostiene una opinión propia y se hace cargo de lo suyo",
     ],
 }
 

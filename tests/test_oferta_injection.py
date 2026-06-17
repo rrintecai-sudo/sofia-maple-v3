@@ -817,8 +817,11 @@ def test_funnel_usa_contenido_por_grado() -> None:
         capt, es_continuacion=False, nivel_en_msg="kinder",
         pide_info_nueva=False, en_agendado=False, umbral=2,
     )
+    from app.core.sales_funnel import _beats_de
     assert "2° de Kinder" in d.hint
-    assert "rutinas" in d.hint.lower()  # punto obligatorio del grado
+    # El hint trae al menos un beat real del grado (no genérico).
+    beats_2k = _beats_de("2° de Kinder", "kinder")
+    assert any(b in d.hint for b in beats_2k)
 
 
 def _conv_agendando_secundaria():
@@ -931,8 +934,11 @@ def test_secundaria_grado_en_contenido() -> None:
     for g in ("1° de Secundaria", "2° de Secundaria", "3° de Secundaria",
               "2° de Primaria", "3° de Primaria"):
         assert _BEATS.get(g), f"{g} sin beats"
-    beats_1sec = " ".join(_beats_de("1° de Secundaria", "secundaria"))
-    assert "argumentar" in beats_1sec
+    beats_1sec = _beats_de("1° de Secundaria", "secundaria")
+    assert len(beats_1sec) >= 4
+    # Facetas DISTINTAS: pensamiento crítico, proyectos, autonomía, emocional, liderazgo.
+    blob = " ".join(beats_1sec).lower()
+    assert "pensamiento crítico" in blob and "proyectos" in blob and "liderazgo" in blob
 
 
 def test_recorte_cap_4_oraciones() -> None:
@@ -1000,6 +1006,39 @@ def test_beats_agotados_degrada_con_gracia() -> None:
     todos = _beats_de("1° de Secundaria", "secundaria")
     hint, beats = hint_contenido("secundaria", "1° de Secundaria", list(todos))
     assert hint is None and beats == []
+
+
+def test_beats_facetas_distintas_sin_cruce_grado_nivel() -> None:
+    """Ajuste 2 (b): los beats de cada grado son únicos (sin duplicados internos) y NO
+    se cruzan con su fallback de nivel — así rotar nunca recae en la misma idea (el bug
+    era 'argumenta con criterio' presente en grado Y en nivel)."""
+    from app.core.sales_funnel import _BEATS, _BEATS_NIVEL
+
+    nivel_de = {
+        "Kinder": "kinder", "Primaria": "primaria", "Secundaria": "secundaria",
+    }
+    for grado, beats in _BEATS.items():
+        assert len(beats) == len(set(beats)), f"{grado} tiene beats duplicados"
+        nivel = next((v for k, v in nivel_de.items() if k in grado), None)
+        fallback = set(_BEATS_NIVEL.get(nivel, []))
+        assert not (set(beats) & fallback), f"{grado} cruza con fallback {nivel}"
+
+
+def test_etiqueta_hoy_manana_en_paso_hora() -> None:
+    """Defecto 2: el paso de HORA etiqueta hoy/mañana en el día (fecha_humana_solo_dia
+    con now), igual que la propuesta de días. Antes decía 'miércoles 17' sin 'hoy'."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.core.appointment_extractor import fecha_humana_solo_dia
+
+    mty = ZoneInfo("America/Monterrey")
+    now = datetime(2026, 6, 17, 9, 0, tzinfo=mty)  # miércoles 17
+    assert fecha_humana_solo_dia("2026-06-17", now) == "hoy, miércoles 17 de junio"
+    assert fecha_humana_solo_dia("2026-06-18", now) == "mañana, jueves 18 de junio"
+    assert fecha_humana_solo_dia("2026-06-25", now) == "jueves 25 de junio"
+    # Sin now: comportamiento previo intacto (sin etiqueta).
+    assert fecha_humana_solo_dia("2026-06-17") == "miércoles 17 de junio"
 
 
 def test_etiqueta_hoy_manana_en_confirmacion() -> None:

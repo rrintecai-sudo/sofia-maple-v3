@@ -64,13 +64,24 @@ _MESES_ES = (
 )
 
 
-def fecha_humana_solo_dia(fecha_iso: str) -> str | None:
-    """'2026-06-01' → 'lunes 1 de junio'. None si el formato es inválido."""
+def fecha_humana_solo_dia(fecha_iso: str, now: datetime | None = None) -> str | None:
+    """'2026-06-01' → 'lunes 1 de junio'. None si el formato es inválido.
+
+    Si `now` se pasa, etiqueta 'hoy,'/'mañana,' cuando el día cae hoy/mañana en hora
+    de Saltillo (America/Monterrey) — mismo criterio que la propuesta de días."""
     try:
         d = date.fromisoformat(fecha_iso)
     except (ValueError, TypeError):
         return None
-    return f"{_DIAS_ES[d.weekday()]} {d.day} de {_MESES_ES[d.month - 1]}"
+    etiqueta = ""
+    if now is not None:
+        base = now if now.tzinfo else now.replace(tzinfo=TZ_MONTERREY)
+        hoy = base.astimezone(TZ_MONTERREY).date()
+        if d == hoy:
+            etiqueta = "hoy, "
+        elif (d - hoy).days == 1:
+            etiqueta = "mañana, "
+    return f"{etiqueta}{_DIAS_ES[d.weekday()]} {d.day} de {_MESES_ES[d.month - 1]}"
 
 
 # ============================================================

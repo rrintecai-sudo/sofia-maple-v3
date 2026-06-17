@@ -560,7 +560,7 @@ async def handle_appointment_intent(
     # un día imposible (hoy ya cerró, día pasado, no laborable, lleno) y no se
     # inventa "todos los días".
     if hora_slot is None:
-        dia_resuelto = fecha_humana_solo_dia(fecha_slot) or "ese día"
+        dia_resuelto = fecha_humana_solo_dia(fecha_slot, now) or "ese día"
         try:
             dia_dt = datetime.strptime(fecha_slot, "%Y-%m-%d").replace(tzinfo=TZ_MONTERREY)
         except ValueError:
