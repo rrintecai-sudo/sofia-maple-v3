@@ -695,9 +695,7 @@ def test_sin_guiones_largos_pasa_con_bullet_hyphen() -> None:
 
 
 def test_sin_guiones_largos_falla_con_em_dash() -> None:
-    r = validar_sin_guiones_largos(
-        "Maple no es escuela tradicional — es educación activa."
-    )
+    r = validar_sin_guiones_largos("Maple no es escuela tradicional — es educación activa.")
     assert r.passed is False
     assert "guión largo" in (r.reason or "").lower()
     assert r.suggested_fix is not None

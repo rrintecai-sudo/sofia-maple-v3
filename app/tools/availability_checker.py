@@ -57,8 +57,13 @@ class AvailabilityResult:
 
 
 _DOW_NOMBRES = {
-    0: "domingo", 1: "lunes", 2: "martes", 3: "miércoles",
-    4: "jueves", 5: "viernes", 6: "sábado",
+    0: "domingo",
+    1: "lunes",
+    2: "martes",
+    3: "miércoles",
+    4: "jueves",
+    5: "viernes",
+    6: "sábado",
 }
 # Orden semanal lunes→domingo para listar rangos contiguos.
 _DOW_ORDEN = {1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 0: 6}
@@ -374,7 +379,9 @@ async def is_slot_available(
 
     # ¿Día laborable de Lily?
     if not _dia_es_laborable(fecha_hora, windows):
-        alts = await _proponer_alternativas(fecha_hora, duracion_minutos, windows, settings, now_local)
+        alts = await _proponer_alternativas(
+            fecha_hora, duracion_minutos, windows, settings, now_local
+        )
         return AvailabilityResult(
             available=False,
             reason="dia_no_laborable",
@@ -385,7 +392,9 @@ async def is_slot_available(
 
     # ¿Dentro del horario?
     if not _slot_dentro_de_horario(fecha_hora, duracion_minutos, windows):
-        alts = await _proponer_alternativas(fecha_hora, duracion_minutos, windows, settings, now_local)
+        alts = await _proponer_alternativas(
+            fecha_hora, duracion_minutos, windows, settings, now_local
+        )
         return AvailabilityResult(
             available=False,
             reason="fuera_de_horario",
@@ -399,7 +408,9 @@ async def is_slot_available(
     rango_fin = fecha_hora + timedelta(hours=2)
     citas = await _fetch_appointments_in_range(settings, rango_inicio, rango_fin)
     if _slot_choca_con_citas(fecha_hora, duracion_minutos, citas):
-        alts = await _proponer_alternativas(fecha_hora, duracion_minutos, windows, settings, now_local)
+        alts = await _proponer_alternativas(
+            fecha_hora, duracion_minutos, windows, settings, now_local
+        )
         return AvailabilityResult(
             available=False,
             reason="slot_ocupado",
@@ -408,7 +419,9 @@ async def is_slot_available(
             resumen=resumen,
         )
 
-    return AvailabilityResult(available=True, reason="ok", mensaje="Slot disponible.", resumen=resumen)
+    return AvailabilityResult(
+        available=True, reason="ok", mensaje="Slot disponible.", resumen=resumen
+    )
 
 
 async def _proponer_alternativas(
@@ -469,7 +482,9 @@ async def evaluar_dia(
 
     if not _dia_es_laborable(dia, windows):
         alts = await _proximos_slots(dia, duracion_min, windows, settings, now_local)
-        return AvailabilityResult(False, "dia_no_laborable", alts, "Ese día Lily no atiende.", resumen)
+        return AvailabilityResult(
+            False, "dia_no_laborable", alts, "Ese día Lily no atiende.", resumen
+        )
 
     # Slots del día que TODAVÍA no pasaron (clave para "hoy 9pm").
     slots = [s for s in _slots_del_dia(dia, duracion_min, windows) if s > now_local]
@@ -537,9 +552,7 @@ async def proximos_dias_habiles(
     # Reúne slots libres de las próximas ~3 semanas y agrupa por día.
     cand: list[datetime] = []
     for off in range(0, 22):
-        dia = (base_now + timedelta(days=off)).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
+        dia = (base_now + timedelta(days=off)).replace(hour=0, minute=0, second=0, microsecond=0)
         for s in _slots_del_dia(dia, duracion_min, windows):
             if s > base_now:
                 cand.append(s)
@@ -558,9 +571,8 @@ async def proximos_dias_habiles(
         if _slot_choca_con_citas(s, duracion_min, citas):
             # ese slot está ocupado; revisa si el día tiene OTRO libre
             libres_dia = [
-                x for x in _slots_del_dia(
-                    s.replace(hour=0, minute=0), duracion_min, windows
-                )
+                x
+                for x in _slots_del_dia(s.replace(hour=0, minute=0), duracion_min, windows)
                 if x > base_now and not _slot_choca_con_citas(x, duracion_min, citas)
             ]
             if not libres_dia:

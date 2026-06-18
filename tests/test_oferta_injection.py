@@ -22,18 +22,34 @@ from app.tools.precios import PrecioResult
 
 def _precio_kinder() -> PrecioResult:
     return PrecioResult(
-        nivel="kinder", sub_nivel="preschool", ciclo_escolar="2026-2027",
-        inscripcion=Decimal("10000"), colegiatura_mensual=Decimal("5250"),
-        seguro_escolar=None, seguro_orfandad=None, recursos_educativos=None,
-        gastos_escolares=None, desayunos_snacks=None, talleres=None,
-        cuota_graduacion=None, total_gastos_iniciales=None, num_colegiaturas=11,
-        fecha_limite_pago=None, notas=None,
+        nivel="kinder",
+        sub_nivel="preschool",
+        ciclo_escolar="2026-2027",
+        inscripcion=Decimal("10000"),
+        colegiatura_mensual=Decimal("5250"),
+        seguro_escolar=None,
+        seguro_orfandad=None,
+        recursos_educativos=None,
+        gastos_escolares=None,
+        desayunos_snacks=None,
+        talleres=None,
+        cuota_graduacion=None,
+        total_gastos_iniciales=None,
+        num_colegiaturas=11,
+        fecha_limite_pago=None,
+        notas=None,
     )
 
 
 def _horario_kinder2() -> HorarioResult:
-    return HorarioResult(nivel="kinder_2", modalidad="regular",
-                         hora_inicio="09:00:00", hora_fin="14:00:00", dias="L-V", notas=None)
+    return HorarioResult(
+        nivel="kinder_2",
+        modalidad="regular",
+        hora_inicio="09:00:00",
+        hora_fin="14:00:00",
+        dias="L-V",
+        notas=None,
+    )
 
 
 _NIVELES_ALL = ["maternal", "kinder", "primaria_baja", "primaria_alta", "secundaria"]
@@ -41,24 +57,78 @@ _NIVELES_ALL = ["maternal", "kinder", "primaria_baja", "primaria_alta", "secunda
 
 def _estancias_kinder() -> list[EstanciaResult]:
     """Las 5 modalidades oficiales (Lili 2026-06-11). SIN After School ni Academias $630."""
+
     def e(nombre, ini, fin, comida, snack, aca, mes, dia, notas):
         return EstanciaResult(
-            nombre=nombre, aplica_para=_NIVELES_ALL, hora_inicio=ini, hora_fin=fin,
-            incluye_comida=comida, incluye_snack=snack, incluye_academia=aca,
+            nombre=nombre,
+            aplica_para=_NIVELES_ALL,
+            hora_inicio=ini,
+            hora_fin=fin,
+            incluye_comida=comida,
+            incluye_snack=snack,
+            incluye_academia=aca,
             costo_mensual=Decimal(mes) if mes else None,
-            costo_por_dia=Decimal(dia) if dia else None, inscripcion_extra=None, notas=notas,
+            costo_por_dia=Decimal(dia) if dia else None,
+            inscripcion_extra=None,
+            notas=notas,
         )
+
     return [
-        e("manana", "07:00:00", None, False, False, False, "550", None,
-          "De 7:00 a.m. hasta la hora de entrada del alumno. Sin alimentos."),
-        e("media", "07:00:00", "16:00:00", True, False, True, "1400", None,
-          "Incluye comida y 1 academia."),
-        e("completa", "07:00:00", "19:00:00", True, True, True, "2500", None,
-          "Incluye comida, snack y 2 academias."),
-        e("express", "07:00:00", "19:00:00", True, False, False, None, "210",
-          "Por día. Se solicita en recepción."),
-        e("academia_individual", None, None, True, False, False, "800", None,
-          "2 clases por semana. Incluye comida los días de asistencia."),
+        e(
+            "manana",
+            "07:00:00",
+            None,
+            False,
+            False,
+            False,
+            "550",
+            None,
+            "De 7:00 a.m. hasta la hora de entrada del alumno. Sin alimentos.",
+        ),
+        e(
+            "media",
+            "07:00:00",
+            "16:00:00",
+            True,
+            False,
+            True,
+            "1400",
+            None,
+            "Incluye comida y 1 academia.",
+        ),
+        e(
+            "completa",
+            "07:00:00",
+            "19:00:00",
+            True,
+            True,
+            True,
+            "2500",
+            None,
+            "Incluye comida, snack y 2 academias.",
+        ),
+        e(
+            "express",
+            "07:00:00",
+            "19:00:00",
+            True,
+            False,
+            False,
+            None,
+            "210",
+            "Por día. Se solicita en recepción.",
+        ),
+        e(
+            "academia_individual",
+            None,
+            None,
+            True,
+            False,
+            False,
+            "800",
+            None,
+            "2 clases por semana. Incluye comida los días de asistencia.",
+        ),
     ]
 
 
@@ -77,8 +147,12 @@ class _Haiku:
         self.texto = texto
 
     async def chat(self, *, system_blocks, messages, **kw):
-        usage = types.SimpleNamespace(input_tokens=10, output_tokens=10,
-                                      cache_read_input_tokens=0, cache_creation_input_tokens=0)
+        usage = types.SimpleNamespace(
+            input_tokens=10,
+            output_tokens=10,
+            cache_read_input_tokens=0,
+            cache_creation_input_tokens=0,
+        )
         return types.SimpleNamespace(content=[types.SimpleNamespace(text=self.texto)], usage=usage)
 
 
@@ -114,7 +188,9 @@ def _leaf(repo, anthropic, intent_value, *, estancias=None):
 
     async def fake_extract(mensaje, estado_actual, *, ultimo_assistant=None, **kw):
         return _aplicar_fallbacks_deterministicos(
-            ExtraccionTurno(), mensaje, ultimo_assistant=ultimo_assistant,
+            ExtraccionTurno(),
+            mensaje,
+            ultimo_assistant=ultimo_assistant,
             ultimo_campo_pedido=estado_actual.ultimo_campo_pedido,
         )
 
@@ -130,15 +206,20 @@ def _leaf(repo, anthropic, intent_value, *, estancias=None):
         patch("app.core.orchestrator.get_precio", AsyncMock(return_value=_precio_kinder())),
         patch("app.core.orchestrator.get_todos_precios", AsyncMock(return_value=[])),
         patch("app.core.orchestrator.get_horario", AsyncMock(return_value=_horario_kinder2())),
-        patch("app.core.orchestrator.get_estancias",
-              AsyncMock(return_value=_estancias_kinder() if estancias is None else estancias)),
+        patch(
+            "app.core.orchestrator.get_estancias",
+            AsyncMock(return_value=_estancias_kinder() if estancias is None else estancias),
+        ),
     ]
 
 
 def _conv(nivel, grado):
     from app.core.state import Canal, EstadoCapturado, EstadoConversacion, HijoInfo
+
     return EstadoConversacion(
-        session_id="web:lili", canal=Canal.WEB, identificador="lili",
+        session_id="web:lili",
+        canal=Canal.WEB,
+        identificador="lili",
         estado_capturado=EstadoCapturado(
             nivel_buscado_actual=nivel,
             hijos=[HijoInfo(nivel=nivel, grado=grado)] if (nivel or grado) else [],
@@ -171,8 +252,9 @@ async def test_turno_real_lili_bundleado_confuso_otro_codigo_gana() -> None:
     try:
         r = await procesar_turno(
             mensaje="Hola, quiero informes para kinder, costos y horarios viene de otra "
-                    "escuela, va a 2do de kinder",
-            session_id="web:lili", canal=None,
+            "escuela, va a 2do de kinder",
+            session_id="web:lili",
+            canal=None,
         )
     finally:
         _exit(ctx)
@@ -196,7 +278,9 @@ async def test_costos_emite_5250_y_guard_borra_6450() -> None:
     ctx = _leaf(repo, _Haiku("Colegiatura: $6,450 al mes. ¡Te encantará!"), Intent.PREGUNTA_COSTOS)
     _enter(ctx)
     try:
-        r = await procesar_turno(mensaje="¿cuánto cuesta kinder?", session_id="web:lili", canal=None)
+        r = await procesar_turno(
+            mensaje="¿cuánto cuesta kinder?", session_id="web:lili", canal=None
+        )
     finally:
         _exit(ctx)
     assert "$5,250" in r.response and "$10,000" in r.response
@@ -247,9 +331,9 @@ async def test_tienen_estancia_confirma_y_ofrece_sin_volcar_lista() -> None:
         _exit(ctx)
     low = r.response.lower()
     assert "sí" in low and "7:00 a.m. a 7:00 p.m." in r.response  # confirma + el horario
-    assert "detalle" in low or "detallar" in low                  # ofrece ver modalidades
+    assert "detalle" in low or "detallar" in low  # ofrece ver modalidades
     assert "$550" not in r.response and "$2,500" not in r.response  # NO volcó precios
-    assert r.response.count("?") == 1                              # una sola pregunta
+    assert r.response.count("?") == 1  # una sola pregunta
 
 
 @pytest.mark.asyncio
@@ -311,6 +395,7 @@ async def test_kinder_sin_grado_pide_grado_no_emite_horario() -> None:
 
 def _conv_kinder2():
     from app.core.state import NivelEducativo
+
     return _conv(NivelEducativo.KINDER, "2° de Kinder")
 
 
@@ -326,8 +411,7 @@ async def test_guard_borra_venezolanismos_camino_produccion() -> None:
 
     repo = _Repo(_conv(None, None))
     haiku = _Haiku(
-        "¡Hola! ¿Está tu hijo en alguna escuela? ¿Cómo lo viven? "
-        "Avísame qué día te viene bien."
+        "¡Hola! ¿Está tu hijo en alguna escuela? ¿Cómo lo viven? Avísame qué día te viene bien."
     )
     ctx = _leaf(repo, haiku, Intent.SALUDO_INICIAL)
     _enter(ctx)
@@ -369,8 +453,8 @@ async def test_guards_no_rompen_costos_camino_produccion() -> None:
     finally:
         _exit(ctx)
     assert "$5,250" in r.response and "$10,000" in r.response  # dato correcto intacto
-    assert "$6,450" not in r.response                          # guard de cifras
-    assert "regalado" not in r.response.lower()                # guard de frases
+    assert "$6,450" not in r.response  # guard de cifras
+    assert "regalado" not in r.response.lower()  # guard de frases
     assert "cómo lo viven" not in r.response.lower()
 
 
@@ -387,8 +471,8 @@ async def test_costos_sin_sondeo_enganchado() -> None:
         r = await procesar_turno(mensaje="¿costos de kinder?", session_id="web:lili", canal=None)
     finally:
         _exit(ctx)
-    assert "$5,250" in r.response                       # dato correcto
-    assert "más te importa" not in r.response.lower()   # sondeo eliminado
+    assert "$5,250" in r.response  # dato correcto
+    assert "más te importa" not in r.response.lower()  # sondeo eliminado
     # La única pregunta permitida es la línea de cierre fija (transaccional, no sondeo).
     assert "agendamos una visita" in r.response.lower()
     assert r.response.count("?") == 1
@@ -407,12 +491,14 @@ async def test_visita_dispara_agendado_no_sondeo() -> None:
     ctx.append(
         patch(
             "app.core.orchestrator.handle_appointment_intent",
-            AsyncMock(return_value=AppointmentHandlerResult(
-                hint_para_prompt="[FLUJO AGENDADO — pide el día]",
-                mensaje_coleccion="¿Qué día te queda mejor para tu visita? "
-                "Atendemos lunes a viernes de 8:00 a.m. a 3:00 p.m.",
-                acciones=["missing_date"],
-            )),
+            AsyncMock(
+                return_value=AppointmentHandlerResult(
+                    hint_para_prompt="[FLUJO AGENDADO — pide el día]",
+                    mensaje_coleccion="¿Qué día te queda mejor para tu visita? "
+                    "Atendemos lunes a viernes de 8:00 a.m. a 3:00 p.m.",
+                    acciones=["missing_date"],
+                )
+            ),
         )
     )
     _enter(ctx)
@@ -421,9 +507,7 @@ async def test_visita_dispara_agendado_no_sondeo() -> None:
             mensaje="quiero conocer el colegio", session_id="web:lili", canal=None
         )
         # Turno 2 (la hora) NO debe repetir la explicación de la cita de informes.
-        r2 = await procesar_turno(
-            mensaje="el jueves", session_id="web:lili", canal=None
-        )
+        r2 = await procesar_turno(mensaje="el jueves", session_id="web:lili", canal=None)
     finally:
         _exit(ctx)
     assert repo._conv.estado_capturado.fase_agendado == FaseAgendado.AGENDANDO  # disparó agendar
@@ -431,7 +515,7 @@ async def test_visita_dispara_agendado_no_sondeo() -> None:
     assert "cita de informes" in r.response.lower()
     assert "conoces las instalaciones" in r.response.lower()
     assert "qué día" in r.response.lower()
-    assert "más te importa" not in r.response.lower()            # NO sondeo
+    assert "más te importa" not in r.response.lower()  # NO sondeo
     # Turno siguiente: NO repite la explicación.
     assert "cita de informes" not in r2.response.lower()
 
@@ -477,9 +561,7 @@ async def test_costos_sin_marcador_suelto_ni_sondeo() -> None:
     from app.core.orchestrator import procesar_turno
 
     repo = _Repo(_conv_kinder2())
-    haiku = _Haiku(
-        "** ¡Claro! Colegiatura: $6,450. Me gustaría entender qué buscas para tu hijo."
-    )
+    haiku = _Haiku("** ¡Claro! Colegiatura: $6,450. Me gustaría entender qué buscas para tu hijo.")
     ctx = _leaf(repo, haiku, Intent.PREGUNTA_COSTOS)
     _enter(ctx)
     try:
@@ -488,7 +570,7 @@ async def test_costos_sin_marcador_suelto_ni_sondeo() -> None:
         _exit(ctx)
     assert "$5,250" in r.response
     assert "** " not in r.response and not r.response.strip().endswith("**")  # sin marcador suelto
-    assert "me gustaría entender" not in r.response.lower()                    # sin sondeo
+    assert "me gustaría entender" not in r.response.lower()  # sin sondeo
     assert "$6,450" not in r.response
 
 
@@ -506,7 +588,8 @@ async def test_quiero_informes_no_entra_agendado() -> None:
     try:
         r = await procesar_turno(
             mensaje="Hola, quiero informes para kinder, mi hijo va a 2do de kinder, costos",
-            session_id="web:lili", canal=None,
+            session_id="web:lili",
+            canal=None,
         )
     finally:
         _exit(ctx)
@@ -537,9 +620,9 @@ async def test_quiero_informes_para_kinder_da_costos_sin_agendar_ni_lista_rota()
     finally:
         _exit(ctx)
     assert repo._conv.estado_capturado.fase_agendado == FaseAgendado.EXPLORANDO  # NO agendó
-    assert "$5,250" in r.response and "$10,000" in r.response                    # dio el dato
-    assert "te agendo" not in r.response.lower()                                 # sin agendado falso
-    assert "\n2.\n" not in r.response and "\n3.\n" not in r.response             # sin lista rota
+    assert "$5,250" in r.response and "$10,000" in r.response  # dio el dato
+    assert "te agendo" not in r.response.lower()  # sin agendado falso
+    assert "\n2.\n" not in r.response and "\n3.\n" not in r.response  # sin lista rota
     assert "1. ¿qué día" not in r.response.lower()
 
 
@@ -646,12 +729,19 @@ async def test_funnel_3_turnos_acepta_rapido_llega_al_agendado() -> None:
     # T3: continúa tras el empuje → ACEPTA → entra al agendado (Etapa 3).
     ctx = _leaf(repo, _Haiku("(redacta)"), Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO)
     from unittest.mock import AsyncMock, patch
-    ctx.append(patch(
-        "app.core.orchestrator.handle_appointment_intent",
-        AsyncMock(return_value=AppointmentHandlerResult(
-            hint_para_prompt="[día]", mensaje_coleccion="¿Qué día te queda mejor?",
-            acciones=["missing_date"])),
-    ))
+
+    ctx.append(
+        patch(
+            "app.core.orchestrator.handle_appointment_intent",
+            AsyncMock(
+                return_value=AppointmentHandlerResult(
+                    hint_para_prompt="[día]",
+                    mensaje_coleccion="¿Qué día te queda mejor?",
+                    acciones=["missing_date"],
+                )
+            ),
+        )
+    )
     _enter(ctx)
     try:
         r = await procesar_turno(mensaje="esta semana", session_id="web:f", canal=None)
@@ -683,9 +773,9 @@ async def test_empuje_determinista_sin_descubrimiento() -> None:
     finally:
         _exit(ctx)
     low = r.response.lower()
-    assert "esta semana o la siguiente" in low            # empuje determinístico
+    assert "esta semana o la siguiente" in low  # empuje determinístico
     assert "qué edad" not in low and "te importa" not in low  # discovery suprimido
-    assert r.response.count("?") == 1                      # una sola pregunta (el empuje)
+    assert r.response.count("?") == 1  # una sola pregunta (el empuje)
 
 
 @pytest.mark.asyncio
@@ -702,8 +792,8 @@ async def test_horario_primaria_no_dice_kinder() -> None:
     finally:
         _exit(ctx)
     low = r.response.lower()
-    assert "primaria" in low and "kinder" not in low      # respeta el nivel guardado
-    assert "grado" in low                                 # pide el grado de primaria
+    assert "primaria" in low and "kinder" not in low  # respeta el nivel guardado
+    assert "grado" in low  # pide el grado de primaria
 
 
 @pytest.mark.asyncio
@@ -761,7 +851,8 @@ async def test_quiere_persona_responde_calido_sin_menu() -> None:
     try:
         r = await procesar_turno(
             mensaje="puedo hablar con otra persona y no con un robot",
-            session_id="web:p", canal=None,
+            session_id="web:p",
+            canal=None,
         )
     finally:
         _exit(ctx)
@@ -800,7 +891,7 @@ async def test_horario_extendido_solo_estancias_no_escolar() -> None:
         )
     finally:
         _exit(ctx)
-    assert "🏫" in r.response                        # estancias
+    assert "🏫" in r.response  # estancias
     assert "las clases son de" not in r.response.lower()  # NO el horario escolar
 
 
@@ -815,8 +906,12 @@ def test_funnel_usa_contenido_por_grado() -> None:
         hijos=[HijoInfo(nivel=NivelEducativo.KINDER, grado="2° de Kinder")],
     )
     d = decidir_funnel(
-        capt, es_continuacion=False, nivel_en_msg="kinder",
-        pide_info_nueva=False, en_agendado=False, umbral=2,
+        capt,
+        es_continuacion=False,
+        nivel_en_msg="kinder",
+        pide_info_nueva=False,
+        en_agendado=False,
+        umbral=2,
     )
     assert "2° de Kinder" in d.hint
     # El hint trae el texto VERBATIM del grado desde el KB oficial (no genérico).
@@ -827,6 +922,7 @@ def test_funnel_usa_contenido_por_grado() -> None:
 
 def _conv_agendando_secundaria():
     from app.core.state import FaseAgendado, NivelEducativo
+
     c = _conv(NivelEducativo.SECUNDARIA, "1° de Secundaria")
     c.estado_capturado.fase_agendado = FaseAgendado.AGENDANDO
     c.estado_capturado.opciones_dia_propuestas = ["2026-06-17", "2026-06-18", "2026-06-19"]
@@ -842,7 +938,9 @@ async def test_pausa_info_en_agendado_contenido_grado_no_avanza_a_hora() -> None
     from app.core.state import FaseAgendado
 
     repo = _Repo(_conv_agendando_secundaria())
-    ctx = _leaf(repo, _Haiku("Contenido de secundaria redactado."), Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO)
+    ctx = _leaf(
+        repo, _Haiku("Contenido de secundaria redactado."), Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO
+    )
     _enter(ctx)
     try:
         r = await procesar_turno(
@@ -852,8 +950,8 @@ async def test_pausa_info_en_agendado_contenido_grado_no_avanza_a_hora() -> None
         _exit(ctx)
     c = repo._conv.estado_capturado
     assert c.cita_fecha_slot is None and c.cita_hora_slot is None  # NO avanzó
-    assert c.fase_agendado == FaseAgendado.AGENDANDO               # sigue la cita en proceso
-    assert "seguimos con tu visita" in r.response.lower()          # re-oferta de la visita
+    assert c.fase_agendado == FaseAgendado.AGENDANDO  # sigue la cita en proceso
+    assert "seguimos con tu visita" in r.response.lower()  # re-oferta de la visita
 
 
 @pytest.mark.asyncio
@@ -881,16 +979,18 @@ async def test_pregunta_contenido_tras_empuje_no_acepta_la_visita() -> None:
         _exit(ctx)
     assert repo._conv.estado_capturado.turnos_valor == 2
     # T2 "que se fortalece?" → contenido + re-oferta, NO entra a agendado
-    ctx = _leaf(repo, _Haiku("En secundaria se fortalece el pensamiento crítico…"), Intent.CONFUSO_OTRO)
+    ctx = _leaf(
+        repo, _Haiku("En secundaria se fortalece el pensamiento crítico…"), Intent.CONFUSO_OTRO
+    )
     _enter(ctx)
     try:
         r = await procesar_turno(mensaje="que se fortalece?", session_id="web:bug", canal=None)
     finally:
         _exit(ctx)
     c = repo._conv.estado_capturado
-    assert c.fase_agendado == FaseAgendado.EXPLORANDO       # NO entró a agendado
-    assert "cita de informes" not in r.response.lower()     # NO explicó la cita
-    assert "visita" in r.response.lower()                   # re-ofreció la visita
+    assert c.fase_agendado == FaseAgendado.EXPLORANDO  # NO entró a agendado
+    assert "cita de informes" not in r.response.lower()  # NO explicó la cita
+    assert "visita" in r.response.lower()  # re-ofreció la visita
 
 
 @pytest.mark.asyncio
@@ -900,7 +1000,9 @@ async def test_pausa_contenido_sin_nivel_en_msg_usa_nivel_estado() -> None:
     from app.core.orchestrator import procesar_turno
 
     repo = _Repo(_conv_agendando_secundaria())
-    ctx = _leaf(repo, _Haiku("En secundaria se fortalece el pensamiento crítico…"), Intent.CONFUSO_OTRO)
+    ctx = _leaf(
+        repo, _Haiku("En secundaria se fortalece el pensamiento crítico…"), Intent.CONFUSO_OTRO
+    )
     _enter(ctx)
     try:
         r = await procesar_turno(mensaje="Que se fortalece", session_id="web:p4", canal=None)
@@ -932,8 +1034,13 @@ def test_secundaria_grado_en_contenido() -> None:
     """1° de Secundaria YA tiene beats por grado (no genérico)."""
     from app.core.sales_funnel import _BEATS, _beats_de
 
-    for g in ("1° de Secundaria", "2° de Secundaria", "3° de Secundaria",
-              "2° de Primaria", "3° de Primaria"):
+    for g in (
+        "1° de Secundaria",
+        "2° de Secundaria",
+        "3° de Secundaria",
+        "2° de Primaria",
+        "3° de Primaria",
+    ):
         assert _BEATS.get(g), f"{g} sin beats"
     beats_1sec = _beats_de("1° de Secundaria", "secundaria")
     assert len(beats_1sec) >= 4
@@ -965,8 +1072,13 @@ def test_beat_diferenciador_siempre_en_enganche() -> None:
         hijos=[HijoInfo(nivel=NivelEducativo.SECUNDARIA, grado="1° de Secundaria")],
     )
     d = decidir_funnel(
-        capt, es_continuacion=False, nivel_en_msg="secundaria",
-        pide_info_nueva=False, en_agendado=False, umbral=2, beats_usados=[],
+        capt,
+        es_continuacion=False,
+        nivel_en_msg="secundaria",
+        pide_info_nueva=False,
+        en_agendado=False,
+        umbral=2,
+        beats_usados=[],
     )
     assert "se forma" in d.hint  # diferenciador presente en el enganche
 
@@ -982,15 +1094,25 @@ def test_segundo_turno_no_repite_beat() -> None:
         hijos=[HijoInfo(nivel=NivelEducativo.SECUNDARIA, grado="1° de Secundaria")],
     )
     d1 = decidir_funnel(
-        capt, es_continuacion=False, nivel_en_msg="secundaria",
-        pide_info_nueva=False, en_agendado=False, umbral=2, beats_usados=[],
+        capt,
+        es_continuacion=False,
+        nivel_en_msg="secundaria",
+        pide_info_nueva=False,
+        en_agendado=False,
+        umbral=2,
+        beats_usados=[],
     )
     usados = list(d1.beats_usados or [])
     # Camino funnel (Etapa 2)
     capt.stage_venta, capt.turnos_valor = "valor", 1
     d2 = decidir_funnel(
-        capt, es_continuacion=True, nivel_en_msg=None,
-        pide_info_nueva=False, en_agendado=False, umbral=2, beats_usados=usados,
+        capt,
+        es_continuacion=True,
+        nivel_en_msg=None,
+        pide_info_nueva=False,
+        en_agendado=False,
+        umbral=2,
+        beats_usados=usados,
     )
     assert not (set(usados) & set(d2.beats_usados or [])), "Etapa 2 repitió beat"
     # Camino pausa de contenido (hint_contenido) comparte beats_usados
@@ -1020,7 +1142,9 @@ def test_beats_facetas_distintas_sin_cruce_grado_nivel() -> None:
     from app.core.sales_funnel import _BEATS, _BEATS_NIVEL
 
     nivel_de = {
-        "Kinder": "kinder", "Primaria": "primaria", "Secundaria": "secundaria",
+        "Kinder": "kinder",
+        "Primaria": "primaria",
+        "Secundaria": "secundaria",
     }
     for grado, beats in _BEATS.items():
         assert len(beats) == len(set(beats)), f"{grado} tiene beats duplicados"
@@ -1165,8 +1289,8 @@ async def test_saludo_repetido_reorienta_sin_estoy_por_aca() -> None:
     finally:
         _exit(ctx)
     low = r.response.lower()
-    assert "nivel" in low and "?" in r.response          # reorienta a pedir nivel
-    assert "estoy por acá" not in low                     # sin rebote seco
+    assert "nivel" in low and "?" in r.response  # reorienta a pedir nivel
+    assert "estoy por acá" not in low  # sin rebote seco
 
 
 @pytest.mark.asyncio

@@ -72,8 +72,7 @@ def test_build_blocks_bienvenida() -> None:
     # Anthropic permite máx 4 bloques cacheables: identity, rules, KB y journey.
     # vocabulario (idx 3) y el dynamic (último) van SIN cache.
     cacheables = [
-        i for i, b in enumerate(blocks)
-        if b.get("cache_control") == {"type": "ephemeral"}
+        i for i, b in enumerate(blocks) if b.get("cache_control") == {"type": "ephemeral"}
     ]
     assert cacheables == [0, 1, 2, 4]
     # El último NO cacheable
@@ -86,9 +85,7 @@ def test_build_blocks_includes_journey_for_phase() -> None:
     estado.fase_journey = FaseJourney.DESCUBRIMIENTO
     blocks = build_system_blocks(estado)
     textos = [b["text"] for b in blocks]
-    assert any(
-        "DESCUBRIMIENTO" in t and "ALIANZA ESCUELA-FAMILIA" in t for t in textos
-    )
+    assert any("DESCUBRIMIENTO" in t and "ALIANZA ESCUELA-FAMILIA" in t for t in textos)
 
 
 def test_build_blocks_agendado_includes_post_agendado() -> None:
@@ -451,8 +448,26 @@ def test_meta_block_incluye_fecha_actual() -> None:
     dyn = blocks[-1]["text"].lower()
     assert "hoy es" in dyn
     # Alguno de los días o meses debe aparecer
-    assert any(d in dyn for d in ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"))
-    assert any(m in dyn for m in ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"))
+    assert any(
+        d in dyn for d in ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+    )
+    assert any(
+        m in dyn
+        for m in (
+            "enero",
+            "febrero",
+            "marzo",
+            "abril",
+            "mayo",
+            "junio",
+            "julio",
+            "agosto",
+            "septiembre",
+            "octubre",
+            "noviembre",
+            "diciembre",
+        )
+    )
 
 
 def test_meta_block_explica_regla_dia_mas_fecha() -> None:

@@ -165,14 +165,57 @@ _NOMBRE_VOCATIVO_RE = re.compile(
 
 # Palabras que pueden seguir a un saludo SIN ser un nombre propio (evita
 # falsos positivos como "Claro, Maple ofrece..." o "Gracias por tu mensaje").
-_PALABRAS_NO_NOMBRE = frozenset({
-    "sof", "sofia", "sofía", "maple", "college", "collège", "colegio",
-    "que", "qué", "como", "cómo", "claro", "mira", "oye", "hola", "hey",
-    "gracias", "perfecto", "bienvenido", "bienvenida", "buenas", "buenos",
-    "mucho", "muchas", "un", "una", "por", "para", "con", "cuando", "entonces",
-    "ahora", "aqui", "aquí", "papa", "papá", "mama", "mamá", "genial",
-    "excelente", "encantada", "estamos", "estoy", "este", "esta", "todo", "ya",
-})
+_PALABRAS_NO_NOMBRE = frozenset(
+    {
+        "sof",
+        "sofia",
+        "sofía",
+        "maple",
+        "college",
+        "collège",
+        "colegio",
+        "que",
+        "qué",
+        "como",
+        "cómo",
+        "claro",
+        "mira",
+        "oye",
+        "hola",
+        "hey",
+        "gracias",
+        "perfecto",
+        "bienvenido",
+        "bienvenida",
+        "buenas",
+        "buenos",
+        "mucho",
+        "muchas",
+        "un",
+        "una",
+        "por",
+        "para",
+        "con",
+        "cuando",
+        "entonces",
+        "ahora",
+        "aqui",
+        "aquí",
+        "papa",
+        "papá",
+        "mama",
+        "mamá",
+        "genial",
+        "excelente",
+        "encantada",
+        "estamos",
+        "estoy",
+        "este",
+        "esta",
+        "todo",
+        "ya",
+    }
+)
 
 # FIX 2/3 (2026-05-29 — ADR-021): confirmación de cita declarativa/completada.
 # Si Sofía afirma haber registrado/confirmado/agendado una cita Y no existe

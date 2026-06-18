@@ -33,20 +33,55 @@ log = logging.getLogger(__name__)
 # fallback lo normaliza por código: "2 kinder" → "2° de Kinder".
 
 _NUM_PALABRA: dict[str, int] = {
-    "1": 1, "1ro": 1, "1er": 1, "1°": 1, "primero": 1, "primer": 1, "primera": 1,
-    "2": 2, "2do": 2, "2°": 2, "segundo": 2, "segunda": 2,
-    "3": 3, "3ro": 3, "3er": 3, "3°": 3, "tercero": 3, "tercer": 3, "tercera": 3,
-    "4": 4, "4to": 4, "4°": 4, "cuarto": 4, "cuarta": 4,
-    "5": 5, "5to": 5, "5°": 5, "quinto": 5, "quinta": 5,
-    "6": 6, "6to": 6, "6°": 6, "sexto": 6, "sexta": 6,
+    "1": 1,
+    "1ro": 1,
+    "1er": 1,
+    "1°": 1,
+    "primero": 1,
+    "primer": 1,
+    "primera": 1,
+    "2": 2,
+    "2do": 2,
+    "2°": 2,
+    "segundo": 2,
+    "segunda": 2,
+    "3": 3,
+    "3ro": 3,
+    "3er": 3,
+    "3°": 3,
+    "tercero": 3,
+    "tercer": 3,
+    "tercera": 3,
+    "4": 4,
+    "4to": 4,
+    "4°": 4,
+    "cuarto": 4,
+    "cuarta": 4,
+    "5": 5,
+    "5to": 5,
+    "5°": 5,
+    "quinto": 5,
+    "quinta": 5,
+    "6": 6,
+    "6to": 6,
+    "6°": 6,
+    "sexto": 6,
+    "sexta": 6,
 }
 _NIVEL_DISPLAY: dict[str, str] = {
-    "kinder": "Kinder", "kínder": "Kinder", "preescolar": "Kinder",
-    "primaria": "Primaria", "secundaria": "Secundaria",
+    "kinder": "Kinder",
+    "kínder": "Kinder",
+    "preescolar": "Kinder",
+    "primaria": "Primaria",
+    "secundaria": "Secundaria",
 }
 _NIVEL_ENUM: dict[str, str] = {
-    "kinder": "kinder", "kínder": "kinder", "preescolar": "kinder",
-    "primaria": "primaria", "secundaria": "secundaria", "maternal": "maternal",
+    "kinder": "kinder",
+    "kínder": "kinder",
+    "preescolar": "kinder",
+    "primaria": "primaria",
+    "secundaria": "secundaria",
+    "maternal": "maternal",
 }
 # Multi-char primero para que "2do"/"2°" ganen al dígito suelto.
 _NUMS_KW = (
@@ -88,12 +123,49 @@ _NOMBRE_EDAD_RE = re.compile(
     r"\b([a-záéíóúñ]{2,16})\b\s*,?\s+(?:de\s+|tiene\s+)?(\d{1,2})\s*a[ñn](?:o|os|ito|itos)?\b",
     re.IGNORECASE,
 )
-_NO_NOMBRE_EDAD = frozenset({
-    "tengo", "tiene", "tienen", "mi", "su", "hijo", "hija", "niño", "niña", "nino",
-    "nina", "nene", "nena", "peque", "el", "la", "los", "las", "de", "del", "años",
-    "año", "ya", "mas", "más", "casi", "como", "unos", "una", "uno", "y", "es",
-    "son", "soy", "con", "para", "cumple", "cumplio", "cumplió",
-})
+_NO_NOMBRE_EDAD = frozenset(
+    {
+        "tengo",
+        "tiene",
+        "tienen",
+        "mi",
+        "su",
+        "hijo",
+        "hija",
+        "niño",
+        "niña",
+        "nino",
+        "nina",
+        "nene",
+        "nena",
+        "peque",
+        "el",
+        "la",
+        "los",
+        "las",
+        "de",
+        "del",
+        "años",
+        "año",
+        "ya",
+        "mas",
+        "más",
+        "casi",
+        "como",
+        "unos",
+        "una",
+        "uno",
+        "y",
+        "es",
+        "son",
+        "soy",
+        "con",
+        "para",
+        "cumple",
+        "cumplio",
+        "cumplió",
+    }
+)
 
 
 def _nombre_junto_a_edad(mensaje: str) -> str | None:
@@ -116,12 +188,40 @@ def _nombre_junto_a_edad(mensaje: str) -> str | None:
 
 # Palabras que NO son nombre propio (de hijo ni de papá). Si el LLM devuelve una
 # de éstas como nombre, se descarta → el gate la pedirá (NO se inventa).
-_NO_ES_NOMBRE = _NO_NOMBRE_EDAD | frozenset({
-    "pequeño", "pequeña", "pequeno", "pequena", "peque", "pequeñito", "pequenito",
-    "bebe", "bebé", "bb", "chiquito", "chiquita", "hijo", "hija", "niño", "niña",
-    "nino", "nina", "nene", "nena", "hermano", "hermana", "mamá", "papá", "mama",
-    "papa", "señor", "señora", "senor", "senora",
-})
+_NO_ES_NOMBRE = _NO_NOMBRE_EDAD | frozenset(
+    {
+        "pequeño",
+        "pequeña",
+        "pequeno",
+        "pequena",
+        "peque",
+        "pequeñito",
+        "pequenito",
+        "bebe",
+        "bebé",
+        "bb",
+        "chiquito",
+        "chiquita",
+        "hijo",
+        "hija",
+        "niño",
+        "niña",
+        "nino",
+        "nina",
+        "nene",
+        "nena",
+        "hermano",
+        "hermana",
+        "mamá",
+        "papá",
+        "mama",
+        "papa",
+        "señor",
+        "señora",
+        "senor",
+        "senora",
+    }
+)
 
 
 def _es_nombre_valido(nombre: str | None) -> bool:
@@ -147,11 +247,37 @@ _NOMBRE_PAPA_CAP_RE = re.compile(
     re.IGNORECASE,
 )
 # Tras "soy/me llamo", estas palabras cortan el nombre (no forman parte de él).
-_STOP_NOMBRE_PAPA = frozenset({
-    "la", "el", "los", "las", "mama", "mamá", "papa", "papá", "de", "del", "y",
-    "con", "para", "que", "mi", "su", "busco", "buscando", "interesad", "interesada",
-    "interesado", "aqui", "aquí", "un", "una", "porque", "pero",
-})
+_STOP_NOMBRE_PAPA = frozenset(
+    {
+        "la",
+        "el",
+        "los",
+        "las",
+        "mama",
+        "mamá",
+        "papa",
+        "papá",
+        "de",
+        "del",
+        "y",
+        "con",
+        "para",
+        "que",
+        "mi",
+        "su",
+        "busco",
+        "buscando",
+        "interesad",
+        "interesada",
+        "interesado",
+        "aqui",
+        "aquí",
+        "un",
+        "una",
+        "porque",
+        "pero",
+    }
+)
 
 
 def extraer_email(mensaje: str) -> str | None:
@@ -241,11 +367,15 @@ def extraer_nombre_hijo(mensaje: str) -> str | None:
     if not m:
         return None
     tokens: list[str] = []
-    for raw in (mensaje or "")[m.end():].split():
+    for raw in (mensaje or "")[m.end() :].split():
         t = raw.lower().strip(",.;¿?¡!()")
         if not t:
             continue
-        if not re.match(r"^[a-záéíóúñ]+$", t) or t in _PALABRAS_NO_NOMBRE or not _es_nombre_valido(t):
+        if (
+            not re.match(r"^[a-záéíóúñ]+$", t)
+            or t in _PALABRAS_NO_NOMBRE
+            or not _es_nombre_valido(t)
+        ):
             break
         tokens.append(t)
         if len(tokens) >= 2:  # nombre + apellido
@@ -273,19 +403,103 @@ _PIDE_NOMBRE_HIJO_RE = re.compile(
 )
 # Palabras función / deflexiones que NO son nombre (descartan "si ya te lo dije",
 # "ok claro", "cuánto cuesta", "no sé", etc.).
-_PALABRAS_NO_NOMBRE = frozenset({
-    "si", "sí", "no", "ya", "te", "lo", "la", "le", "les", "me", "mi", "tu", "su",
-    "eso", "esa", "ese", "esta", "este", "esto", "aqui", "aquí", "alli", "allí",
-    "igual", "mismo", "dije", "dijo", "dado", "gracias", "ok", "okay", "dale",
-    "claro", "va", "sale", "bien", "asi", "así", "pues", "porque", "que", "cual",
-    "cuando", "como", "cómo", "y", "o", "el", "ella", "ellos", "es", "son", "soy",
-    # deflexiones / preguntas frecuentes
-    "cuanto", "cuánto", "cuesta", "cuestan", "precio", "precios", "costo", "costos",
-    "colegiatura", "mensualidad", "donde", "dónde", "quiero", "quisiera", "puedo",
-    "podemos", "necesito", "hola", "buenas", "buenos", "dias", "días", "tardes",
-    "informacion", "información", "info", "ayuda", "nose", "sé", "perdon", "perdón",
-    "disculpa", "espera", "espere", "nada", "todavia", "todavía", "aun", "aún",
-})
+_PALABRAS_NO_NOMBRE = frozenset(
+    {
+        "si",
+        "sí",
+        "no",
+        "ya",
+        "te",
+        "lo",
+        "la",
+        "le",
+        "les",
+        "me",
+        "mi",
+        "tu",
+        "su",
+        "eso",
+        "esa",
+        "ese",
+        "esta",
+        "este",
+        "esto",
+        "aqui",
+        "aquí",
+        "alli",
+        "allí",
+        "igual",
+        "mismo",
+        "dije",
+        "dijo",
+        "dado",
+        "gracias",
+        "ok",
+        "okay",
+        "dale",
+        "claro",
+        "va",
+        "sale",
+        "bien",
+        "asi",
+        "así",
+        "pues",
+        "porque",
+        "que",
+        "cual",
+        "cuando",
+        "como",
+        "cómo",
+        "y",
+        "o",
+        "el",
+        "ella",
+        "ellos",
+        "es",
+        "son",
+        "soy",
+        # deflexiones / preguntas frecuentes
+        "cuanto",
+        "cuánto",
+        "cuesta",
+        "cuestan",
+        "precio",
+        "precios",
+        "costo",
+        "costos",
+        "colegiatura",
+        "mensualidad",
+        "donde",
+        "dónde",
+        "quiero",
+        "quisiera",
+        "puedo",
+        "podemos",
+        "necesito",
+        "hola",
+        "buenas",
+        "buenos",
+        "dias",
+        "días",
+        "tardes",
+        "informacion",
+        "información",
+        "info",
+        "ayuda",
+        "nose",
+        "sé",
+        "perdon",
+        "perdón",
+        "disculpa",
+        "espera",
+        "espere",
+        "nada",
+        "todavia",
+        "todavía",
+        "aun",
+        "aún",
+    }
+)
 # Prefijos de cortesía a ignorar antes del nombre ("soy Oscar", "me llamo Ana").
 _PREFIJO_CORTESIA = frozenset({"soy", "me", "llamo", "mi", "nombre", "es", "yo"})
 

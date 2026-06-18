@@ -68,8 +68,7 @@ def _campus_1() -> CampusResult:
         estado="Coahuila",
         niveles=["kinder_1"],
         google_maps_url=(
-            "https://www.google.com/maps/search/?api=1"
-            "&query=Jos%C3%A9+Figueroa+Siller+156"
+            "https://www.google.com/maps/search/?api=1&query=Jos%C3%A9+Figueroa+Siller+156"
         ),
     )
 
@@ -163,9 +162,7 @@ def test_registration_message_sin_maps_url() -> None:
 
 def test_confirmation_message_con_nombre_papa() -> None:
     dt = datetime(2026, 6, 4, 10, 0, tzinfo=TZ_MTY)
-    msg = render_confirmation_message(
-        fecha_hora=dt, campus=_campus_1(), nombre_papa="Ana"
-    )
+    msg = render_confirmation_message(fecha_hora=dt, campus=_campus_1(), nombre_papa="Ana")
     assert msg.startswith("¡Listo, Ana! Lily confirmó tu cita de informes")
     assert "📅" in msg and "🕐" in msg and "📍" in msg and "🗺️" in msg
     assert "https://www.google.com/maps" in msg

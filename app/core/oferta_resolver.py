@@ -25,11 +25,17 @@ from app.core.state import EstadoConversacion, NivelEducativo
 # Nivel mencionado SUELTO en el mensaje ("para kinder, costos"). El LLM/extracción a
 # veces no lo captura en frases cortas → este respaldo determinístico sí.
 _NIVEL_MSG: list[tuple] = [
-    (re.compile(
-        r"\b(?:maternal|early\s*years|guarder[íi]a|toddlers?|infants?|babies|baby|cubs?)\b",
-        re.IGNORECASE), NivelEducativo.MATERNAL),
-    (re.compile(r"\b(?:kinder|k[íi]nder|preescolar|preschool)\b", re.IGNORECASE),
-     NivelEducativo.KINDER),
+    (
+        re.compile(
+            r"\b(?:maternal|early\s*years|guarder[íi]a|toddlers?|infants?|babies|baby|cubs?)\b",
+            re.IGNORECASE,
+        ),
+        NivelEducativo.MATERNAL,
+    ),
+    (
+        re.compile(r"\b(?:kinder|k[íi]nder|preescolar|preschool)\b", re.IGNORECASE),
+        NivelEducativo.KINDER,
+    ),
     (re.compile(r"\b(?:secundaria|secu)\b", re.IGNORECASE), NivelEducativo.SECUNDARIA),
     (re.compile(r"\bprimaria\b", re.IGNORECASE), NivelEducativo.PRIMARIA),
 ]
@@ -47,8 +53,14 @@ def nivel_buscado_de_mensaje(mensaje: str) -> NivelEducativo | None:
 # Grado SUELTO ("3", "1°", "tercero", "4to", "1 a 3") → para la rama de horarios cuando
 # ya se pidió el grado. Mapea al rango/grado válido según el nivel.
 _GRADO_PALABRA = {
-    "primero": 1, "primer": 1, "segundo": 2, "tercero": 3, "tercer": 3,
-    "cuarto": 4, "quinto": 5, "sexto": 6,
+    "primero": 1,
+    "primer": 1,
+    "segundo": 2,
+    "tercero": 3,
+    "tercer": 3,
+    "cuarto": 4,
+    "quinto": 5,
+    "sexto": 6,
 }
 _GRADO_NUM_RE = re.compile(r"\b([1-9])\s*(?:°|º|ro|do|er|to|vo|mo)?\b")
 _RANGO_BAJA_RE = re.compile(r"\b1\s*(?:a|-|al)\s*3\b")
@@ -84,6 +96,7 @@ def extraer_grado_suelto(mensaje: str, nivel: NivelEducativo | None) -> str | No
     if g is None or not (1 <= g <= _MAX_GRADO.get(nivel_val, 0)):
         return None
     return f"{g}° de {display}"
+
 
 # ============================================================
 # Detección DETERMINÍSTICA de consultas de oferta (keywords) — NO depende del

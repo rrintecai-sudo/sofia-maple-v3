@@ -37,7 +37,7 @@ from app.core.appointment_extractor import (
         ("10", "10:00"),
         ("8", "08:00"),
         ("12", "12:00"),
-        ("1", "13:00"),   # 1-7 = PM por el horario de Lily
+        ("1", "13:00"),  # 1-7 = PM por el horario de Lily
         ("3", "15:00"),
         ("13", "13:00"),
         ("10:30", "10:30"),
@@ -51,6 +51,7 @@ from app.core.appointment_extractor import (
 )
 def test_extraer_hora_de_numero_suelto(texto, esperado) -> None:
     assert extraer_hora_de_numero_suelto(texto) == esperado
+
 
 # ============================================================
 # FIX (a) 2026-06-01 — hora "sucia": 10a, 10hrs, etc.
@@ -80,8 +81,24 @@ def test_extraer_hora_simple_sucia(texto, esperado) -> None:
 
 @pytest.mark.parametrize(
     "texto",
-    ["sí", "si", "si dale", "sí dale", "dale", "ok", "okey", "va", "correcto",
-     "exacto", "claro", "perfecto", "de acuerdo", "está bien", "si esta bien", "así es"],
+    [
+        "sí",
+        "si",
+        "si dale",
+        "sí dale",
+        "dale",
+        "ok",
+        "okey",
+        "va",
+        "correcto",
+        "exacto",
+        "claro",
+        "perfecto",
+        "de acuerdo",
+        "está bien",
+        "si esta bien",
+        "así es",
+    ],
 )
 def test_es_confirmacion_positivos(texto) -> None:
     assert es_confirmacion(texto) is True
@@ -89,8 +106,15 @@ def test_es_confirmacion_positivos(texto) -> None:
 
 @pytest.mark.parametrize(
     "texto",
-    ["no", "sí pero el lunes", "mejor el martes", "quiero kinder", "no gracias",
-     "a qué hora", "cuánto cuesta"],
+    [
+        "no",
+        "sí pero el lunes",
+        "mejor el martes",
+        "quiero kinder",
+        "no gracias",
+        "a qué hora",
+        "cuánto cuesta",
+    ],
 )
 def test_es_confirmacion_negativos(texto) -> None:
     assert es_confirmacion(texto) is False
@@ -112,6 +136,7 @@ def test_extraer_fecha_explicita_sin_fecha() -> None:
     now = datetime(2026, 6, 1, tzinfo=TZ_MONTERREY)
     assert extraer_fecha_explicita("sí dale", now) is None
     assert extraer_fecha_explicita("a las 10", now) is None
+
 
 # ============================================================
 # extraer_hora_simple (FIX 2026-06-01 — hora suelta determinística)

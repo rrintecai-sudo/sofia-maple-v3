@@ -25,8 +25,18 @@ TZ_MONTERREY = ZoneInfo("America/Monterrey")
 
 _DIAS_ES = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
 _MESES_ES = (
-    "enero", "febrero", "marzo", "abril", "mayo", "junio",
-    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+    "enero",
+    "febrero",
+    "marzo",
+    "abril",
+    "mayo",
+    "junio",
+    "julio",
+    "agosto",
+    "septiembre",
+    "octubre",
+    "noviembre",
+    "diciembre",
 )
 
 
@@ -41,6 +51,7 @@ def _hoy_humano(now: datetime | None = None) -> str:
     else:
         dt = dt.astimezone(TZ_MONTERREY)
     return f"{_DIAS_ES[dt.weekday()]} {dt.day} de {_MESES_ES[dt.month - 1]} de {dt.year}"
+
 
 PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 
@@ -77,6 +88,7 @@ def load_kb_oficial() -> str:
         log.warning("KB oficial no encontrada en %s", KB_OFICIAL_PATH)
         return ""
     return KB_OFICIAL_PATH.read_text(encoding="utf-8")
+
 
 # Mapeo fase → archivo journey
 _JOURNEY_FILES: dict[FaseJourney, str] = {

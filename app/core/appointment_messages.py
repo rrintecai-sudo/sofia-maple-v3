@@ -157,9 +157,7 @@ def formato_opciones_dia(fechas: list[datetime], now: datetime | None = None) ->
         return ""
     mismo_mes = len({(f.year, f.month) for f in fechas}) == 1
     if mismo_mes:
-        partes = [
-            f"{_etiqueta_relativa(f, now)}{_DIAS_ES[f.weekday()]} {f.day}" for f in fechas
-        ]
+        partes = [f"{_etiqueta_relativa(f, now)}{_DIAS_ES[f.weekday()]} {f.day}" for f in fechas]
         return f"{_join_o(partes)} de {_MESES_ES[fechas[0].month - 1]}"
     partes = [
         f"{_etiqueta_relativa(f, now)}{_DIAS_ES[f.weekday()]} {f.day} de {_MESES_ES[f.month - 1]}"

@@ -209,7 +209,11 @@ async def test_conversacion_fragmentada_gate_6_datos_impide_confirmacion() -> No
         ("Hola", Intent.SALUDO_INICIAL, ExtraccionTurno()),
         ("Kinder", Intent.PREGUNTA_NIVEL, ExtraccionTurno(nivel_buscado="kinder")),
         ("4 años", Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO, ExtraccionTurno(edad_hijo=4)),
-        ("Quiero ver las instalaciones", Intent.QUIERE_AGENDAR, ExtraccionTurno(quiere_agendar=True)),
+        (
+            "Quiero ver las instalaciones",
+            Intent.QUIERE_AGENDAR,
+            ExtraccionTurno(quiere_agendar=True),
+        ),
         ("Mañana", Intent.CONFUSO_OTRO, ExtraccionTurno()),
     ]
 
@@ -237,7 +241,10 @@ async def test_conversacion_fragmentada_gate_6_datos_impide_confirmacion() -> No
         classify = AsyncMock(return_value=_intent(intent))
         extract = AsyncMock(return_value=extraccion)
         ctx = _patches(
-            repo, anthropic, classify=classify, extract=extract,
+            repo,
+            anthropic,
+            classify=classify,
+            extract=extract,
             handler=AsyncMock(side_effect=fake_handler),
         )
         _enter(ctx)
@@ -465,9 +472,7 @@ async def test_cierre_fragmentado_crea_y_persiste_cita() -> None:
         ),
         "Soy Oscar, mi correo oscar@x.com y mi cel 8441234567": (
             Intent.CONFUSO_OTRO,
-            ExtraccionTurno(
-                nombre_papa="Oscar", email_papa="oscar@x.com", telefono="8441234567"
-            ),
+            ExtraccionTurno(nombre_papa="Oscar", email_papa="oscar@x.com", telefono="8441234567"),
             (None, None, 0.0),  # ← tampoco trae fecha; el slot persiste desde turno 2
         ),
     }
@@ -483,8 +488,13 @@ async def test_cierre_fragmentado_crea_y_persiste_cita() -> None:
         return AppointmentDateTime(fecha=f, hora=h, confidence=c, razonamiento="test")
 
     campus1 = CampusResult(
-        id=1, nombre="Campus 1", direccion="José Figueroa Siller 156", colonia="Doctores",
-        ciudad="Saltillo", estado="Coahuila", niveles=["kinder_1", "kinder_2", "kinder_3"],
+        id=1,
+        nombre="Campus 1",
+        direccion="José Figueroa Siller 156",
+        colonia="Doctores",
+        ciudad="Saltillo",
+        estado="Coahuila",
+        niveles=["kinder_1", "kinder_2", "kinder_3"],
         google_maps_url="https://www.google.com/maps/search/?api=1&query=Jose",
     )
 
@@ -508,8 +518,9 @@ async def test_cierre_fragmentado_crea_y_persiste_cita() -> None:
         patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
         patch(
             "app.core.appointment_flow.is_slot_available",
-            AsyncMock(return_value=types.SimpleNamespace(
-                available=True, reason=None, alternativas=[])),
+            AsyncMock(
+                return_value=types.SimpleNamespace(available=True, reason=None, alternativas=[])
+            ),
         ),
         patch("app.core.appointment_flow.create_appointment", create_appt),
         patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=campus1)),
@@ -558,16 +569,20 @@ async def test_fase_agendado_es_pegajosa_no_baja_sola() -> None:
 
     anthropic = _fake_anthropic(["ok"])
     handler = AsyncMock(
-        return_value=AppointmentHandlerResult(hint_para_prompt="[FLUJO AGENDADO]", appointment_id=None)
+        return_value=AppointmentHandlerResult(
+            hint_para_prompt="[FLUJO AGENDADO]", appointment_id=None
+        )
     )
 
     from app.core.orchestrator import procesar_turno
 
     # Turno 1: señal de agendar → AGENDANDO
     ctx = _patches(
-        repo, anthropic,
+        repo,
+        anthropic,
         classify=AsyncMock(return_value=_intent(Intent.QUIERE_AGENDAR)),
-        extract=AsyncMock(return_value=ExtraccionTurno()), handler=handler,
+        extract=AsyncMock(return_value=ExtraccionTurno()),
+        handler=handler,
     )
     _enter(ctx)
     try:
@@ -575,14 +590,17 @@ async def test_fase_agendado_es_pegajosa_no_baja_sola() -> None:
     finally:
         _exit(ctx)
     from app.core.state import FaseAgendado
+
     assert repo._conv.estado_capturado.fase_agendado == FaseAgendado.AGENDANDO
 
     # Turno 2: mensaje SIN señal temporal ni intent de agendar → sigue AGENDANDO
     handler.reset_mock()
     ctx = _patches(
-        repo, anthropic,
+        repo,
+        anthropic,
         classify=AsyncMock(return_value=_intent(Intent.CONFUSO_OTRO)),
-        extract=AsyncMock(return_value=ExtraccionTurno()), handler=handler,
+        extract=AsyncMock(return_value=ExtraccionTurno()),
+        handler=handler,
     )
     _enter(ctx)
     try:
@@ -618,18 +636,23 @@ async def test_reproduccion_oscar_hora_suelta_y_nombre_obligatorio() -> None:
             (None, None, 0.0),
         ),
         "quiero agendar una visita": (
-            Intent.QUIERE_AGENDAR, ExtraccionTurno(quiere_agendar=True), (None, None, 0.0),
+            Intent.QUIERE_AGENDAR,
+            ExtraccionTurno(quiere_agendar=True),
+            (None, None, 0.0),
         ),
         "Oscar Rodriguez, ing2oscar@gmail.com, +17866035862": (
             Intent.CONFUSO_OTRO,
             ExtraccionTurno(
-                nombre_papa="Oscar Rodriguez", email_papa="ing2oscar@gmail.com",
+                nombre_papa="Oscar Rodriguez",
+                email_papa="ing2oscar@gmail.com",
                 telefono="+17866035862",
             ),
             (None, None, 0.0),
         ),
         "el jueves": (
-            Intent.CONFUSO_OTRO, ExtraccionTurno(), ("2026-06-04", None, 0.95),
+            Intent.CONFUSO_OTRO,
+            ExtraccionTurno(),
+            ("2026-06-04", None, 0.95),
         ),
         # ↓ hora SOLA: el extractor LLM la devuelve vacía; el fallback determinístico la resuelve
         "2pm": (Intent.CONFUSO_OTRO, ExtraccionTurno(), (None, None, 0.0)),
@@ -641,7 +664,9 @@ async def test_reproduccion_oscar_hora_suelta_y_nombre_obligatorio() -> None:
         ),
         # ↓ recién aquí el papá da el nombre del niño → cierre
         "se llama Diego": (
-            Intent.CONFUSO_OTRO, ExtraccionTurno(nombre_hijo="Diego"), (None, None, 0.0),
+            Intent.CONFUSO_OTRO,
+            ExtraccionTurno(nombre_hijo="Diego"),
+            (None, None, 0.0),
         ),
     }
 
@@ -656,8 +681,13 @@ async def test_reproduccion_oscar_hora_suelta_y_nombre_obligatorio() -> None:
         return AppointmentDateTime(fecha=f, hora=h, confidence=c, razonamiento="test")
 
     campus1 = CampusResult(
-        id=1, nombre="Campus 1", direccion="José Figueroa Siller 156", colonia="Doctores",
-        ciudad="Saltillo", estado="Coahuila", niveles=["kinder_1", "kinder_2", "kinder_3"],
+        id=1,
+        nombre="Campus 1",
+        direccion="José Figueroa Siller 156",
+        colonia="Doctores",
+        ciudad="Saltillo",
+        estado="Coahuila",
+        niveles=["kinder_1", "kinder_2", "kinder_3"],
         google_maps_url="https://www.google.com/maps/search/?api=1&query=Jose",
     )
     repo = _StatefulRepo()
@@ -675,8 +705,9 @@ async def test_reproduccion_oscar_hora_suelta_y_nombre_obligatorio() -> None:
         patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
         patch(
             "app.core.appointment_flow.is_slot_available",
-            AsyncMock(return_value=types.SimpleNamespace(
-                available=True, reason=None, alternativas=[])),
+            AsyncMock(
+                return_value=types.SimpleNamespace(available=True, reason=None, alternativas=[])
+            ),
         ),
         patch("app.core.appointment_flow.create_appointment", create_appt),
         patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=campus1)),
@@ -741,7 +772,11 @@ async def test_entrada_sucia_cierra_con_confirmacion() -> None:
 
     # intent + JSON CRUDO del extractor LLM (buggy a propósito) + fecha del extractor
     SCRIPT = {
-        "hola quiero agendar": (Intent.QUIERE_AGENDAR, '{"quiere_agendar": true}', (None, None, 0.0)),
+        "hola quiero agendar": (
+            Intent.QUIERE_AGENDAR,
+            '{"quiere_agendar": true}',
+            (None, None, 0.0),
+        ),
         # ↓ el LLM mete "Jose" como nombre del PAPÁ (bug real) → (c) lo corrige a hijo
         "Jose, 4 anos": (
             Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO,
@@ -786,8 +821,13 @@ async def test_entrada_sucia_cierra_con_confirmacion() -> None:
         return AppointmentDateTime(fecha=f, hora=h, confidence=c, razonamiento="t")
 
     campus1 = CampusResult(
-        id=1, nombre="Campus 1", direccion="José Figueroa Siller 156", colonia="Doctores",
-        ciudad="Saltillo", estado="Coahuila", niveles=["kinder_1", "kinder_2", "kinder_3"],
+        id=1,
+        nombre="Campus 1",
+        direccion="José Figueroa Siller 156",
+        colonia="Doctores",
+        ciudad="Saltillo",
+        estado="Coahuila",
+        niveles=["kinder_1", "kinder_2", "kinder_3"],
         google_maps_url="https://www.google.com/maps/search/?api=1&query=Jose",
     )
     repo = _StatefulRepo()
@@ -806,7 +846,9 @@ async def test_entrada_sucia_cierra_con_confirmacion() -> None:
         patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
         patch(
             "app.core.appointment_flow.is_slot_available",
-            AsyncMock(return_value=types.SimpleNamespace(available=True, reason=None, alternativas=[])),
+            AsyncMock(
+                return_value=types.SimpleNamespace(available=True, reason=None, alternativas=[])
+            ),
         ),
         patch("app.core.appointment_flow.create_appointment", create_appt),
         patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=campus1)),
@@ -876,24 +918,26 @@ async def test_estado_contaminado_cierra_con_datos_correctos() -> None:
     # Estado CONTAMINADO de un intento viejo: Jose clavado como papá, hijo huérfano
     # {edad:4}, fase ya AGENDANDO, slots de fecha/hora ya puestos, email/tel ya dados.
     contaminado = EstadoConversacion(
-        session_id="web:dirty", canal=Canal.WEB, identificador="dirty",
+        session_id="web:dirty",
+        canal=Canal.WEB,
+        identificador="dirty",
         fase_journey=FaseJourney.AGENDADO,
         estado_capturado=EstadoCapturado(
             nombre_papa="Jose",  # ← clavado y MAL (era el niño del intento viejo)
-            email_papa="ing2oscar@gmail.com", telefono="+17866035862",
+            email_papa="ing2oscar@gmail.com",
+            telefono="+17866035862",
             hijos=[HijoInfo(edad=4)],  # ← huérfano sin nombre/nivel/grado
             fase_agendado=FaseAgendado.AGENDANDO,
-            cita_fecha_slot="2026-06-05", cita_hora_slot="11:00",
+            cita_fecha_slot="2026-06-05",
+            cita_hora_slot="11:00",
         ),
     )
 
     SCRIPT = {
         # presentación explícita → (e) corrige "Jose"→"Oscar"; nombre del niño Emanuel
-        "Emanuel Rodriguez, yo soy Oscar Rodriguez":
-            '{"nombre_hijo": "Emanuel", "nombre_papa": "Oscar Rodriguez"}',
+        "Emanuel Rodriguez, yo soy Oscar Rodriguez": '{"nombre_hijo": "Emanuel", "nombre_papa": "Oscar Rodriguez"}',
         # grado + nivel del niño (crea/fusiona) → (d) consolida con el huérfano
-        "Emanuel, 2° de Kinder":
-            '{"nombre_hijo": "Emanuel", "grado_hijo": "2° de Kinder", "nivel_buscado": "kinder"}',
+        "Emanuel, 2° de Kinder": '{"nombre_hijo": "Emanuel", "grado_hijo": "2° de Kinder", "nivel_buscado": "kinder"}',
     }
 
     class _StubOpenAI:
@@ -910,8 +954,13 @@ async def test_estado_contaminado_cierra_con_datos_correctos() -> None:
         return AppointmentDateTime(fecha=None, hora=None, confidence=0.0, razonamiento="t")
 
     campus1 = CampusResult(
-        id=1, nombre="Campus 1", direccion="José Figueroa Siller 156", colonia="Doctores",
-        ciudad="Saltillo", estado="Coahuila", niveles=["kinder_1", "kinder_2", "kinder_3"],
+        id=1,
+        nombre="Campus 1",
+        direccion="José Figueroa Siller 156",
+        colonia="Doctores",
+        ciudad="Saltillo",
+        estado="Coahuila",
+        niveles=["kinder_1", "kinder_2", "kinder_3"],
         google_maps_url="https://www.google.com/maps/search/?api=1&query=Jose",
     )
     repo = _StatefulRepo()
@@ -922,14 +971,20 @@ async def test_estado_contaminado_cierra_con_datos_correctos() -> None:
     leaf = [
         patch("app.core.orchestrator.get_repository", return_value=repo),
         patch("app.core.orchestrator.get_anthropic", return_value=anthropic),
-        patch("app.core.orchestrator.classify_intent",
-              side_effect=lambda *a, **k: _intent(Intent.CONFUSO_OTRO)),
+        patch(
+            "app.core.orchestrator.classify_intent",
+            side_effect=lambda *a, **k: _intent(Intent.CONFUSO_OTRO),
+        ),
         patch("app.core.orchestrator.get_campus_para_nivel", AsyncMock(return_value=None)),
         patch("app.core.orchestrator.consultar_edades_de_nivel", AsyncMock(return_value=None)),
         patch("app.core.state_extractor.get_openai", return_value=_StubOpenAI()),
         patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
-        patch("app.core.appointment_flow.is_slot_available",
-              AsyncMock(return_value=types.SimpleNamespace(available=True, reason=None, alternativas=[]))),
+        patch(
+            "app.core.appointment_flow.is_slot_available",
+            AsyncMock(
+                return_value=types.SimpleNamespace(available=True, reason=None, alternativas=[])
+            ),
+        ),
         patch("app.core.appointment_flow.create_appointment", create_appt),
         patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=campus1)),
         patch("app.core.appointment_flow.get_lead_by_session", AsyncMock(return_value=None)),
@@ -988,14 +1043,24 @@ def _seed_cerrado() -> EstadoConversacion:  # noqa: F821
     )
 
     return EstadoConversacion(
-        session_id="web:reuse", canal=Canal.WEB, identificador="reuse",
-        fase_journey=FaseJourney.POST_AGENDADO, agendado=True,
+        session_id="web:reuse",
+        canal=Canal.WEB,
+        identificador="reuse",
+        fase_journey=FaseJourney.POST_AGENDADO,
+        agendado=True,
         estado_capturado=EstadoCapturado(
-            nombre_papa="Oscar Rodriguez", email_papa="ing2oscar@gmail.com",
+            nombre_papa="Oscar Rodriguez",
+            email_papa="ing2oscar@gmail.com",
             telefono="+17866035862",
-            hijos=[HijoInfo(nombre="Emanuel", edad=4, nivel=NivelEducativo.KINDER, grado="2° de Kinder")],
-            fase_agendado=FaseAgendado.CERRADO, cita_agendada=True,
-            cita_fecha_slot="2026-06-05", cita_hora_slot="11:00",
+            hijos=[
+                HijoInfo(
+                    nombre="Emanuel", edad=4, nivel=NivelEducativo.KINDER, grado="2° de Kinder"
+                )
+            ],
+            fase_agendado=FaseAgendado.CERRADO,
+            cita_agendada=True,
+            cita_fecha_slot="2026-06-05",
+            cita_hora_slot="11:00",
         ),
     )
 
@@ -1010,15 +1075,19 @@ async def test_rearmado_segunda_cita_se_crea_real() -> None:
 
     SCRIPT = {
         # intent explícito QUIERE_AGENDAR → re-arma (resetea Emanuel + cita vieja)
-        "quiero agendar otra visita para mi otro hijo":
-            (Intent.QUIERE_AGENDAR, ExtraccionTurno(quiere_agendar=True), (None, None, 0.0)),
+        "quiero agendar otra visita para mi otro hijo": (
+            Intent.QUIERE_AGENDAR,
+            ExtraccionTurno(quiere_agendar=True),
+            (None, None, 0.0),
+        ),
         # niño NUEVO (Pablo, 4) → grado se DEDUCE (4 → 2° de Kinder)
-        "Pablo, 4 años":
-            (Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO, ExtraccionTurno(nombre_hijo="Pablo", edad_hijo=4), (None, None, 0.0)),
-        "el viernes":
-            (Intent.CONFUSO_OTRO, ExtraccionTurno(), ("2026-06-12", None, 0.95)),
-        "a las 10am":
-            (Intent.CONFUSO_OTRO, ExtraccionTurno(), (None, "10:00", 0.95)),
+        "Pablo, 4 años": (
+            Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO,
+            ExtraccionTurno(nombre_hijo="Pablo", edad_hijo=4),
+            (None, None, 0.0),
+        ),
+        "el viernes": (Intent.CONFUSO_OTRO, ExtraccionTurno(), ("2026-06-12", None, 0.95)),
+        "a las 10am": (Intent.CONFUSO_OTRO, ExtraccionTurno(), (None, "10:00", 0.95)),
     }
 
     async def fake_classify(message, **kw):
@@ -1035,8 +1104,13 @@ async def test_rearmado_segunda_cita_se_crea_real() -> None:
         return types.SimpleNamespace(available=True, reason="ok", alternativas=[], resumen="")
 
     campus1 = CampusResult(
-        id=1, nombre="Campus 1", direccion="José Figueroa Siller 156", colonia="Doctores",
-        ciudad="Saltillo", estado="Coahuila", niveles=["kinder_1", "kinder_2", "kinder_3"],
+        id=1,
+        nombre="Campus 1",
+        direccion="José Figueroa Siller 156",
+        colonia="Doctores",
+        ciudad="Saltillo",
+        estado="Coahuila",
+        niveles=["kinder_1", "kinder_2", "kinder_3"],
         google_maps_url="https://www.google.com/maps/search/?api=1&query=Jose",
     )
     repo = _StatefulRepo()
@@ -1057,8 +1131,14 @@ async def test_rearmado_segunda_cita_se_crea_real() -> None:
         patch("app.core.orchestrator.get_estancias", AsyncMock(return_value=[])),
         patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
         patch("app.core.appointment_flow.evaluar_dia", side_effect=fake_evaluar_dia),
-        patch("app.core.appointment_flow.is_slot_available",
-              AsyncMock(return_value=types.SimpleNamespace(available=True, reason="ok", alternativas=[], resumen=""))),
+        patch(
+            "app.core.appointment_flow.is_slot_available",
+            AsyncMock(
+                return_value=types.SimpleNamespace(
+                    available=True, reason="ok", alternativas=[], resumen=""
+                )
+            ),
+        ),
         patch("app.core.appointment_flow.create_appointment", create_appt),
         patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=campus1)),
         patch("app.core.appointment_flow.get_lead_by_session", AsyncMock(return_value=None)),
@@ -1110,9 +1190,11 @@ async def test_temporal_suelto_no_reabre_cita_cerrada() -> None:
     from app.core.orchestrator import procesar_turno
 
     ctx = _patches(
-        repo, anthropic,
+        repo,
+        anthropic,
         classify=AsyncMock(return_value=_intent(Intent.CONFUSO_OTRO)),
-        extract=AsyncMock(return_value=ExtraccionTurno()), handler=handler,
+        extract=AsyncMock(return_value=ExtraccionTurno()),
+        handler=handler,
     )
     _enter(ctx)
     try:
@@ -1134,15 +1216,19 @@ async def test_ghost_close_bloqueado_tras_rearmar_sin_crear() -> None:
     # Haiku terco: ghost-close
     anthropic = _fake_anthropic(["Listo, ya quedó agendada tu cita."])
     handler = AsyncMock(
-        return_value=AppointmentHandlerResult(hint_para_prompt="[FLUJO AGENDADO — pide datos]", appointment_id=None)
+        return_value=AppointmentHandlerResult(
+            hint_para_prompt="[FLUJO AGENDADO — pide datos]", appointment_id=None
+        )
     )
 
     from app.core.orchestrator import procesar_turno
 
     ctx = _patches(
-        repo, anthropic,
+        repo,
+        anthropic,
         classify=AsyncMock(return_value=_intent(Intent.QUIERE_AGENDAR)),
-        extract=AsyncMock(return_value=ExtraccionTurno(quiere_agendar=True)), handler=handler,
+        extract=AsyncMock(return_value=ExtraccionTurno(quiere_agendar=True)),
+        handler=handler,
     )
     _enter(ctx)
     try:
@@ -1179,11 +1265,18 @@ async def test_rearmado_captura_todo_del_mensaje_disparador() -> None:
 
     async def fake_extract_dt(mensaje, *, now=None):
         # 2026-06-11 es jueves
-        return AppointmentDateTime(fecha="2026-06-11", hora="11:00", confidence=0.95, razonamiento="t")
+        return AppointmentDateTime(
+            fecha="2026-06-11", hora="11:00", confidence=0.95, razonamiento="t"
+        )
 
     campus1 = CampusResult(
-        id=1, nombre="Campus 1", direccion="José Figueroa Siller 156", colonia="Doctores",
-        ciudad="Saltillo", estado="Coahuila", niveles=["kinder_1", "kinder_2", "kinder_3"],
+        id=1,
+        nombre="Campus 1",
+        direccion="José Figueroa Siller 156",
+        colonia="Doctores",
+        ciudad="Saltillo",
+        estado="Coahuila",
+        niveles=["kinder_1", "kinder_2", "kinder_3"],
         google_maps_url="https://www.google.com/maps/search/?api=1&query=Jose",
     )
     repo = _StatefulRepo()
@@ -1203,8 +1296,14 @@ async def test_rearmado_captura_todo_del_mensaje_disparador() -> None:
         patch("app.core.orchestrator.get_horario", AsyncMock(return_value=None)),
         patch("app.core.orchestrator.get_estancias", AsyncMock(return_value=[])),
         patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
-        patch("app.core.appointment_flow.is_slot_available",
-              AsyncMock(return_value=types.SimpleNamespace(available=True, reason="ok", alternativas=[], resumen=""))),
+        patch(
+            "app.core.appointment_flow.is_slot_available",
+            AsyncMock(
+                return_value=types.SimpleNamespace(
+                    available=True, reason="ok", alternativas=[], resumen=""
+                )
+            ),
+        ),
         patch("app.core.appointment_flow.create_appointment", create_appt),
         patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=campus1)),
         patch("app.core.appointment_flow.get_lead_by_session", AsyncMock(return_value=None)),
@@ -1218,9 +1317,7 @@ async def test_rearmado_captura_todo_del_mensaje_disparador() -> None:
 
     _enter(leaf)
     try:
-        result = await procesar_turno(
-            mensaje=msg, session_id="web:reuse", canal=None, now=_NOW_MIE
-        )
+        result = await procesar_turno(mensaje=msg, session_id="web:reuse", canal=None, now=_NOW_MIE)
     finally:
         _exit(leaf)
 
@@ -1264,17 +1361,24 @@ async def test_tres_agendados_una_sesion_n_filas_y_grado_por_edad() -> None:
     # (intent del LLM, extracción, (fecha,hora)). Los agendados 2 y 3 los fuerzo a
     # CONFUSO_OTRO: el trigger determinístico ("quiero agendar otra") debe re-armar.
     SCRIPT = {
-        "quiero agendar para Mateo, 4 años, el lunes 10am":
-            (Intent.QUIERE_AGENDAR, ExtraccionTurno(nombre_hijo="Mateo", edad_hijo=4),
-             ("2026-06-08", "10:00")),
+        "quiero agendar para Mateo, 4 años, el lunes 10am": (
+            Intent.QUIERE_AGENDAR,
+            ExtraccionTurno(nombre_hijo="Mateo", edad_hijo=4),
+            ("2026-06-08", "10:00"),
+        ),
         # ↓ CONFUSO_OTRO forzado + grado PARCIAL "kinder" (debe deducir 5→3° Kinder)
-        "ahora quiero agendar otra para Lucía, 5 años, el martes 11am":
-            (Intent.CONFUSO_OTRO,
-             ExtraccionTurno(nombre_hijo="Lucía", edad_hijo=5, nivel_buscado="kinder", grado_hijo="kinder"),
-             ("2026-06-09", "11:00")),
-        "quiero agendar otra para Anabela, 6 años, el miércoles 9am":
-            (Intent.CONFUSO_OTRO, ExtraccionTurno(nombre_hijo="Anabela", edad_hijo=6),
-             ("2026-06-10", "09:00")),
+        "ahora quiero agendar otra para Lucía, 5 años, el martes 11am": (
+            Intent.CONFUSO_OTRO,
+            ExtraccionTurno(
+                nombre_hijo="Lucía", edad_hijo=5, nivel_buscado="kinder", grado_hijo="kinder"
+            ),
+            ("2026-06-09", "11:00"),
+        ),
+        "quiero agendar otra para Anabela, 6 años, el miércoles 9am": (
+            Intent.CONFUSO_OTRO,
+            ExtraccionTurno(nombre_hijo="Anabela", edad_hijo=6),
+            ("2026-06-10", "09:00"),
+        ),
     }
 
     async def fake_classify(message, **kw):
@@ -1288,17 +1392,26 @@ async def test_tres_agendados_una_sesion_n_filas_y_grado_por_edad() -> None:
         return AppointmentDateTime(fecha=f, hora=h, confidence=0.95, razonamiento="t")
 
     campus1 = CampusResult(
-        id=1, nombre="Campus 1", direccion="José Figueroa Siller 156", colonia="Doctores",
-        ciudad="Saltillo", estado="Coahuila", niveles=["kinder_1", "kinder_2", "kinder_3", "primaria_1"],
+        id=1,
+        nombre="Campus 1",
+        direccion="José Figueroa Siller 156",
+        colonia="Doctores",
+        ciudad="Saltillo",
+        estado="Coahuila",
+        niveles=["kinder_1", "kinder_2", "kinder_3", "primaria_1"],
         google_maps_url="https://www.google.com/maps/search/?api=1&query=Jose",
     )
 
     repo = _StatefulRepo()
     repo._conv = EstadoConversacion(
-        session_id="web:multi", canal=Canal.WEB, identificador="multi",
+        session_id="web:multi",
+        canal=Canal.WEB,
+        identificador="multi",
         estado_capturado=EstadoCapturado(
-            nombre_papa="Oscar Rodriguez", email_papa="ing2oscar@gmail.com",
-            telefono="+17866035862", fase_agendado=FaseAgendado.EXPLORANDO,
+            nombre_papa="Oscar Rodriguez",
+            email_papa="ing2oscar@gmail.com",
+            telefono="+17866035862",
+            fase_agendado=FaseAgendado.EXPLORANDO,
         ),
     )
     anthropic = _fake_anthropic(["ok"])
@@ -1316,8 +1429,14 @@ async def test_tres_agendados_una_sesion_n_filas_y_grado_por_edad() -> None:
         patch("app.core.orchestrator.get_horario", AsyncMock(return_value=None)),
         patch("app.core.orchestrator.get_estancias", AsyncMock(return_value=[])),
         patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
-        patch("app.core.appointment_flow.is_slot_available",
-              AsyncMock(return_value=types.SimpleNamespace(available=True, reason="ok", alternativas=[], resumen=""))),
+        patch(
+            "app.core.appointment_flow.is_slot_available",
+            AsyncMock(
+                return_value=types.SimpleNamespace(
+                    available=True, reason="ok", alternativas=[], resumen=""
+                )
+            ),
+        ),
         patch("app.core.appointment_flow.create_appointment", create_appt),
         patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=campus1)),
         patch("app.core.appointment_flow.get_lead_by_session", AsyncMock(return_value=None)),
@@ -1343,9 +1462,9 @@ async def test_tres_agendados_una_sesion_n_filas_y_grado_por_edad() -> None:
     assert create_appt.await_count == 3
     # grado DEDUCIDO por edad en cada uno (no el de Haiku ni el parcial "kinder")
     assert grados_por_turno == [
-        ("Mateo", "2° de Kinder"),     # 4 años
-        ("Lucía", "3° de Kinder"),     # 5 años — sobreescribió el parcial "kinder"
-        ("Anabela", "1° de Primaria"), # 6 años — NO se salta Kinder 3°/Primaria 1°
+        ("Mateo", "2° de Kinder"),  # 4 años
+        ("Lucía", "3° de Kinder"),  # 5 años — sobreescribió el parcial "kinder"
+        ("Anabela", "1° de Primaria"),  # 6 años — NO se salta Kinder 3°/Primaria 1°
     ]
 
 
@@ -1398,14 +1517,21 @@ async def test_primer_agendado_dia_cercano_resuelve_determinista_y_cierra() -> N
         return AppointmentDateTime(fecha=None, hora=None, confidence=0.0, razonamiento="vacío")
 
     campus1 = CampusResult(
-        id=1, nombre="Campus 1", direccion="José Figueroa Siller 156", colonia="Doctores",
-        ciudad="Saltillo", estado="Coahuila", niveles=["kinder_1", "kinder_2", "kinder_3"],
+        id=1,
+        nombre="Campus 1",
+        direccion="José Figueroa Siller 156",
+        colonia="Doctores",
+        ciudad="Saltillo",
+        estado="Coahuila",
+        niveles=["kinder_1", "kinder_2", "kinder_3"],
         google_maps_url="https://www.google.com/maps/search/?api=1&query=Jose",
     )
 
     repo = _StatefulRepo()
     repo._conv = EstadoConversacion(
-        session_id="web:pedro", canal=Canal.WEB, identificador="pedro",
+        session_id="web:pedro",
+        canal=Canal.WEB,
+        identificador="pedro",
         estado_capturado=EstadoCapturado(fase_agendado=FaseAgendado.EXPLORANDO),
     )
     anthropic = _fake_anthropic(["Voy a pasar tu solicitud a Lily."])  # Haiku improvisa…
@@ -1423,8 +1549,14 @@ async def test_primer_agendado_dia_cercano_resuelve_determinista_y_cierra() -> N
         patch("app.core.orchestrator.get_horario", AsyncMock(return_value=None)),
         patch("app.core.orchestrator.get_estancias", AsyncMock(return_value=[])),
         patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
-        patch("app.core.appointment_flow.is_slot_available",
-              AsyncMock(return_value=types.SimpleNamespace(available=True, reason="ok", alternativas=[], resumen=""))),
+        patch(
+            "app.core.appointment_flow.is_slot_available",
+            AsyncMock(
+                return_value=types.SimpleNamespace(
+                    available=True, reason="ok", alternativas=[], resumen=""
+                )
+            ),
+        ),
         patch("app.core.appointment_flow.create_appointment", create_appt),
         patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=campus1)),
         patch("app.core.appointment_flow.get_lead_by_session", AsyncMock(return_value=None)),
@@ -1471,8 +1603,12 @@ def _campus_test():
     from app.tools.campus import CampusResult
 
     return CampusResult(
-        id=1, nombre="Campus 1", direccion="José Figueroa Siller 156", colonia="Doctores",
-        ciudad="Saltillo", estado="Coahuila",
+        id=1,
+        nombre="Campus 1",
+        direccion="José Figueroa Siller 156",
+        colonia="Doctores",
+        ciudad="Saltillo",
+        estado="Coahuila",
         niveles=["kinder_1", "kinder_2", "kinder_3", "primaria_1"],
         google_maps_url="https://www.google.com/maps/search/?api=1&query=Jose",
     )
@@ -1519,15 +1655,29 @@ def _leaf_determinista(repo, anthropic, create_appt):
         patch("app.core.orchestrator.get_horario", AsyncMock(return_value=None)),
         patch("app.core.orchestrator.get_estancias", AsyncMock(return_value=[])),
         patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
-        patch("app.core.appointment_flow.resumen_disponibilidad",
-              AsyncMock(return_value="lunes a viernes de 8:00 a.m. a 3:00 p.m.")),
-        patch("app.core.appointment_flow.evaluar_dia",
-              AsyncMock(return_value=types.SimpleNamespace(
-                  available=True, reason="ok", alternativas=[],
-                  resumen="lunes a viernes de 8:00 a.m. a 3:00 p.m."))),
-        patch("app.core.appointment_flow.is_slot_available",
-              AsyncMock(return_value=types.SimpleNamespace(
-                  available=True, reason="ok", alternativas=[], resumen=""))),
+        patch(
+            "app.core.appointment_flow.resumen_disponibilidad",
+            AsyncMock(return_value="lunes a viernes de 8:00 a.m. a 3:00 p.m."),
+        ),
+        patch(
+            "app.core.appointment_flow.evaluar_dia",
+            AsyncMock(
+                return_value=types.SimpleNamespace(
+                    available=True,
+                    reason="ok",
+                    alternativas=[],
+                    resumen="lunes a viernes de 8:00 a.m. a 3:00 p.m.",
+                )
+            ),
+        ),
+        patch(
+            "app.core.appointment_flow.is_slot_available",
+            AsyncMock(
+                return_value=types.SimpleNamespace(
+                    available=True, reason="ok", alternativas=[], resumen=""
+                )
+            ),
+        ),
         patch("app.core.appointment_flow.create_appointment", create_appt),
         patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=_campus_test())),
         patch("app.core.appointment_flow.get_lead_by_session", AsyncMock(return_value=None)),
@@ -1544,7 +1694,9 @@ def _nuevo_repo_explorando(session_id: str):
 
     repo = _StatefulRepo()
     repo._conv = EstadoConversacion(
-        session_id=session_id, canal=Canal.WEB, identificador=session_id.split(":")[-1],
+        session_id=session_id,
+        canal=Canal.WEB,
+        identificador=session_id.split(":")[-1],
         estado_capturado=EstadoCapturado(fase_agendado=FaseAgendado.EXPLORANDO),
     )
     return repo
@@ -1613,9 +1765,13 @@ async def test_captura_determinista_integral_5_escenarios() -> None:
     leaf = _leaf_determinista(repo, _fake_anthropic(["¿Cómo se llama tu peque?"]), create_appt3)
     _enter(leaf)
     try:
-        await procesar_turno(mensaje="quiero agendar el viernes 10am", session_id="web:s3", canal=None)
+        await procesar_turno(
+            mensaje="quiero agendar el viernes 10am", session_id="web:s3", canal=None
+        )
         # parte el nombre real: solo dice "mi pequeño tiene 4 años"
-        await procesar_turno(mensaje="es para mi pequeño, tiene 4 años", session_id="web:s3", canal=None)
+        await procesar_turno(
+            mensaje="es para mi pequeño, tiene 4 años", session_id="web:s3", canal=None
+        )
     finally:
         _exit(leaf)
     c3 = repo._conv.estado_capturado
@@ -1648,9 +1804,9 @@ async def test_captura_determinista_integral_5_escenarios() -> None:
         _exit(leaf)
     assert create_appt4.await_count == 3  # 3 filas reales
     assert grados == [
-        ("Mateo", "2° de Kinder"),     # 4 años
-        ("Lucía", "3° de Kinder"),     # 5 años
-        ("Anabela", "1° de Primaria"), # 6 años
+        ("Mateo", "2° de Kinder"),  # 4 años
+        ("Lucía", "3° de Kinder"),  # 5 años
+        ("Anabela", "1° de Primaria"),  # 6 años
     ]
 
 
@@ -1681,9 +1837,7 @@ class _HaikuTerco:
         self.hints: list[str] = []
 
     async def chat(self, *, system_blocks, messages, **kw):
-        last_user = next(
-            (m["content"] for m in reversed(messages) if m["role"] == "user"), ""
-        )
+        last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
         self.hints.append(last_user)
         return _FakeMessage(self._RESPUESTA)
 
@@ -1708,11 +1862,11 @@ async def test_codigo_decide_pregunta_y_cierre_con_haiku_terco() -> None:
     # Día+hora PRIMERO; luego los 6 datos llegan de a uno por turno.
     turnos = [
         "quiero agendar el viernes a las 10am",  # fija día+hora → AGENDANDO
-        "se llama Emanuel",                      # nombre del niño
-        "tiene 4 años",                          # edad → deduce grado
-        "yo soy Oscar",                          # nombre del papá
-        "oscar@oscar.com",                       # correo
-        "8441234567",                            # celular → completa → CIERRA
+        "se llama Emanuel",  # nombre del niño
+        "tiene 4 años",  # edad → deduce grado
+        "yo soy Oscar",  # nombre del papá
+        "oscar@oscar.com",  # correo
+        "8441234567",  # celular → completa → CIERRA
     ]
 
     _enter(leaf)
@@ -1772,10 +1926,10 @@ async def test_nombre_papa_suelto_cierra_multiturno() -> None:
 
     turnos = [
         "quiero agendar el viernes a las 10am",  # día+hora
-        "se llama Emanuel",                      # nombre del niño
-        "tiene 4 años",                          # edad → grado
-        "Oscar Rodriguez",                       # ← nombre del papá SUELTO
-        "oscar@oscar.com, 7866035862",           # correo + cel → completa → CIERRA
+        "se llama Emanuel",  # nombre del niño
+        "tiene 4 años",  # edad → grado
+        "Oscar Rodriguez",  # ← nombre del papá SUELTO
+        "oscar@oscar.com, 7866035862",  # correo + cel → completa → CIERRA
     ]
     _enter(leaf)
     try:
@@ -1815,20 +1969,28 @@ async def test_confirmacion_confuso_otro_con_datos_completos_cierra() -> None:
     # Estado con los 6 datos + slots YA completos, fase AGENDANDO (aún no cerró).
     repo = _StatefulRepo()
     repo._conv = EstadoConversacion(
-        session_id="web:confirma", canal=Canal.WEB, identificador="confirma",
+        session_id="web:confirma",
+        canal=Canal.WEB,
+        identificador="confirma",
         estado_capturado=EstadoCapturado(
             nombre_papa="Oscar Rodriguez",
             email_papa="oscar@oscar.com",
             telefono="7866035862",
             nivel_buscado_actual=NivelEducativo.KINDER,
-            hijos=[HijoInfo(nombre="Emanuel", edad=4, nivel=NivelEducativo.KINDER, grado="2° de Kinder")],
+            hijos=[
+                HijoInfo(
+                    nombre="Emanuel", edad=4, nivel=NivelEducativo.KINDER, grado="2° de Kinder"
+                )
+            ],
             fase_agendado=FaseAgendado.AGENDANDO,
             cita_fecha_slot="2026-06-05",
             cita_hora_slot="15:00",
         ),
     )
     # Sofía venía confirmando los datos en su último turno.
-    await repo.insert_message("web:confirma", "assistant", "Perfecto, Oscar. Entonces te tengo todo, ¿confirmas?")
+    await repo.insert_message(
+        "web:confirma", "assistant", "Perfecto, Oscar. Entonces te tengo todo, ¿confirmas?"
+    )
 
     haiku = _HaikuTerco()  # si Haiku improvisara, NO debe sobrevivir
     create_appt = AsyncMock(return_value=321)
@@ -1854,15 +2016,29 @@ async def test_confirmacion_confuso_otro_con_datos_completos_cierra() -> None:
         patch("app.core.orchestrator.get_horario", AsyncMock(return_value=None)),
         patch("app.core.orchestrator.get_estancias", AsyncMock(return_value=[])),
         patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
-        patch("app.core.appointment_flow.resumen_disponibilidad",
-              AsyncMock(return_value="lunes a viernes de 8:00 a.m. a 3:00 p.m.")),
-        patch("app.core.appointment_flow.evaluar_dia",
-              AsyncMock(return_value=types.SimpleNamespace(
-                  available=True, reason="ok", alternativas=[],
-                  resumen="lunes a viernes de 8:00 a.m. a 3:00 p.m."))),
-        patch("app.core.appointment_flow.is_slot_available",
-              AsyncMock(return_value=types.SimpleNamespace(
-                  available=True, reason="ok", alternativas=[], resumen=""))),
+        patch(
+            "app.core.appointment_flow.resumen_disponibilidad",
+            AsyncMock(return_value="lunes a viernes de 8:00 a.m. a 3:00 p.m."),
+        ),
+        patch(
+            "app.core.appointment_flow.evaluar_dia",
+            AsyncMock(
+                return_value=types.SimpleNamespace(
+                    available=True,
+                    reason="ok",
+                    alternativas=[],
+                    resumen="lunes a viernes de 8:00 a.m. a 3:00 p.m.",
+                )
+            ),
+        ),
+        patch(
+            "app.core.appointment_flow.is_slot_available",
+            AsyncMock(
+                return_value=types.SimpleNamespace(
+                    available=True, reason="ok", alternativas=[], resumen=""
+                )
+            ),
+        ),
         patch("app.core.appointment_flow.create_appointment", create_appt),
         patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=_campus_test())),
         patch("app.core.appointment_flow.get_lead_by_session", AsyncMock(return_value=None)),
@@ -1875,7 +2051,9 @@ async def test_confirmacion_confuso_otro_con_datos_completos_cierra() -> None:
 
     _enter(leaf)
     try:
-        result = await procesar_turno(mensaje="si ya te lo dije", session_id="web:confirma", canal=None)
+        result = await procesar_turno(
+            mensaje="si ya te lo dije", session_id="web:confirma", canal=None
+        )
     finally:
         _exit(leaf)
 
@@ -1909,9 +2087,9 @@ async def test_apellido_hijo_no_se_vuelve_nombre_papa() -> None:
     # pero NUNCA su propio nombre, hasta el último turno cuando se lo preguntan.
     turnos_sin_nombre_papa = [
         "quiero agendar el viernes a las 10am",
-        "se llama Emanuel Rodriguez",          # nombre+apellido del HIJO
+        "se llama Emanuel Rodriguez",  # nombre+apellido del HIJO
         "tiene 4 años",
-        "ema@ema.com, 7866035862",             # correo + cel (NO su nombre)
+        "ema@ema.com, 7866035862",  # correo + cel (NO su nombre)
     ]
     _enter(leaf)
     try:
@@ -1970,10 +2148,10 @@ async def test_nombre_hijo_suelto_tras_pregunta_cierra() -> None:
     # Conversación EXACTA de la prueba real (web:b764c105):
     turnos = [
         "hola quiero agendar, mi pequeño tiene 4 años",  # edad → grado; nombre niño NO
-        "jueves 11am",                                   # día+hora
-        "Emanuel Rodriguez",                             # ← nombre HIJO SUELTO (a "¿nombre de tu hijo?")
-        "Oscar Rodriguez, 7866035862",                   # ← nombre PAPÁ + tel juntos
-        "ema@ema.com",                                   # correo → 6 slots llenos → CIERRA
+        "jueves 11am",  # día+hora
+        "Emanuel Rodriguez",  # ← nombre HIJO SUELTO (a "¿nombre de tu hijo?")
+        "Oscar Rodriguez, 7866035862",  # ← nombre PAPÁ + tel juntos
+        "ema@ema.com",  # correo → 6 slots llenos → CIERRA
     ]
     _enter(leaf)
     try:
@@ -1989,7 +2167,7 @@ async def test_nombre_hijo_suelto_tras_pregunta_cierra() -> None:
     # Los 6 slots quedaron llenos por su propia vía.
     assert capt.hijos[0].nombre == "Emanuel Rodriguez"  # ← capturado por contexto
     assert capt.hijos[0].grado == "2° de Kinder"
-    assert capt.nombre_papa == "Oscar Rodriguez"        # papá + tel juntos
+    assert capt.nombre_papa == "Oscar Rodriguez"  # papá + tel juntos
     assert capt.email_papa == "ema@ema.com" and capt.telefono == "7866035862"
     assert capt.cita_fecha_slot == "2026-06-04" and capt.cita_hora_slot == "11:00"
     # Cerró con D.4, NO "Lily te va a contactar".
@@ -2012,11 +2190,11 @@ async def test_pide_un_solo_campo_a_la_vez_sin_bundlear() -> None:
 
     turnos = [
         "quiero agendar el viernes a las 10am",
-        "se llama Diego Pérez",   # nombre hijo
-        "tiene 5 años",           # edad
-        "yo soy Marta",           # nombre papá
-        "marta@x.com",            # correo
-        "8441234567",             # cel → cierra
+        "se llama Diego Pérez",  # nombre hijo
+        "tiene 5 años",  # edad
+        "yo soy Marta",  # nombre papá
+        "marta@x.com",  # correo
+        "8441234567",  # cel → cierra
     ]
     _enter(leaf)
     try:
@@ -2066,10 +2244,10 @@ async def test_maria_bundle_y_grado_declarado_cierra_e2e() -> None:
     leaf = _leaf_determinista(repo, haiku, create_appt)
 
     turnos = [
-        "quiero agendar el viernes a las 10am",          # día+hora → AGENDANDO
-        "maria urdaneta, hijo juan david wilchez",       # BUNDLE: papá + hijo en un turno
-        "tiene 7 años",                                  # edad (pedida EN ORDEN, no al final)
-        "ingenieriademarketing@gmail.com, 6622236125",   # correo + cel → 6 datos → CIERRA
+        "quiero agendar el viernes a las 10am",  # día+hora → AGENDANDO
+        "maria urdaneta, hijo juan david wilchez",  # BUNDLE: papá + hijo en un turno
+        "tiene 7 años",  # edad (pedida EN ORDEN, no al final)
+        "ingenieriademarketing@gmail.com, 6622236125",  # correo + cel → 6 datos → CIERRA
     ]
     _enter(leaf)
     try:
@@ -2119,17 +2297,15 @@ async def test_hoy_se_resuelve_y_no_repite_pregunta_del_dia() -> None:
             mensaje="quiero agendar una visita", session_id="web:hoy", canal=None, now=_NOW_MIE
         )
         # T2: "hoy" (mié 3-jun 9am) → resuelve a HOY (3-jun), NO repite la pregunta del día.
-        r2 = await procesar_turno(
-            mensaje="hoy", session_id="web:hoy", canal=None, now=_NOW_MIE
-        )
+        r2 = await procesar_turno(mensaje="hoy", session_id="web:hoy", canal=None, now=_NOW_MIE)
     finally:
         _exit(leaf)
 
     capt = repo._conv.estado_capturado
     assert capt.cita_fecha_slot == "2026-06-03"  # "hoy" resuelto, no None
-    assert "qué día" in r1.response.lower()       # T1 pidió el día
-    assert r2.response != r1.response             # T2 NO repite idéntico
-    assert "qué hora" in r2.response.lower()       # ya avanzó: ahora pide la hora
+    assert "qué día" in r1.response.lower()  # T1 pidió el día
+    assert r2.response != r1.response  # T2 NO repite idéntico
+    assert "qué hora" in r2.response.lower()  # ya avanzó: ahora pide la hora
 
 
 # ============================================================
@@ -2152,11 +2328,14 @@ async def test_hora_suelta_10_se_parsea_y_cierra() -> None:
     # En AGENDANDO con los 6 datos y el DÍA listos; falta solo la hora (el código
     # acaba de pedirla → ultimo_campo_pedido='hora').
     repo._conv.estado_capturado = EstadoCapturado(
-        nombre_papa="Oscar Rodriguez", email_papa="o@x.com", telefono="7866035862",
+        nombre_papa="Oscar Rodriguez",
+        email_papa="o@x.com",
+        telefono="7866035862",
         nivel_buscado_actual=NivelEducativo.KINDER,
         hijos=[HijoInfo(nombre="Mateo", edad=4, nivel=NivelEducativo.KINDER, grado="2° de Kinder")],
         fase_agendado=FaseAgendado.AGENDANDO,
-        cita_fecha_slot="2026-06-11", cita_hora_slot=None,
+        cita_fecha_slot="2026-06-11",
+        cita_hora_slot=None,
         ultimo_campo_pedido="hora",
     )
     haiku = _HaikuTerco()
@@ -2197,10 +2376,10 @@ async def test_respuesta_no_parseable_no_repite_pregunta_identica() -> None:
     finally:
         _exit(leaf)
 
-    assert "qué hora" in r1.response.lower()        # T1 pidió la hora (base)
-    assert r2.response != r1.response               # T2 NO repite idéntica
-    assert "no te entendí" in r2.response.lower()    # reformuló con disculpa + formato
-    assert "qué hora" in r2.response.lower()         # sigue pidiendo la hora
+    assert "qué hora" in r1.response.lower()  # T1 pidió la hora (base)
+    assert r2.response != r1.response  # T2 NO repite idéntica
+    assert "no te entendí" in r2.response.lower()  # reformuló con disculpa + formato
+    assert "qué hora" in r2.response.lower()  # sigue pidiendo la hora
 
 
 # ============================================================
@@ -2223,13 +2402,13 @@ async def test_booking_completo_respuesta_natural_minima_por_campo() -> None:
     # La respuesta MÁS SIMPLE que daría un papá real, campo por campo.
     turnos = [
         "quiero agendar para primero de primaria",  # nivel/grado declarado
-        "mañana",                                    # día (relativa)
-        "10",                                        # hora (número suelto)
-        "emanuel rodriguez",                         # nombre del hijo (suelto)
-        "5",                                         # edad (número suelto)
-        "oscar rodriguez",                           # nombre del papá (suelto)
-        "oscar@correo.com",                          # correo
-        "7866035862",                                # teléfono → CIERRA
+        "mañana",  # día (relativa)
+        "10",  # hora (número suelto)
+        "emanuel rodriguez",  # nombre del hijo (suelto)
+        "5",  # edad (número suelto)
+        "oscar rodriguez",  # nombre del papá (suelto)
+        "oscar@correo.com",  # correo
+        "7866035862",  # teléfono → CIERRA
     ]
     respuestas = []
     _enter(leaf)
@@ -2243,9 +2422,9 @@ async def test_booking_completo_respuesta_natural_minima_por_campo() -> None:
     capt = repo._conv.estado_capturado
     # Cada campo se capturó de su respuesta natural mínima.
     assert capt.cita_fecha_slot == "2026-06-04"  # "mañana"
-    assert capt.cita_hora_slot == "10:00"        # "10"
+    assert capt.cita_hora_slot == "10:00"  # "10"
     assert capt.hijos[0].nombre == "Emanuel Rodriguez"
-    assert capt.hijos[0].edad == 5               # "5"
+    assert capt.hijos[0].edad == 5  # "5"
     assert capt.hijos[0].grado == "1° de Primaria"  # declarado, Política A (no 1° por edad 5)
     assert capt.nombre_papa == "Oscar Rodriguez"
     assert capt.email_papa == "oscar@correo.com"
@@ -2274,7 +2453,9 @@ class _HaikuMalo:
     ofrece fin de semana). Si el código lo dejara armar la colección, esto se
     filtraría — el test prueba que NO."""
 
-    _RESPUESTA = "¿Me das el nombre y la edad de tu peque? ¿Te viene bien el sábado o el fin de semana?"
+    _RESPUESTA = (
+        "¿Me das el nombre y la edad de tu peque? ¿Te viene bien el sábado o el fin de semana?"
+    )
 
     def __init__(self) -> None:
         self.llamadas = 0
@@ -2300,7 +2481,9 @@ def _leaf_produccion(repo, anthropic, create_appt, intents: dict):
 
     async def fake_extract(mensaje, estado_actual, *, ultimo_assistant=None, **kw):
         return _aplicar_fallbacks_deterministicos(
-            ExtraccionTurno(), mensaje, ultimo_assistant=ultimo_assistant,
+            ExtraccionTurno(),
+            mensaje,
+            ultimo_assistant=ultimo_assistant,
             ultimo_campo_pedido=estado_actual.ultimo_campo_pedido,
         )
 
@@ -2319,15 +2502,29 @@ def _leaf_produccion(repo, anthropic, create_appt, intents: dict):
         patch("app.core.orchestrator.get_horario", AsyncMock(return_value=None)),
         patch("app.core.orchestrator.get_estancias", AsyncMock(return_value=[])),
         patch("app.core.appointment_flow.extract_datetime", side_effect=fake_extract_dt),
-        patch("app.core.appointment_flow.resumen_disponibilidad",
-              AsyncMock(return_value="lunes a viernes de 8:00 a.m. a 3:00 p.m.")),
-        patch("app.core.appointment_flow.evaluar_dia",
-              AsyncMock(return_value=types.SimpleNamespace(
-                  available=True, reason="ok", alternativas=[],
-                  resumen="lunes a viernes de 8:00 a.m. a 3:00 p.m."))),
-        patch("app.core.appointment_flow.is_slot_available",
-              AsyncMock(return_value=types.SimpleNamespace(
-                  available=True, reason="ok", alternativas=[], resumen=""))),
+        patch(
+            "app.core.appointment_flow.resumen_disponibilidad",
+            AsyncMock(return_value="lunes a viernes de 8:00 a.m. a 3:00 p.m."),
+        ),
+        patch(
+            "app.core.appointment_flow.evaluar_dia",
+            AsyncMock(
+                return_value=types.SimpleNamespace(
+                    available=True,
+                    reason="ok",
+                    alternativas=[],
+                    resumen="lunes a viernes de 8:00 a.m. a 3:00 p.m.",
+                )
+            ),
+        ),
+        patch(
+            "app.core.appointment_flow.is_slot_available",
+            AsyncMock(
+                return_value=types.SimpleNamespace(
+                    available=True, reason="ok", alternativas=[], resumen=""
+                )
+            ),
+        ),
         patch("app.core.appointment_flow.create_appointment", create_appt),
         patch("app.core.appointment_flow.get_campus_by_id", AsyncMock(return_value=_campus_test())),
         patch("app.core.appointment_flow.get_lead_by_session", AsyncMock(return_value=None)),
@@ -2358,11 +2555,16 @@ async def test_camino_produccion_codigo_dueno_de_la_coleccion() -> None:
 
     turnos = [
         "hola",
-        "primero de primaria",          # sustantiva (Haiku) — pero captura grado por extracción
-        "mandan tareas?",               # sustantiva (Haiku, postura tareas)
-        "quiero visitar el colegio",    # → AGENDANDO; el código pide el día
-        "hoy", "10", "emanuel rodriguez", "5", "oscar rodriguez",
-        "oscar@correo.com", "7866035862",
+        "primero de primaria",  # sustantiva (Haiku) — pero captura grado por extracción
+        "mandan tareas?",  # sustantiva (Haiku, postura tareas)
+        "quiero visitar el colegio",  # → AGENDANDO; el código pide el día
+        "hoy",
+        "10",
+        "emanuel rodriguez",
+        "5",
+        "oscar rodriguez",
+        "oscar@correo.com",
+        "7866035862",
     ]
     respuestas = []
     _enter(leaf)
@@ -2376,7 +2578,7 @@ async def test_camino_produccion_codigo_dueno_de_la_coleccion() -> None:
     capt = repo._conv.estado_capturado
     # Slots: cada dato quedó en su lugar (fuente de verdad), edad incluida.
     assert capt.cita_fecha_slot == "2026-06-03"  # "hoy" (mié, antes del cierre)
-    assert capt.cita_hora_slot == "10:00"        # "10" NO se perdió
+    assert capt.cita_hora_slot == "10:00"  # "10" NO se perdió
     assert capt.hijos[0].nombre == "Emanuel Rodriguez"
     assert capt.hijos[0].edad == 5
     assert capt.hijos[0].grado == "1° de Primaria"
@@ -2386,7 +2588,7 @@ async def test_camino_produccion_codigo_dueno_de_la_coleccion() -> None:
     resp_coleccion = respuestas[3:]  # desde "quiero visitar" en adelante
     junto = " ".join(resp_coleccion).lower()
     assert "sábado" not in junto and "fin de semana" not in junto  # NUNCA fin de semana
-    assert "nombre y la edad" not in junto                          # NUNCA bundle de Haiku
+    assert "nombre y la edad" not in junto  # NUNCA bundle de Haiku
     # La EDAD se pidió EXACTAMENTE una vez (no re-preguntada tras tener 5).
     n_edad = sum(1 for r in resp_coleccion if "qué edad" in r.lower())
     assert n_edad == 1, f"edad preguntada {n_edad} veces"
@@ -2415,14 +2617,18 @@ async def test_pregunta_costos_mid_coleccion_pausa_da_dato_y_reofrece() -> None:
     leaf = _leaf_produccion(repo, haiku, create_appt, intents)
     _enter(leaf)
     try:
-        await procesar_turno(mensaje="quiero agendar", session_id="web:mid", canal=None, now=_NOW_MIE)
+        await procesar_turno(
+            mensaje="quiero agendar", session_id="web:mid", canal=None, now=_NOW_MIE
+        )
         await procesar_turno(mensaje="hoy", session_id="web:mid", canal=None, now=_NOW_MIE)  # día
-        r = await procesar_turno(mensaje="cuánto cuesta?", session_id="web:mid", canal=None, now=_NOW_MIE)
+        r = await procesar_turno(
+            mensaje="cuánto cuesta?", session_id="web:mid", canal=None, now=_NOW_MIE
+        )
     finally:
         _exit(leaf)
 
     capt = repo._conv.estado_capturado
-    assert capt.cita_fecha_slot == "2026-06-03"   # el día PERSISTE (no se perdió)
-    assert capt.cita_hora_slot is None            # NO avanzó: sigue faltando la hora
-    assert "💰" in r.response                       # dato de costos emitido por código
-    assert "a qué hora" in r.response.lower()       # re-oferta pidiendo la hora de ese día
+    assert capt.cita_fecha_slot == "2026-06-03"  # el día PERSISTE (no se perdió)
+    assert capt.cita_hora_slot is None  # NO avanzó: sigue faltando la hora
+    assert "💰" in r.response  # dato de costos emitido por código
+    assert "a qué hora" in r.response.lower()  # re-oferta pidiendo la hora de ese día

@@ -59,8 +59,18 @@ def contiene_expresion_temporal(mensaje: str) -> bool:
 
 _DIAS_ES = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
 _MESES_ES = (
-    "enero", "febrero", "marzo", "abril", "mayo", "junio",
-    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+    "enero",
+    "febrero",
+    "marzo",
+    "abril",
+    "mayo",
+    "junio",
+    "julio",
+    "agosto",
+    "septiembre",
+    "octubre",
+    "noviembre",
+    "diciembre",
 )
 
 
@@ -234,9 +244,19 @@ def es_confirmacion(mensaje: str) -> bool:
 
 
 _MESES_NUM: dict[str, int] = {
-    "enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5, "junio": 6,
-    "julio": 7, "agosto": 8, "septiembre": 9, "setiembre": 9, "octubre": 10,
-    "noviembre": 11, "diciembre": 12,
+    "enero": 1,
+    "febrero": 2,
+    "marzo": 3,
+    "abril": 4,
+    "mayo": 5,
+    "junio": 6,
+    "julio": 7,
+    "agosto": 8,
+    "septiembre": 9,
+    "setiembre": 9,
+    "octubre": 10,
+    "noviembre": 11,
+    "diciembre": 12,
 }
 _FECHA_DIA_MES_RE = re.compile(
     r"\b(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|"
@@ -446,7 +466,10 @@ _DIAS_SEMANA_ES = [
 _ORDINAL_OPCION: list[tuple] = [
     (re.compile(r"\b(?:el\s+)?(?:primer[oa]?|1[°º]|la\s+primera)\b", re.IGNORECASE), 0),
     (re.compile(r"\b(?:el\s+)?(?:segund[oa]|2[°º]|la\s+segunda)\b", re.IGNORECASE), 1),
-    (re.compile(r"\b(?:el\s+)?(?:tercer[oa]?|3[°º]|la\s+tercera|[úu]ltim[oa])\b", re.IGNORECASE), 2),
+    (
+        re.compile(r"\b(?:el\s+)?(?:tercer[oa]?|3[°º]|la\s+tercera|[úu]ltim[oa])\b", re.IGNORECASE),
+        2,
+    ),
 ]
 
 # Ordinal/número seguido de "de {nivel}" = grado, NO una opción de fecha.
@@ -553,12 +576,12 @@ async def elegir_dia_de_opciones_llm(
         f"Hoy es {now.strftime('%Y-%m-%d')} ({_DIAS_SEMANA_ES[now.weekday()]}). "
         "Un papá respondió a '¿qué día te queda mejor para la visita?'. Le ofrecimos "
         "EXACTAMENTE estas fechas disponibles:\n" + "\n".join(lineas) + "\n\n"
-        "Devuelve SOLO un JSON {\"fecha\":\"YYYY-MM-DD\"} eligiendo la fecha de la lista "
+        'Devuelve SOLO un JSON {"fecha":"YYYY-MM-DD"} eligiendo la fecha de la lista '
         "que mejor corresponde a su respuesta:\n"
         "- 'esta semana' -> la primera fecha de la lista en la semana actual.\n"
         "- 'la proxima'/'la que viene' -> la primera de la semana siguiente.\n"
         "- 'cualquiera'/'la mas pronto'/'tu dime'/'el que sea' -> la primera de la lista.\n"
-        "- Si su respuesta NO elige dia (pregunta de info, otro tema) -> {\"fecha\":null}.\n"
+        '- Si su respuesta NO elige dia (pregunta de info, otro tema) -> {"fecha":null}.\n'
         "La fecha DEBE ser una de la lista, copiada igual. Responde SOLO el JSON."
     )
     try:
@@ -566,9 +589,7 @@ async def elegir_dia_de_opciones_llm(
     except Exception as exc:  # nunca rompe el turno
         log.warning("elegir_dia_de_opciones_llm error", extra={"err": str(exc)})
         return None
-    cleaned = (
-        raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-    )
+    cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
     try:
         data = json.loads(cleaned)
     except json.JSONDecodeError:

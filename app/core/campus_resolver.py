@@ -23,16 +23,28 @@ log = logging.getLogger(__name__)
 
 
 # Mapa granular nivel → campus_id (Lily 2026-05-24)
-_CAMPUS_1_NIVELES = frozenset({
-    "maternal",
-    "kinder_1", "kinder_2", "kinder_3",
-    "primaria_1", "primaria_2", "primaria_3", "primaria_4", "primaria_5",
-})
+_CAMPUS_1_NIVELES = frozenset(
+    {
+        "maternal",
+        "kinder_1",
+        "kinder_2",
+        "kinder_3",
+        "primaria_1",
+        "primaria_2",
+        "primaria_3",
+        "primaria_4",
+        "primaria_5",
+    }
+)
 
-_CAMPUS_2_NIVELES = frozenset({
-    "primaria_6",
-    "secundaria_1", "secundaria_2", "secundaria_3",
-})
+_CAMPUS_2_NIVELES = frozenset(
+    {
+        "primaria_6",
+        "secundaria_1",
+        "secundaria_2",
+        "secundaria_3",
+    }
+)
 
 ALL_NIVELES_GRANULARES = _CAMPUS_1_NIVELES | _CAMPUS_2_NIVELES
 
@@ -56,8 +68,7 @@ def resolve_campus(nivel: str) -> int:
     if n in _CAMPUS_2_NIVELES:
         return 2
     raise ValueError(
-        f"nivel granular desconocido: {nivel!r}. "
-        f"Esperado uno de: {sorted(ALL_NIVELES_GRANULARES)}"
+        f"nivel granular desconocido: {nivel!r}. Esperado uno de: {sorted(ALL_NIVELES_GRANULARES)}"
     )
 
 
@@ -81,12 +92,20 @@ def _infer_grado_primaria(*, edad: int | None, grado_texto: str | None) -> int |
             return int(m.group(1))
         # Ordinales escritos
         ordinales = {
-            "primer": 1, "primero": 1, "primera": 1,
-            "segundo": 2, "segunda": 2,
-            "tercer": 3, "tercero": 3, "tercera": 3,
-            "cuarto": 4, "cuarta": 4,
-            "quinto": 5, "quinta": 5,
-            "sexto": 6, "sexta": 6,
+            "primer": 1,
+            "primero": 1,
+            "primera": 1,
+            "segundo": 2,
+            "segunda": 2,
+            "tercer": 3,
+            "tercero": 3,
+            "tercera": 3,
+            "cuarto": 4,
+            "cuarta": 4,
+            "quinto": 5,
+            "quinta": 5,
+            "sexto": 6,
+            "sexta": 6,
         }
         g_low = grado_texto.lower()
         for palabra, n in ordinales.items():
@@ -105,9 +124,14 @@ def _infer_grado_kinder(*, edad: int | None, grado_texto: str | None) -> int | N
         if m:
             return int(m.group(1))
         ordinales = {
-            "primer": 1, "primero": 1, "primera": 1,
-            "segundo": 2, "segunda": 2,
-            "tercer": 3, "tercero": 3, "tercera": 3,
+            "primer": 1,
+            "primero": 1,
+            "primera": 1,
+            "segundo": 2,
+            "segunda": 2,
+            "tercer": 3,
+            "tercero": 3,
+            "tercera": 3,
         }
         g_low = grado_texto.lower()
         for palabra, n in ordinales.items():

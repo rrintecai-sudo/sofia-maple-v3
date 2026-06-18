@@ -132,9 +132,7 @@ def test_extraer_edad_simple(texto, esperado) -> None:
 def test_fallback_edad_numero_suelto_con_contexto() -> None:
     """Cuando el gate pidió la EDAD, un número suelto ('5', 'tiene 5') es la edad."""
     for msg in ("5", "tiene 5", "5 añitos"):
-        res = _aplicar_fallbacks_deterministicos(
-            ExtraccionTurno(), msg, ultimo_campo_pedido="edad"
-        )
+        res = _aplicar_fallbacks_deterministicos(ExtraccionTurno(), msg, ultimo_campo_pedido="edad")
         assert res.edad_hijo == 5, msg
     # Sin contexto de edad, un '5' suelto NO se vuelve edad.
     res = _aplicar_fallbacks_deterministicos(
@@ -194,8 +192,11 @@ def test_fallback_se_llama_no_va_a_nombre_papa() -> None:
         ("¿tu nombre?", "si ya te lo dije", None),
         ("¿tu nombre?", "no gracias", None),
         # Nombre + correo + teléfono JUNTOS → extrae solo el nombre.
-        ("¿Me compartes tu nombre, correo y celular?",
-         "Oscar Rodriguez, ing2oscar@gmail.com, +17866035862", "Oscar Rodriguez"),
+        (
+            "¿Me compartes tu nombre, correo y celular?",
+            "Oscar Rodriguez, ing2oscar@gmail.com, +17866035862",
+            "Oscar Rodriguez",
+        ),
         # Presentación del HIJO con apellido tras "¿tu nombre?" → NO es el papá.
         ("¿y tu nombre?", "se llama Emanuel Rodriguez", None),
     ],
@@ -282,6 +283,7 @@ def test_fallback_captura_todo_en_un_mensaje_corrido() -> None:
     assert res.email_papa == "ing2oscar@gmail.com"
     assert res.telefono == "+17866035862"
 
+
 # ============================================================
 # FIX (e) 2026-06-01 — "yo soy Oscar" corrige nombre_papa clavado
 # ============================================================
@@ -315,6 +317,7 @@ def test_aplicar_extraccion_no_explicito_no_sobreescribe() -> None:
     extr = ExtraccionTurno(nombre_papa="Oscar", nombre_papa_explicito=False)
     nuevo = aplicar_extraccion(actual, extr)
     assert nuevo.nombre_papa == "Jose"
+
 
 # ============================================================
 # FIX (c) 2026-06-01 — "Jose, 4 años" → Jose es el NIÑO
@@ -383,6 +386,7 @@ def test_aplicar_extraccion_libera_nombre_papa_mal_asignado() -> None:
     # ahora sí puede entrar Oscar
     nuevo2 = aplicar_extraccion(nuevo, ExtraccionTurno(nombre_papa="Oscar Rodriguez"))
     assert nuevo2.nombre_papa == "Oscar Rodriguez"
+
 
 # ============================================================
 # extraer_grado_simple (FIX 2026-06-01 — "2 kinder" → "2° de Kinder")

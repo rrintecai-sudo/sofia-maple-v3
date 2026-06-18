@@ -48,6 +48,7 @@ def _kb_contenido() -> tuple[dict[str, str], dict[str, str]]:
         por_nivel[m.group(1).strip().lower()] = " ".join(m.group(2).split())
     return por_grado, por_nivel
 
+
 # Continuación del papá (sin pregunta nueva) — el contador incrementa con estos.
 # (El caller ya descartó preguntas de info nueva antes de llegar aquí.)
 STAGE_ENGANCHE = "enganche"
@@ -189,6 +190,8 @@ _REGLA_MATERNAL = (
 
 def _maternal_regla(nivel: str) -> str:
     return _REGLA_MATERNAL if nivel == "maternal" else ""
+
+
 # El CÓDIGO cierra cada etapa con su pregunta (CTA). Haiku NO pregunta nada → así el
 # empuje es determinístico y no se cuela el descubrimiento. PERO tiene LIBERTAD para
 # redactar cálido y natural sobre los puntos de la base (no recitar, no omitir).
@@ -259,16 +262,16 @@ def construir_contenido_grado(
     if texto:
         # INYECTAMOS el contenido exacto del grado y prohibimos mezclar lo general.
         contenido = (
-            f' Este es el contenido OFICIAL y EXACTO de {display} (del documento). '
-            f'Descríbelo SOLO a partir de esto, sin agregar características GENERALES del '
+            f" Este es el contenido OFICIAL y EXACTO de {display} (del documento). "
+            f"Descríbelo SOLO a partir de esto, sin agregar características GENERALES del "
             f'colegio (como "alto nivel académico", el modelo educativo, valores '
-            f'generales) — eso NO es específico de {display} y mezclarlo es un error '
+            f"generales) — eso NO es específico de {display} y mezclarlo es un error "
             f'grave en educación. Contenido de {display}:\n"{texto}"'
         )
     else:
         contenido = (
-            f' Toma el contenido de la sección de {display} en la base de conocimiento; '
-            f'NO agregues características generales del colegio que no sean de este grado.'
+            f" Toma el contenido de la sección de {display} en la base de conocimiento; "
+            f"NO agregues características generales del colegio que no sean de este grado."
         )
 
     hint = (
@@ -296,22 +299,58 @@ def hint_contenido(
 # Faceta (etiqueta legible) por palabra clave — para el RECAP cuando ya no quedan beats
 # nuevos: nombra lo YA visto sin re-explicarlo. Orden = orden natural de lectura.
 _FACETAS_RECAP: list[tuple[str, tuple[str, ...]]] = [
-    ("lo académico", (
-        "académic", "lectura", "leer", "ley", "número", "operar", "operando", "texto",
-        "comprensión", "trazo", "escritura",
-    )),
-    ("el pensamiento crítico", (
-        "pensamiento crítico", "analiz", "análisis", "cuestiona", "compar",
-    )),
+    (
+        "lo académico",
+        (
+            "académic",
+            "lectura",
+            "leer",
+            "ley",
+            "número",
+            "operar",
+            "operando",
+            "texto",
+            "comprensión",
+            "trazo",
+            "escritura",
+        ),
+    ),
+    (
+        "el pensamiento crítico",
+        (
+            "pensamiento crítico",
+            "analiz",
+            "análisis",
+            "cuestiona",
+            "compar",
+        ),
+    ),
     ("los proyectos", ("proyecto", "investig", "defend", "presenta al grupo", "expon")),
-    ("la autonomía", (
-        "autonomía", "organiz", "responsabilidad", "independ", "su tiempo", "por sí mismo",
-        "iniciativa",
-    )),
-    ("lo emocional", (
-        "emocional", "vínculo", "frustración", "seguro", "seguridad", "identidad",
-        "acompañ", "confianza",
-    )),
+    (
+        "la autonomía",
+        (
+            "autonomía",
+            "organiz",
+            "responsabilidad",
+            "independ",
+            "su tiempo",
+            "por sí mismo",
+            "iniciativa",
+        ),
+    ),
+    (
+        "lo emocional",
+        (
+            "emocional",
+            "vínculo",
+            "frustración",
+            "seguro",
+            "seguridad",
+            "identidad",
+            "acompañ",
+            "confianza",
+        ),
+    ),
     ("la convivencia", ("convive", "comparte", "turnos", "roces")),
     ("el liderazgo", ("liderazgo", "coordin", "equipos")),
     ("el juego y la exploración", ("juego intencional", "explor", "rincones")),
@@ -402,8 +441,13 @@ def decidir_funnel(
             nivel_en_msg, grado, usados, n=1, incluir_diferenciador=True
         )
         return FunnelDecision(
-            hint, _cta_etapa1(nivel_en_msg, grado),
-            False, STAGE_VALOR, 1, False, beats_usados=beats,
+            hint,
+            _cta_etapa1(nivel_en_msg, grado),
+            False,
+            STAGE_VALOR,
+            1,
+            False,
+            beats_usados=beats,
         )
 
     # Continuación dentro del funnel (ya en 'valor').
@@ -419,7 +463,12 @@ def decidir_funnel(
         # Etapa 2: 1-2 beats NO usados. Si se agotaron → hint None → solo la CTA (gracia).
         hint, beats = construir_contenido_grado(nivel, grado, usados, n=2)
         return FunnelDecision(
-            hint, _cta_etapa2(empuje), False, STAGE_VALOR, nuevo_tv, empuje,
+            hint,
+            _cta_etapa2(empuje),
+            False,
+            STAGE_VALOR,
+            nuevo_tv,
+            empuje,
             beats_usados=beats,
         )
 

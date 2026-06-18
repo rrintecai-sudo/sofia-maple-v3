@@ -15,11 +15,11 @@ import re
 # Si una frase aparece en una oración, esa oración se elimina completa.
 # ============================================================
 FRASES_PROHIBIDAS: list[str] = [
-    r"¿?\s*c[oó]mo\s+lo\s+viven\b",            # venezolanismo: "¿cómo lo viven?"
-    r"\bte\s+vien[e]?n?\s+(?:bien|mejor)\b",   # "te viene/vienen bien/mejor"
-    r"\bregalad[oa]s?\b",                       # "precio regalado/regalada"
-    r"\bch[ée]vere\b",                          # venezolanismo
-    r"\bde\s+pinga\b",                          # venezolanismo
+    r"¿?\s*c[oó]mo\s+lo\s+viven\b",  # venezolanismo: "¿cómo lo viven?"
+    r"\bte\s+vien[e]?n?\s+(?:bien|mejor)\b",  # "te viene/vienen bien/mejor"
+    r"\bregalad[oa]s?\b",  # "precio regalado/regalada"
+    r"\bch[ée]vere\b",  # venezolanismo
+    r"\bde\s+pinga\b",  # venezolanismo
 ]
 
 # Máximo de preguntas en el texto de Haiku. Configurable (subir a 2 si se decide).
@@ -47,7 +47,7 @@ def limpiar_marcadores_sueltos(texto: str) -> str:
     for linea in (texto or "").split("\n"):
         if linea.count("**") % 2 == 1:  # número impar → hay un huérfano
             idx = linea.rfind("**")
-            linea = (linea[:idx] + linea[idx + 2:]).rstrip()
+            linea = (linea[:idx] + linea[idx + 2 :]).rstrip()
         out.append(linea)
     txt = "\n".join(out)
     return re.sub(r"[ \t]{2,}", " ", txt).strip()
@@ -72,12 +72,12 @@ def limpiar_comillas_huerfanas(texto: str) -> str:
     for linea in (texto or "").split("\n"):
         if linea.count('"') % 2 == 1:  # comilla sin par → quita la última huérfana
             idx = linea.rfind('"')
-            linea = linea[:idx] + linea[idx + 1:]
+            linea = linea[:idx] + linea[idx + 1 :]
         out.append(linea)
     txt = "\n".join(out)
-    txt = re.sub(r'"\s*\.\s*"', '.', txt)   # residuo '". "' entre cortes
-    txt = re.sub(r'\.\s+\.', '.', txt)        # '. .' que queda tras quitar la comilla
-    txt = re.sub(r'[ \t]{2,}', ' ', txt)
+    txt = re.sub(r'"\s*\.\s*"', ".", txt)  # residuo '". "' entre cortes
+    txt = re.sub(r"\.\s+\.", ".", txt)  # '. .' que queda tras quitar la comilla
+    txt = re.sub(r"[ \t]{2,}", " ", txt)
     return txt.strip()
 
 
@@ -132,9 +132,7 @@ def _rejoin(segmentos: list[str]) -> str:
     return re.sub(r"[ \t]{2,}", " ", out).strip()
 
 
-def sanear_frases_prohibidas(
-    texto: str, patrones: list[re.Pattern] | None = None
-) -> str:
+def sanear_frases_prohibidas(texto: str, patrones: list[re.Pattern] | None = None) -> str:
     """Elimina cada ORACIÓN que contenga una frase prohibida (venezolanismo/etc).
     SOLO debe llamarse sobre el texto libre de Haiku."""
     pats = patrones if patrones is not None else _FRASES_COMPILADAS
@@ -158,9 +156,7 @@ def limitar_preguntas(texto: str, maximo: int = MAX_PREGUNTAS_POR_TURNO) -> str:
     return _rejoin(fuera)
 
 
-def sanear_texto_libre_haiku(
-    texto: str, *, max_preguntas: int = MAX_PREGUNTAS_POR_TURNO
-) -> str:
+def sanear_texto_libre_haiku(texto: str, *, max_preguntas: int = MAX_PREGUNTAS_POR_TURNO) -> str:
     """Aplica los guards en orden: quita frases prohibidas, recorta preguntas de más
     y limpia marcadores de formato huérfanos. Texto libre de Haiku exclusivamente."""
     paso1 = sanear_frases_prohibidas(texto)

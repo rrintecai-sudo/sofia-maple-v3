@@ -214,9 +214,7 @@ def render_confirmacion_email_papa(
     dia = formato_dia_fecha(fecha_hora)
     hora = formato_hora(fecha_hora)
     nombre_campus = campus.nombre if campus else "nuestro campus"
-    direccion = (
-        campus.direccion_legible() if campus else "te compartimos la dirección por separado"
-    )
+    direccion = campus.direccion_legible() if campus else "te compartimos la dirección por separado"
     maps_url = (campus.google_maps_url if campus else None) or ""
 
     # --- Texto plano (fallback): Maps como URL cruda ---
@@ -239,9 +237,7 @@ def render_confirmacion_email_papa(
     def esc(s: object) -> str:
         return _html.escape(str(s))
 
-    maps_html = (
-        f'🗺️ <a href="{esc(maps_url)}">Ver ubicación en Google Maps</a>' if maps_url else ""
-    )
+    maps_html = f'🗺️ <a href="{esc(maps_url)}">Ver ubicación en Google Maps</a>' if maps_url else ""
     body_html = (
         '<!DOCTYPE html><html><body style="font-family:Arial,Helvetica,sans-serif;'
         'font-size:15px;color:#222;line-height:1.5;">'

@@ -304,9 +304,7 @@ def test_webhook_imagen_se_describe(client: TestClient) -> None:
 
     class _Claim:
         claimed = True
-        joined = (
-            "Esto es lo que recibí\n\n(imagen adjunta: un boleto de inscripción)"
-        )
+        joined = "Esto es lo que recibí\n\n(imagen adjunta: un boleto de inscripción)"
 
     debouncer_mock.try_claim = AsyncMock(return_value=_Claim())
 
@@ -344,9 +342,7 @@ def test_webhook_imagen_se_describe(client: TestClient) -> None:
 
 
 def test_webhook_body_no_json_no_revienta(client: TestClient) -> None:
-    resp = client.post(
-        "/webhook/whatsapp", data="not json", headers={"Content-Type": "text/plain"}
-    )
+    resp = client.post("/webhook/whatsapp", data="not json", headers={"Content-Type": "text/plain"})
     assert resp.status_code == 200
     assert resp.json() == {"status": "ignored"}
 

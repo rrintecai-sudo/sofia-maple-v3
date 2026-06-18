@@ -65,7 +65,7 @@ def test_guards_no_tocan_texto_vacio() -> None:
 def test_limpiar_marcadores_huerfanos() -> None:
     from app.core.output_guards import limpiar_marcadores_sueltos as lm
 
-    assert lm("** Me gustaría algo") == "Me gustaría algo"   # ** huérfano fuera
+    assert lm("** Me gustaría algo") == "Me gustaría algo"  # ** huérfano fuera
     assert lm("**Colegiatura:** $5,250") == "**Colegiatura:** $5,250"  # negrita válida intacta
     assert lm("uno ** dos") == "uno dos"
     assert lm("texto normal") == "texto normal"
@@ -74,9 +74,12 @@ def test_limpiar_marcadores_huerfanos() -> None:
 def test_sanear_sondeo_quita_afirmaciones() -> None:
     from app.core.output_guards import sanear_sondeo
 
-    assert "me gustaría entender" not in sanear_sondeo(
-        "Colegiatura $5,250. Me gustaría entender qué buscas para tu hijo."
-    ).lower()
+    assert (
+        "me gustaría entender"
+        not in sanear_sondeo(
+            "Colegiatura $5,250. Me gustaría entender qué buscas para tu hijo."
+        ).lower()
+    )
     assert "cuéntame" not in sanear_sondeo("Listo. Cuéntame cómo es tu peque.").lower()
     # No toca afirmaciones normales:
     txt = "La colegiatura es de $5,250 al mes."

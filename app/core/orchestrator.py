@@ -92,36 +92,40 @@ log = logging.getLogger(__name__)
 # campus/prepa/proceso). Estos PAUSAN el contador del funnel (se responde el dato y NO
 # se empuja). Preguntar por el NIVEL o la METODOLOGÍA es parte del valor (el
 # diferenciador lo responde) → NO pausa.
-_DATA_INTENTS = frozenset({
-    Intent.PREGUNTA_COSTOS,
-    Intent.PREGUNTA_HORARIO,
-    Intent.PREGUNTA_ESTANCIAS,
-    Intent.PREGUNTA_BECAS,
-    Intent.PREGUNTA_CAMPUS,
-    Intent.PREGUNTA_PREPA,
-    Intent.PREGUNTA_PROCESO_ADMISION,
-})
+_DATA_INTENTS = frozenset(
+    {
+        Intent.PREGUNTA_COSTOS,
+        Intent.PREGUNTA_HORARIO,
+        Intent.PREGUNTA_ESTANCIAS,
+        Intent.PREGUNTA_BECAS,
+        Intent.PREGUNTA_CAMPUS,
+        Intent.PREGUNTA_PREPA,
+        Intent.PREGUNTA_PROCESO_ADMISION,
+    }
+)
 
 # Intents donde el papá hace una pregunta SUSTANTIVA: durante la colección del
 # agendado, Haiku SÍ responde estos (tiene la info/tools). En cualquier otro intent
 # (dar datos, respuesta corta, confuso), la pregunta del campo la pone el código.
-_PREGUNTAS_SUSTANTIVAS = frozenset({
-    Intent.PREGUNTA_COSTOS,
-    Intent.PREGUNTA_HORARIO,
-    Intent.PREGUNTA_NIVEL,
-    Intent.PREGUNTA_METODOLOGIA,
-    Intent.PREGUNTA_PROCESO_ADMISION,
-    Intent.PREGUNTA_ESTANCIAS,
-    Intent.PREGUNTA_BECAS,
-    Intent.PREGUNTA_CAMPUS,
-    Intent.PREGUNTA_PREPA,
-    Intent.PREGUNTA_GENERAL_MAPLE,
-    Intent.MENCIONA_DIAGNOSTICO,
-    Intent.OBJECION_CARO,
-    Intent.OBJECION_FLEXIBLE,
-    Intent.OBJECION_TAREA,
-    Intent.OBJECION_OTRA,
-})
+_PREGUNTAS_SUSTANTIVAS = frozenset(
+    {
+        Intent.PREGUNTA_COSTOS,
+        Intent.PREGUNTA_HORARIO,
+        Intent.PREGUNTA_NIVEL,
+        Intent.PREGUNTA_METODOLOGIA,
+        Intent.PREGUNTA_PROCESO_ADMISION,
+        Intent.PREGUNTA_ESTANCIAS,
+        Intent.PREGUNTA_BECAS,
+        Intent.PREGUNTA_CAMPUS,
+        Intent.PREGUNTA_PREPA,
+        Intent.PREGUNTA_GENERAL_MAPLE,
+        Intent.MENCIONA_DIAGNOSTICO,
+        Intent.OBJECION_CARO,
+        Intent.OBJECION_FLEXIBLE,
+        Intent.OBJECION_TAREA,
+        Intent.OBJECION_OTRA,
+    }
+)
 
 # Comandos especiales — Modo Aprendizaje
 COMANDO_ENTRAR_APRENDIZAJE = "maple2026"
@@ -220,8 +224,7 @@ _EXPLICACION_CITA_INFORMES = (
 # Reorientación code-emitida cuando Haiku no tiene una consulta concreta que responder
 # (Bloque B-3) — útil y breve, sin sondeo ni monólogo.
 _REORIENTA_SALUDO = (
-    "¡Hola! 😊 ¿Para qué nivel te interesa información — maternal, kinder, primaria "
-    "o secundaria?"
+    "¡Hola! 😊 ¿Para qué nivel te interesa información — maternal, kinder, primaria o secundaria?"
 )
 _REORIENTA_GENERAL = (
     "Con gusto te ayudo 😊 Puedo contarte de los niveles, costos, horarios y "
@@ -268,9 +271,7 @@ def _reoferta_visita(capt: Any, now: datetime | None = None) -> str:
         try:
             fechas = [datetime.fromisoformat(o) for o in ops]
             txt = formato_opciones_dia(fechas, now)
-            return (
-                f"Cuando quieras seguimos con tu visita 😊 ¿Qué día te queda mejor: {txt}?"
-            )
+            return f"Cuando quieras seguimos con tu visita 😊 ¿Qué día te queda mejor: {txt}?"
         except (ValueError, TypeError):
             pass
     return "Cuando quieras seguimos con tu visita 😊 ¿Qué día te queda mejor?"
@@ -288,6 +289,7 @@ def _variar_respuesta(texto: str) -> str:
     if alt:
         return alt
     return "Como te comentaba, " + texto.lstrip()
+
 
 # "¿cuáles son las modalidades?" / "detállame" / "costos" → lista completa.
 # "¿tienen estancia?" (sí/no) → confirmar + ofrecer, sin volcar la lista.
@@ -339,10 +341,12 @@ async def _construir_oferta(
             estado.estado_capturado.pendiente_grado_horario = True
             nivel_act = estado.estado_capturado.nivel_buscado_actual
             nivel_disp = {
-                "kinder": "Kinder", "primaria": "Primaria",
+                "kinder": "Kinder",
+                "primaria": "Primaria",
             }.get(nivel_act.value if nivel_act else "", "ese nivel")
             ejemplo = (
-                "1° a 3° o 4° a 6°" if (nivel_act and nivel_act.value == "primaria")
+                "1° a 3° o 4° a 6°"
+                if (nivel_act and nivel_act.value == "primaria")
                 else "1°, 2° o 3°"
             )
             lineas.append(
@@ -480,9 +484,7 @@ async def procesar_turno(
 
     # 3b. Extraer estado y clasificar intención en paralelo (auxiliares baratos)
     extraccion_task = asyncio.create_task(
-        extraer_de_mensaje(
-            mensaje, estado.estado_capturado, ultimo_assistant=ultimo_assistant_msg
-        )
+        extraer_de_mensaje(mensaje, estado.estado_capturado, ultimo_assistant=ultimo_assistant_msg)
     )
     intent_task = asyncio.create_task(
         classify_intent(
@@ -514,10 +516,7 @@ async def procesar_turno(
     quiere_reagendar = quiere_agendar_explicito(mensaje) or (
         intent_result.intent == Intent.QUIERE_AGENDAR and not pide_info_exploratoria
     )
-    if (
-        estado.estado_capturado.fase_agendado == FaseAgendado.CERRADO
-        and quiere_reagendar
-    ):
+    if estado.estado_capturado.fase_agendado == FaseAgendado.CERRADO and quiere_reagendar:
         prev = estado.estado_capturado
         prev.fase_agendado = FaseAgendado.AGENDANDO
         prev.cita_fecha_slot = None
@@ -601,8 +600,7 @@ async def procesar_turno(
         and _es_interrogativo(mensaje)
     )
     es_continuacion = (
-        intent_result.intent
-        in (Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO, Intent.CONFUSO_OTRO)
+        intent_result.intent in (Intent.RESPUESTA_CORTA_AL_TURNO_PREVIO, Intent.CONFUSO_OTRO)
         and not pide_info_nueva
         and nivel_en_msg is None
         and not es_contenido_pregunta  # una pregunta de contenido NO acepta la visita
@@ -718,11 +716,19 @@ async def procesar_turno(
         and intent_result.intent not in _PREGUNTAS_SUSTANTIVAS
     ):
         # ¿La extracción capturó ALGÚN dato del papá este turno? Si sí, NO reorientamos.
-        extraccion_con_datos = any([
-            extraccion.nombre_papa, extraccion.email_papa, extraccion.telefono,
-            extraccion.nivel_buscado, extraccion.nombre_hijo, extraccion.edad_hijo,
-            extraccion.grado_hijo, extraccion.escuela_actual, extraccion.diagnostico_hijo,
-        ])
+        extraccion_con_datos = any(
+            [
+                extraccion.nombre_papa,
+                extraccion.email_papa,
+                extraccion.telefono,
+                extraccion.nivel_buscado,
+                extraccion.nombre_hijo,
+                extraccion.edad_hijo,
+                extraccion.grado_hijo,
+                extraccion.escuela_actual,
+                extraccion.diagnostico_hijo,
+            ]
+        )
         if intent_result.intent == Intent.SALUDO_INICIAL and not es_nueva:
             lineas_oferta = [_REORIENTA_SALUDO]
         elif intent_result.intent == Intent.CONFUSO_OTRO and not extraccion_con_datos:
@@ -1144,8 +1150,11 @@ async def procesar_turno(
             )
         # El cupo de discovery NO aplica dentro del funnel.
         if (
-            not lineas_oferta and not turno_venta and not en_funnel
-            and not en_agendado and "?" in response_text
+            not lineas_oferta
+            and not turno_venta
+            and not en_funnel
+            and not en_agendado
+            and "?" in response_text
         ):
             capt.discovery_pregunta_hecha = True
 
@@ -1225,8 +1234,7 @@ async def procesar_turno(
                     "appointment_id": appointment_handler.appointment_id,
                     "campus_id": appointment_handler.campus_id,
                     "had_maps_url": bool(
-                        appointment_handler.campus
-                        and appointment_handler.campus.google_maps_url
+                        appointment_handler.campus and appointment_handler.campus.google_maps_url
                     ),
                 },
             )

@@ -235,9 +235,7 @@ def test_chat_js_orden_bold_antes_italic() -> None:
 def _chat_html_text() -> str:
     from pathlib import Path
 
-    path = (
-        Path(__file__).resolve().parent.parent.parent / "web" / "templates" / "chat.html"
-    )
+    path = Path(__file__).resolve().parent.parent.parent / "web" / "templates" / "chat.html"
     return path.read_text(encoding="utf-8")
 
 

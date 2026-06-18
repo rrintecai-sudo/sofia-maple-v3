@@ -154,8 +154,13 @@ def test_render_confirmacion_email_papa() -> None:
     from app.tools.campus import CampusResult
 
     campus = CampusResult(
-        id=2, nombre="Campus 2", direccion="Blvd. V. Carranza 5064", colonia="Doctores",
-        ciudad="Saltillo", estado="Coahuila", niveles=["secundaria_1"],
+        id=2,
+        nombre="Campus 2",
+        direccion="Blvd. V. Carranza 5064",
+        colonia="Doctores",
+        ciudad="Saltillo",
+        estado="Coahuila",
+        niveles=["secundaria_1"],
         google_maps_url="https://www.google.com/maps/search/?api=1&query=Blvd",
     )
     dt = datetime(2026, 6, 4, 16, 0, tzinfo=ZoneInfo("America/Monterrey"))

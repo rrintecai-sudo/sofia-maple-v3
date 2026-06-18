@@ -410,8 +410,10 @@ async def _consolidar_y_derivar_hijo(
     if grado_canonico and hijo.nivel is None:
         hijo.nivel = _nivel_de_grado_canonico(hijo.grado)
     if hijo.edad is not None and (hijo.nivel is None or not grado_canonico):
-        nivel_pref = hijo.nivel.value if hijo.nivel else (
-            capt.nivel_buscado_actual.value if capt.nivel_buscado_actual else None
+        nivel_pref = (
+            hijo.nivel.value
+            if hijo.nivel
+            else (capt.nivel_buscado_actual.value if capt.nivel_buscado_actual else None)
         )
         derivado = await derivar_nivel_grado_de_edad(
             hijo.edad, nivel_preferido=nivel_pref, settings=settings
@@ -496,9 +498,7 @@ async def handle_appointment_intent(
     # el LLM elija UNA de esas fechas (el código manda QUÉ fechas existen; Claude solo
     # mapea la intención). Reemplaza decenas de regex frágiles por un juicio.
     if not fecha_det and capt.opciones_dia_propuestas and campo_pedido_prev == "dia":
-        elegida = await elegir_dia_de_opciones_llm(
-            mensaje, capt.opciones_dia_propuestas, now=now
-        )
+        elegida = await elegir_dia_de_opciones_llm(mensaje, capt.opciones_dia_propuestas, now=now)
         if elegida:
             fecha_det = elegida
             log.info(
@@ -601,20 +601,14 @@ async def handle_appointment_intent(
                 "dia_no_laborable": f"ese día ({dia_resuelto}) Lily no atiende",
                 "slot_ocupado": f"ese día ({dia_resuelto}) ya está lleno",
             }.get(eval_dia.reason, f"{dia_resuelto} no está disponible")
-            horario = (
-                f" Horario real de Lily: {eval_dia.resumen}."
-                if eval_dia.resumen
-                else ""
-            )
+            horario = f" Horario real de Lily: {eval_dia.resumen}." if eval_dia.resumen else ""
             # El CÓDIGO re-pide el día (solo lun-vie 8-15), nunca fin de semana.
             motivo_corto = {
                 "fecha_pasada": "Ese día ya no es posible.",
                 "dia_no_laborable": "Ese día no atendemos (solo lun-vie).",
                 "slot_ocupado": "Ese día ya está lleno.",
             }.get(eval_dia.reason, "Ese día no se puede.")
-            horario_lv = (
-                f"Atendemos {eval_dia.resumen}." if eval_dia.resumen else None
-            )
+            horario_lv = f"Atendemos {eval_dia.resumen}." if eval_dia.resumen else None
             return AppointmentHandlerResult(
                 hint_para_prompt=(
                     f"[FLUJO AGENDADO — {motivo}.{horario} Dilo con claridad (NADA de "
@@ -911,12 +905,8 @@ async def handle_appointment_intent(
                 fecha_hora=fecha_dt,
                 campus=campus,
             )
-            res_papa = await send_email(
-                email_papa, subj_p, text_p, html=html_p, settings=settings
-            )
-            acciones.append(
-                "email_papa_sent" if res_papa.delivered else "email_papa_failed"
-            )
+            res_papa = await send_email(email_papa, subj_p, text_p, html=html_p, settings=settings)
+            acciones.append("email_papa_sent" if res_papa.delivered else "email_papa_failed")
         else:
             acciones.append("email_papa_skipped_sin_correo")
     except Exception as exc:  # best-effort: NUNCA rompe el cierre de la cita
@@ -929,9 +919,7 @@ async def handle_appointment_intent(
     # El campus se ASIGNA aquí; el LLM debe MENCIONARLO pero NUNCA preguntar
     # cuál campus prefiere.
     campus_nombre = campus.nombre if campus else f"Campus {campus_id}"
-    direccion_legible = (
-        campus.direccion_legible() if campus else "dirección del campus"
-    )
+    direccion_legible = campus.direccion_legible() if campus else "dirección del campus"
     maps_link = (campus.google_maps_url if campus else "") or ""
     maps_line = f"🗺️ {maps_link}" if maps_link else ""
 

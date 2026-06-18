@@ -99,8 +99,15 @@ def _mock_campus_endpoint(campus_id: int):
             "estado": "Coahuila",
             "pais": "México",
             "niveles": [
-                "maternal", "kinder_1", "kinder_2", "kinder_3",
-                "primaria_1", "primaria_2", "primaria_3", "primaria_4", "primaria_5",
+                "maternal",
+                "kinder_1",
+                "kinder_2",
+                "kinder_3",
+                "primaria_1",
+                "primaria_2",
+                "primaria_3",
+                "primaria_4",
+                "primaria_5",
             ],
             "notas": None,
             "vigente": True,
@@ -119,7 +126,10 @@ def _mock_campus_endpoint(campus_id: int):
             "estado": "Coahuila",
             "pais": "México",
             "niveles": [
-                "primaria_6", "secundaria_1", "secundaria_2", "secundaria_3",
+                "primaria_6",
+                "secundaria_1",
+                "secundaria_2",
+                "secundaria_3",
             ],
             "notas": None,
             "vigente": True,
@@ -413,20 +423,32 @@ async def test_handler_flujo_feliz_e2e(monkeypatch, caplog) -> None:
 async def test_correo_falla_cita_se_crea_igual(monkeypatch) -> None:
     _mock_extractor(monkeypatch, fecha="2026-05-26", hora="10:00")
     respx.get("https://x.supabase.co/rest/v1/lily_availability").mock(
-        return_value=httpx.Response(200, json=[
-            {"day_of_week": 2, "start_time": "09:00:00", "end_time": "17:00:00",
-             "slot_duration_minutes": 60, "active": True}])
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "day_of_week": 2,
+                    "start_time": "09:00:00",
+                    "end_time": "17:00:00",
+                    "slot_duration_minutes": 60,
+                    "active": True,
+                }
+            ],
+        )
     )
     respx.get("https://x.supabase.co/rest/v1/appointments").mock(
-        return_value=httpx.Response(200, json=[]))
-    respx.get("https://x.supabase.co/rest/v1/leads").mock(
-        return_value=httpx.Response(200, json=[]))
+        return_value=httpx.Response(200, json=[])
+    )
+    respx.get("https://x.supabase.co/rest/v1/leads").mock(return_value=httpx.Response(200, json=[]))
     respx.post("https://x.supabase.co/rest/v1/leads").mock(
-        return_value=httpx.Response(201, json=[{"id": 42}]))
+        return_value=httpx.Response(201, json=[{"id": 42}])
+    )
     respx.post("https://x.supabase.co/rest/v1/appointments").mock(
-        return_value=httpx.Response(201, json=[{"id": 99}]))
+        return_value=httpx.Response(201, json=[{"id": 99}])
+    )
     respx.post("https://x.supabase.co/rest/v1/activity_events").mock(
-        return_value=httpx.Response(201, json=[{"id": 1}]))
+        return_value=httpx.Response(201, json=[{"id": 1}])
+    )
     _mock_campus_endpoint(1)
 
     # El correo al papá REVIENTA (simula caída total de send_email).
@@ -548,8 +570,13 @@ async def test_handler_hoy_pasado_cierre_explica_motivo(monkeypatch) -> None:
         return_value=httpx.Response(
             200,
             json=[
-                {"day_of_week": d, "start_time": "08:00:00", "end_time": "15:00:00",
-                 "slot_duration_minutes": 60, "active": True}
+                {
+                    "day_of_week": d,
+                    "start_time": "08:00:00",
+                    "end_time": "15:00:00",
+                    "slot_duration_minutes": 60,
+                    "active": True,
+                }
                 for d in (1, 2, 3, 4, 5)
             ],
         )
@@ -563,9 +590,9 @@ async def test_handler_hoy_pasado_cierre_explica_motivo(monkeypatch) -> None:
 
     assert estado.estado_capturado.cita_fecha_slot == "2026-06-11"  # se movió a jueves
     msg = (result.mensaje_coleccion or "").lower()
-    assert "cerramos" in msg                  # explica la razón
-    assert "jueves 11 de junio" in msg        # nombra el día propuesto
-    assert "hora" in msg                       # y pide la hora de ese día
+    assert "cerramos" in msg  # explica la razón
+    assert "jueves 11 de junio" in msg  # nombra el día propuesto
+    assert "hora" in msg  # y pide la hora de ese día
 
 
 def _mock_lily_lv_8a15() -> None:
@@ -573,8 +600,13 @@ def _mock_lily_lv_8a15() -> None:
         return_value=httpx.Response(
             200,
             json=[
-                {"day_of_week": d, "start_time": "08:00:00", "end_time": "15:00:00",
-                 "slot_duration_minutes": 60, "active": True}
+                {
+                    "day_of_week": d,
+                    "start_time": "08:00:00",
+                    "end_time": "15:00:00",
+                    "slot_duration_minutes": 60,
+                    "active": True,
+                }
                 for d in (1, 2, 3, 4, 5)
             ],
         )
@@ -592,13 +624,17 @@ async def test_handler_paso_dia_propone_fechas_concretas(monkeypatch) -> None:
     _mock_lily_lv_8a15()
     estado = _estado_base(nombre_papa="Ana", nivel=NivelEducativo.KINDER)
     now = datetime(2026, 6, 10, 15, 0, tzinfo=TZ_MONTERREY)  # miércoles 3 p.m.
-    result = await handle_appointment_intent("quiero agendar", estado, settings=_settings(), now=now)
+    result = await handle_appointment_intent(
+        "quiero agendar", estado, settings=_settings(), now=now
+    )
 
     msg = (result.mensaje_coleccion or "").lower()
     assert "tengo disponible" in msg
     assert "jueves 11" in msg and "viernes 12" in msg and "lunes 15" in msg
     assert estado.estado_capturado.opciones_dia_propuestas == [
-        "2026-06-11", "2026-06-12", "2026-06-15",
+        "2026-06-11",
+        "2026-06-12",
+        "2026-06-15",
     ]
 
 
@@ -610,7 +646,9 @@ async def test_handler_papa_elige_opcion_dia(monkeypatch) -> None:
     _mock_lily_lv_8a15()
     estado = _estado_base(nombre_papa="Ana", nivel=NivelEducativo.KINDER)
     estado.estado_capturado.opciones_dia_propuestas = [
-        "2026-06-11", "2026-06-12", "2026-06-15",
+        "2026-06-11",
+        "2026-06-12",
+        "2026-06-15",
     ]
     estado.estado_capturado.ultimo_campo_pedido = "dia"
     now = datetime(2026, 6, 10, 15, 0, tzinfo=TZ_MONTERREY)
@@ -635,7 +673,7 @@ async def test_handler_hoy_en_paso_dia_no_se_vuelve_hora(monkeypatch) -> None:
 
     assert estado.estado_capturado.cita_hora_slot is None  # la hora del LLM NO se tomó
     texto = (result.hint_para_prompt + (result.mensaje_coleccion or "")).lower()
-    assert "fuera" not in texto                  # NO "esa hora fuera de horario"
+    assert "fuera" not in texto  # NO "esa hora fuera de horario"
     assert "hora" in (result.mensaje_coleccion or "").lower()  # ahora sí pide la hora
 
 
@@ -709,9 +747,7 @@ async def test_campus_kinder_es_campus_1(monkeypatch) -> None:
 
     estado = _estado_base(nombre_papa="Ana", nivel=NivelEducativo.KINDER)
     now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)
-    result = await handle_appointment_intent(
-        "martes 10am", estado, settings=_settings(), now=now
-    )
+    result = await handle_appointment_intent("martes 10am", estado, settings=_settings(), now=now)
     assert result.campus_id == 1
     assert "Campus 1" in result.hint_para_prompt
 
@@ -744,9 +780,7 @@ async def test_campus_secundaria_es_campus_2(monkeypatch) -> None:
         ),
     )
     now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)
-    result = await handle_appointment_intent(
-        "martes 10am", estado, settings=_settings(), now=now
-    )
+    result = await handle_appointment_intent("martes 10am", estado, settings=_settings(), now=now)
     assert result.campus_id == 2
     assert "Campus 2" in result.hint_para_prompt
     assert "Blvd. V. Carranza 5064" in result.hint_para_prompt
@@ -780,9 +814,7 @@ async def test_campus_primaria_quinto_es_campus_1(monkeypatch) -> None:
         ),
     )
     now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)
-    result = await handle_appointment_intent(
-        "martes 10am", estado, settings=_settings(), now=now
-    )
+    result = await handle_appointment_intent("martes 10am", estado, settings=_settings(), now=now)
     assert result.campus_id == 1
 
 
@@ -815,9 +847,7 @@ async def test_campus_primaria_sexto_es_campus_2(monkeypatch) -> None:
         ),
     )
     now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)
-    result = await handle_appointment_intent(
-        "martes 10am", estado, settings=_settings(), now=now
-    )
+    result = await handle_appointment_intent("martes 10am", estado, settings=_settings(), now=now)
     assert result.campus_id == 2
     assert "Campus 2" in result.hint_para_prompt
     # Bloque C.2: dirección y Maps incluidos en el hint
@@ -899,9 +929,7 @@ async def test_campus_primaria_sin_grado_pide_grado(monkeypatch) -> None:
         ),
     )
     now = datetime(2026, 5, 20, tzinfo=TZ_MONTERREY)
-    result = await handle_appointment_intent(
-        "martes 10am", estado, settings=_settings(), now=now
-    )
+    result = await handle_appointment_intent("martes 10am", estado, settings=_settings(), now=now)
     assert any(a.startswith("missing_lead_data") for a in result.acciones)
     assert "grado escolar del hijo" in result.acciones[0]
     assert result.appointment_id is None
@@ -966,8 +994,11 @@ def _mock_disponibilidad_lun_vie_8_15() -> None:
             200,
             json=[
                 {
-                    "day_of_week": d, "start_time": "08:00:00", "end_time": "15:00:00",
-                    "slot_duration_minutes": 60, "active": True,
+                    "day_of_week": d,
+                    "start_time": "08:00:00",
+                    "end_time": "15:00:00",
+                    "slot_duration_minutes": 60,
+                    "active": True,
                 }
                 for d in (1, 2, 3, 4, 5)
             ],
@@ -989,7 +1020,9 @@ async def test_handler_hoy_lunes_9pm_no_ofrece_hoy(monkeypatch) -> None:
     _mock_extractor(monkeypatch, fecha="2026-06-08", hora=None, confidence=0.9)  # hoy lunes
 
     estado = EstadoConversacion(
-        session_id="telegram:111", canal=Canal.TELEGRAM, identificador="111",
+        session_id="telegram:111",
+        canal=Canal.TELEGRAM,
+        identificador="111",
         estado_capturado=EstadoCapturado(),
     )
     now = datetime(2026, 6, 8, 21, 0, tzinfo=TZ_MONTERREY)  # lunes 9pm
@@ -1015,9 +1048,14 @@ async def test_ensure_lead_actualiza_edad_y_nivel_al_reusar(monkeypatch) -> None
     from app.core.appointment_flow import _ensure_lead_para_cita
 
     existing = types.SimpleNamespace(
-        id=17, child_name="Emanuel", child_age=3, child_grade=None,
-        nivel="maternal", parent_name="Oscar Rodriguez",
-        parent_phone="+17866035862", parent_email="ing2oscar@gmail.com",
+        id=17,
+        child_name="Emanuel",
+        child_age=3,
+        child_grade=None,
+        nivel="maternal",
+        parent_name="Oscar Rodriguez",
+        parent_phone="+17866035862",
+        parent_email="ing2oscar@gmail.com",
     )
     captured: dict = {}
 
@@ -1032,7 +1070,9 @@ async def test_ensure_lead_actualiza_edad_y_nivel_al_reusar(monkeypatch) -> None
     monkeypatch.setattr("app.core.appointment_flow.update_lead", fake_update)
 
     estado = EstadoConversacion(
-        session_id="web:x", canal=Canal.WEB, identificador="x",
+        session_id="web:x",
+        canal=Canal.WEB,
+        identificador="x",
         estado_capturado=EstadoCapturado(
             nombre_papa="Oscar Rodriguez",
             email_papa="ing2oscar@gmail.com",
@@ -1047,8 +1087,8 @@ async def test_ensure_lead_actualiza_edad_y_nivel_al_reusar(monkeypatch) -> None
     lead_id = await _ensure_lead_para_cita(estado, settings=_settings())
     assert lead_id == 17
     assert captured.get("_id") == 17
-    assert captured.get("child_age") == 4          # 3 → 4
-    assert captured.get("nivel") == "kinder"       # maternal → kinder
+    assert captured.get("child_age") == 4  # 3 → 4
+    assert captured.get("nivel") == "kinder"  # maternal → kinder
     assert captured.get("child_grade") == "2° de Kinder"
 
 
@@ -1060,9 +1100,14 @@ async def test_ensure_lead_no_actualiza_si_no_cambia(monkeypatch) -> None:
     from app.core.appointment_flow import _ensure_lead_para_cita
 
     existing = types.SimpleNamespace(
-        id=17, child_name="Emanuel", child_age=4, child_grade="2° de Kinder",
-        nivel="kinder", parent_name="Oscar Rodriguez",
-        parent_phone="+17866035862", parent_email="ing2oscar@gmail.com",
+        id=17,
+        child_name="Emanuel",
+        child_age=4,
+        child_grade="2° de Kinder",
+        nivel="kinder",
+        parent_name="Oscar Rodriguez",
+        parent_phone="+17866035862",
+        parent_email="ing2oscar@gmail.com",
     )
     llamado = {"update": False}
 
@@ -1076,11 +1121,18 @@ async def test_ensure_lead_no_actualiza_si_no_cambia(monkeypatch) -> None:
     monkeypatch.setattr("app.core.appointment_flow.update_lead", fake_update)
 
     estado = EstadoConversacion(
-        session_id="web:x", canal=Canal.WEB, identificador="x",
+        session_id="web:x",
+        canal=Canal.WEB,
+        identificador="x",
         estado_capturado=EstadoCapturado(
-            nombre_papa="Oscar Rodriguez", email_papa="ing2oscar@gmail.com",
+            nombre_papa="Oscar Rodriguez",
+            email_papa="ing2oscar@gmail.com",
             telefono="+17866035862",
-            hijos=[HijoInfo(nombre="Emanuel", edad=4, nivel=NivelEducativo.KINDER, grado="2° de Kinder")],
+            hijos=[
+                HijoInfo(
+                    nombre="Emanuel", edad=4, nivel=NivelEducativo.KINDER, grado="2° de Kinder"
+                )
+            ],
         ),
     )
     await _ensure_lead_para_cita(estado, settings=_settings())
@@ -1096,20 +1148,20 @@ async def test_ensure_lead_no_actualiza_si_no_cambia(monkeypatch) -> None:
 @pytest.mark.parametrize(
     "edad,pref,cat,grado",
     [
-        (3, None, "maternal", None),       # 3 default → Maternal (Toddlers)
+        (3, None, "maternal", None),  # 3 default → Maternal (Toddlers)
         (3, "kinder", "kinder", "1° de Kinder"),  # papá dice kinder → K1
         (4, "kinder", "kinder", "2° de Kinder"),  # K2 = 4
-        (4, None, "kinder", "2° de Kinder"),      # 4 → Kinder 2 (no maternal a esa edad)
-        (5, None, "kinder", "3° de Kinder"),      # K3 = 5
+        (4, None, "kinder", "2° de Kinder"),  # 4 → Kinder 2 (no maternal a esa edad)
+        (5, None, "kinder", "3° de Kinder"),  # K3 = 5
         (6, None, "primaria", "1° de Primaria"),  # 72m
-        (1, None, "maternal", None),       # 12m → Babies (maternal, sin grado)
+        (1, None, "maternal", None),  # 12m → Babies (maternal, sin grado)
         # Primaria 4-6 + Secundaria (confirmado Lily 2026, numeración RELATIVA):
         (9, "primaria", "primaria", "4° de Primaria"),
         (10, "primaria", "primaria", "5° de Primaria"),
         (11, "primaria", "primaria", "6° de Primaria"),
         (12, "secundaria", "secundaria", "1° de Secundaria"),
         (13, "secundaria", "secundaria", "2° de Secundaria"),  # caso real Emma/Emanuel
-        (13, None, "secundaria", "2° de Secundaria"),          # sin preferencia, igual
+        (13, None, "secundaria", "2° de Secundaria"),  # sin preferencia, igual
         (14, "secundaria", "secundaria", "3° de Secundaria"),
     ],
 )
@@ -1145,7 +1197,9 @@ async def test_politica_a_grado_declarado_manda_sobre_edad() -> None:
     from app.core.state import EstadoCapturado, HijoInfo, NivelEducativo
 
     capt = EstadoCapturado(
-        hijos=[HijoInfo(nombre="Juan", edad=7, nivel=NivelEducativo.PRIMARIA, grado="1° de Primaria")]
+        hijos=[
+            HijoInfo(nombre="Juan", edad=7, nivel=NivelEducativo.PRIMARIA, grado="1° de Primaria")
+        ]
     )
     derivado = await _consolidar_y_derivar_hijo(capt)
     assert capt.hijos[0].grado == "1° de Primaria"  # declarado, NO 2°

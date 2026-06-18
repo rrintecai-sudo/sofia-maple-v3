@@ -199,6 +199,7 @@ _NIVELES_FALLBACK: tuple[tuple[str, int, int, list[str], str], ...] = (
     ("secundaria", 168, 180, ["3°"], "Tercero de Secundaria"),
 )
 
+
 async def derivar_nivel_grado_de_edad(
     edad_anos: int | None,
     *,

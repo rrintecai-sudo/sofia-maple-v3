@@ -58,8 +58,11 @@ class PrecioResult:
         """Frase CONVERSACIONAL con los datos REALES (sin etiqueta 'Concepto:')."""
         cole = self.colegiatura_mensual or Decimal("0")
         disp = {
-            "kinder": "Kinder", "maternal": "Maternal", "secundaria": "Secundaria",
-            "primaria_baja": "Primaria", "primaria_alta": "Primaria",
+            "kinder": "Kinder",
+            "maternal": "Maternal",
+            "secundaria": "Secundaria",
+            "primaria_baja": "Primaria",
+            "primaria_alta": "Primaria",
         }.get(self.nivel, self.nivel.replace("_", " ").title())
         frase = (
             f"La colegiatura de {disp} es de ${cole:,.0f} al mes "
