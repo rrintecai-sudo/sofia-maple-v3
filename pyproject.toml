@@ -62,6 +62,12 @@ select = [
 ignore = [
     "E501", # line length (handled by formatter)
     "B008", # function call in default arg (FastAPI Depends)
+    # Caracteres "ambiguos" (em-dash —, en-dash –): son INTENCIONALES en este
+    # código en español — el validador sin_guiones_largos y sus tests los DETECTAN
+    # a propósito, y los comentarios en español los usan por estilo. No son error.
+    "RUF001", # string contiene carácter ambiguo
+    "RUF002", # docstring contiene carácter ambiguo
+    "RUF003", # comentario contiene carácter ambiguo
 ]
 
 [tool.ruff.format]

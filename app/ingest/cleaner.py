@@ -34,10 +34,10 @@ def clean_text(text: str) -> str:
     text = re.sub(r"[\n\r\t]+", " ", text)
 
     # Comillas tipográficas y angulares → espacio
-    text = re.sub(r'[""«»\'‘’“”]', " ", text)  # noqa: RUF001
+    text = re.sub(r'[""«»\'‘’“”]', " ", text)
 
     # Dashes largos (em, en) → guión
-    text = re.sub(r"[–—]", "-", text)  # noqa: RUF001
+    text = re.sub(r"[–—]", "-", text)
 
     # Bullets → guión
     text = re.sub(r"[•·]", "-", text)

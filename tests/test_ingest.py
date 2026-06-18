@@ -21,7 +21,7 @@ def test_clean_text_normaliza_saltos_de_linea() -> None:
 
 
 def test_clean_text_quita_comillas_tipograficas() -> None:
-    s = "“hola” ‘mundo’ «adios»"  # noqa: RUF001
+    s = "“hola” ‘mundo’ «adios»"
     cleaned = clean_text(s)
     assert "“" not in cleaned
     assert "”" not in cleaned
@@ -29,7 +29,7 @@ def test_clean_text_quita_comillas_tipograficas() -> None:
 
 
 def test_clean_text_reemplaza_dashes_largos() -> None:
-    s = "uno—dos–tres"  # noqa: RUF001
+    s = "uno—dos–tres"
     cleaned = clean_text(s)
     assert "—" not in cleaned
     assert "-" in cleaned
