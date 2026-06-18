@@ -13,9 +13,40 @@ El contenido (BEAR + escenas por nivel) es el MISMO de prompts/journey/educacion
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 
 from app.core.state import EstadoCapturado
+
+# Base de conocimiento oficial — fuente del contenido EXACTO por grado/nivel.
+_KB_PATH = Path(__file__).resolve().parent.parent / "kb" / "sofia_kb_oficial.md"
+
+
+@lru_cache(maxsize=1)
+def _kb_contenido() -> tuple[dict[str, str], dict[str, str]]:
+    """Parsea `sofia_kb_oficial.md` → (por_grado, por_nivel) con el texto VERBATIM del
+    documento. Esto permite INYECTAR el contenido exacto del grado (no pedirle a Haiku
+    que lo busque en todo el documento, donde mezclaba lo general con lo específico)."""
+    por_grado: dict[str, str] = {}
+    por_nivel: dict[str, str] = {}
+    if not _KB_PATH.exists():
+        return por_grado, por_nivel
+    text = _KB_PATH.read_text(encoding="utf-8")
+    # DETALLE POR GRADO: "**1° de Kinder.** <texto>" hasta el próximo **/##.
+    for m in re.finditer(
+        r"\*\*(\d°\s+de\s+\w+)\.\*\*\s*(.+?)(?=\n\s*\*\*|\n#{2,}|\Z)", text, re.DOTALL
+    ):
+        por_grado[m.group(1).strip().lower()] = " ".join(m.group(2).split())
+    # DETALLE POR NIVEL: "**Maternal:** <texto>".
+    for m in re.finditer(
+        r"\*\*(Maternal|Kinder|Primaria|Secundaria):\*\*\s*(.+?)(?=\n\s*\*\*|\n#{2,}|\Z)",
+        text,
+        re.DOTALL,
+    ):
+        por_nivel[m.group(1).strip().lower()] = " ".join(m.group(2).split())
+    return por_grado, por_nivel
 
 # Continuación del papá (sin pregunta nueva) — el contador incrementa con estos.
 # (El caller ya descartó preguntas de info nueva antes de llegar aquí.)
@@ -213,18 +244,38 @@ def construir_contenido_grado(
     que Haiku ya ve.
     """
     display = _display_grado(nivel, grado)
+    por_grado, por_nivel = _kb_contenido()
+    # Texto EXACTO del grado (preferido) o del nivel (fallback) — verbatim del documento.
+    texto = por_grado.get((grado or "").lower()) or por_nivel.get(nivel.lower(), "")
+
     instr_dif = (
-        f" Abre con el diferenciador de Maple (sin nombrar 'BEAR'): {_DIFERENCIADOR}"
+        f" Antes del contenido del grado, abre con el diferenciador GENERAL de Maple "
+        f"(sin nombrar 'BEAR'), presentado CLARAMENTE como la filosofía del COLEGIO (no "
+        f"como algo de este grado): {_DIFERENCIADOR}"
         if incluir_diferenciador
         else ""
     )
+
+    if texto:
+        # INYECTAMOS el contenido exacto del grado y prohibimos mezclar lo general.
+        contenido = (
+            f' Este es el contenido OFICIAL y EXACTO de {display} (del documento). '
+            f'Descríbelo SOLO a partir de esto, sin agregar características GENERALES del '
+            f'colegio (como "alto nivel académico", el modelo educativo, valores '
+            f'generales) — eso NO es específico de {display} y mezclarlo es un error '
+            f'grave en educación. Contenido de {display}:\n"{texto}"'
+        )
+    else:
+        contenido = (
+            f' Toma el contenido de la sección de {display} en la base de conocimiento; '
+            f'NO agregues características generales del colegio que no sean de este grado.'
+        )
+
     hint = (
-        f"[CONTENIDO {display} — el papá quiere saber de {display}. Da 1 idea de valor "
-        f"sobre {display}, BREVE (2-4 frases), con una escena observable (lo que el papá "
-        f"vería en su hijo), TOMÁNDOLA de la BASE DE CONOCIMIENTO OFICIAL de Maple "
-        f"(sección DETALLE POR NIVEL / DETALLE POR GRADO de {display}). Apégate a ese "
-        f"contenido; no inventes datos que no estén ahí.{instr_dif} Toca un aspecto "
-        f"DISTINTO a lo que ya dijiste antes en este chat — no repitas ideas. Sin "
+        f"[CONTENIDO {display} — el papá quiere saber de {display}.{contenido} "
+        f"Redáctalo cálido y BREVE (2-4 frases), con UNA escena observable (lo que el "
+        f"papá vería en su hijo), con tus palabras pero SIN salirte de ese contenido ni "
+        f"inventar.{instr_dif} Toca un aspecto DISTINTO a lo ya dicho — no repitas. Sin "
         f"precios.{_kinder_regla(nivel)}{_maternal_regla(nivel)}{_TONO}]"
     )
     return hint, []
