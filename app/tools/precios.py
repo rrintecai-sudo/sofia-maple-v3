@@ -67,6 +67,12 @@ class PrecioResult:
         )
         if self.inscripcion is not None:
             frase += f", más una inscripción de ${self.inscripcion:,.0f}"
+        # Gaby/Lili (jun 2026): mencionar SIEMPRE que hay otros gastos iniciales —
+        # sin montos (eso quedó fuera por feedback de mayo), solo los conceptos.
+        frase += (
+            ". Además manejamos algunas cuotas iniciales como seguro escolar, recursos "
+            "educativos y otras que te explicamos a detalle cuando vengas a conocernos"
+        )
         return frase + "."
 
 
