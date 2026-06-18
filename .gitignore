@@ -63,3 +63,7 @@ data/dumps/
 # Cache de prompts compilados / KB local
 .prompts-cache/
 .kb-cache/
+
+# Secretos locales (passwords de DB, etc.)
+*.local
+.db_pass.local

@@ -145,6 +145,19 @@ _REGLA_KINDER = (
     " En Kinder NUNCA digas 'proyectos', 'PBL' ni 'Challenge Based Learning' — usa "
     "'aprendizaje activo' / 'juego intencional'."
 )
+# Maternal: la KB exige orientar por edad a la modalidad correcta (NO lista fría).
+_REGLA_MATERNAL = (
+    " REGLA MATERNAL (de la KB): orienta por EDAD a la modalidad que le toca — "
+    "Cubs (3-11 meses), Baby (12-18 meses), Infants (18 meses-2 años), Toddlers "
+    "(2 años en adelante). Si ya sabes la edad del bebé, nómbrale SU modalidad con su "
+    "rango ('para 1 año es nuestro grupo Baby, de 12 a 18 meses'); si NO sabes la edad, "
+    "menciona que hay modalidades por edad y pregúntale la edad del bebé. NUNCA vuelques "
+    "las 4 como lista fría."
+)
+
+
+def _maternal_regla(nivel: str) -> str:
+    return _REGLA_MATERNAL if nivel == "maternal" else ""
 # El CÓDIGO cierra cada etapa con su pregunta (CTA). Haiku NO pregunta nada → así el
 # empuje es determinístico y no se cuela el descubrimiento. PERO tiene LIBERTAD para
 # redactar cálido y natural sobre los puntos de la base (no recitar, no omitir).
@@ -184,23 +197,32 @@ def construir_contenido_grado(
     n: int = 2,
     incluir_diferenciador: bool = False,
 ) -> tuple[str | None, list[str]]:
-    """Devuelve (hint, beats_usados): hint con el diferenciador (si aplica, SIEMPRE) +
-    1-2 beats NO usados; Haiku lo redacta breve. (None, []) si no quedan beats ni hay
-    diferenciador (caller reduce con gracia)."""
-    beats = _elegir_beats(grado, nivel, usados, n)
-    partes: list[str] = []
-    if incluir_diferenciador:
-        partes.append(_DIFERENCIADOR)  # el diferenciador SIEMPRE va en el enganche
-    partes.extend(beats)
-    if not partes:
-        return None, []
+    """CLAUDE-CONDUCE (funnel ← KB): el funnel decide CUÁNDO dar valor y de QUÉ
+    nivel/grado; el CONTENIDO lo toma Haiku de la BASE DE CONOCIMIENTO OFICIAL (que
+    vive en su system prompt), no de texto congelado. Así una sola fuente de verdad:
+    si Lili/Gaby actualizan la KB, el contenido de venta se actualiza solo.
+
+    Devuelve (hint, []): el hint instruye, no pega prosa. El segundo elemento se
+    mantiene por compatibilidad con el caller (ya no hay beats discretos que marcar).
+    La frescura la sostiene la instrucción 'toca un aspecto distinto' + el historial
+    que Haiku ya ve.
+    """
     display = _display_grado(nivel, grado)
-    hint = (
-        f"[CONTENIDO {display} — el papá quiere saber de {display}. Redáctalo cálido y "
-        f"BREVE (máx 1-2 ideas, 2-4 frases) con TUS palabras: {' '.join(partes)} Sin "
-        f"precios.{_kinder_regla(nivel)}{_TONO}]"
+    instr_dif = (
+        f" Abre con el diferenciador de Maple (sin nombrar 'BEAR'): {_DIFERENCIADOR}"
+        if incluir_diferenciador
+        else ""
     )
-    return hint, beats
+    hint = (
+        f"[CONTENIDO {display} — el papá quiere saber de {display}. Da 1 idea de valor "
+        f"sobre {display}, BREVE (2-4 frases), con una escena observable (lo que el papá "
+        f"vería en su hijo), TOMÁNDOLA de la BASE DE CONOCIMIENTO OFICIAL de Maple "
+        f"(sección DETALLE POR NIVEL / DETALLE POR GRADO de {display}). Apégate a ese "
+        f"contenido; no inventes datos que no estén ahí.{instr_dif} Toca un aspecto "
+        f"DISTINTO a lo que ya dijiste antes en este chat — no repitas ideas. Sin "
+        f"precios.{_kinder_regla(nivel)}{_maternal_regla(nivel)}{_TONO}]"
+    )
+    return hint, []
 
 
 def _cta_etapa1(nivel: str, grado: str | None = None) -> str:

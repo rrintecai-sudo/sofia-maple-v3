@@ -44,8 +44,39 @@ def _hoy_humano(now: datetime | None = None) -> str:
 
 PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 
+# Base de conocimiento OFICIAL (filtrada por Gaby/Lili) — fuente de verdad de
+# COMPORTAMIENTO y CONOCIMIENTO. Vive fuera de prompts/ (en app/kb/).
+KB_OFICIAL_PATH = Path(__file__).resolve().parent.parent / "kb" / "sofia_kb_oficial.md"
+
 # Archivos cacheables que se cargan SIEMPRE
 _ALWAYS_FILES = ("identity.md", "rules.md", "vocabulario.md")
+
+_KB_OFICIAL_HEADER = (
+    "# BASE DE CONOCIMIENTO OFICIAL DE MAPLE COLLÈGE — FUENTE DE VERDAD\n\n"
+    "Este documento fue filtrado y aprobado por el colegio (Gaby y Lili). Es tu fuente "
+    "de verdad de CONOCIMIENTO y COMPORTAMIENTO: tono, escena observable, detalle por "
+    "nivel y grado, manejo de objeciones, prohibiciones. **Síguelo al pie de la letra y "
+    "apégate a su contenido — no lo parafrasees a tu manera ni inventes información que "
+    "no esté aquí.** Para DATOS duros (costos, horarios, estancias) usa SIEMPRE las "
+    "cifras que el sistema te inyecta en el turno, nunca las de este documento.\n\n"
+    "**REGLA ANTI-INVENTO (crítica):** para cualquier servicio o detalle que NO esté "
+    "escrito en este documento ni en los datos del sistema (transporte/rutas, comedor/"
+    "menús, uniformes, alberca, horario flexible, actividades específicas, etc.) NO "
+    "sabes la respuesta: por lo tanto **NO digas 'sí' NI 'no'**, no lo afirmes ni lo "
+    "niegues ni lo describas. Di EXACTAMENTE algo como: 'Es buena pregunta — ese dato "
+    "lo confirma el equipo. En la visita lo resuelves con certeza.' Inventar un 'sí' "
+    "(ej. 'sí tenemos transporte') es una falta grave. Ante la duda, defiere.\n\n"
+    "---\n\n"
+)
+
+
+@lru_cache(maxsize=1)
+def load_kb_oficial() -> str:
+    """Carga la base de conocimiento oficial. Cacheada en memoria."""
+    if not KB_OFICIAL_PATH.exists():
+        log.warning("KB oficial no encontrada en %s", KB_OFICIAL_PATH)
+        return ""
+    return KB_OFICIAL_PATH.read_text(encoding="utf-8")
 
 # Mapeo fase → archivo journey
 _JOURNEY_FILES: dict[FaseJourney, str] = {
@@ -211,9 +242,20 @@ def build_system_blocks(estado: EstadoConversacion) -> list[dict[str, Any]]:
     cacheable = bool(settings.enable_prompt_caching)
     blocks: list[dict[str, Any]] = []
 
-    # 1-3. Always-loaded files (cacheables)
-    for fname in _ALWAYS_FILES:
-        blocks.append(_text_block(load_prompt_file(fname), cacheable=cacheable))
+    # 1-2. identity + rules (cacheables)
+    blocks.append(_text_block(load_prompt_file("identity.md"), cacheable=cacheable))
+    blocks.append(_text_block(load_prompt_file("rules.md"), cacheable=cacheable))
+
+    # 3. BASE DE CONOCIMIENTO OFICIAL (cacheable — fuente de verdad de Sofía).
+    # Es lo que cierra el "no apego": Sofía responde leyendo el documento oficial,
+    # no la paráfrasis congelada de los _BEATS.
+    kb_text = load_kb_oficial()
+    if kb_text:
+        blocks.append(_text_block(_KB_OFICIAL_HEADER + kb_text, cacheable=cacheable))
+
+    # vocabulario — ahora SIN cache. El KB oficial ya cubre tono/argot/prohibiciones,
+    # y Anthropic permite máx 4 bloques cacheables (identity, rules, KB, journey).
+    blocks.append(_text_block(load_prompt_file("vocabulario.md"), cacheable=False))
 
     # 4. Journey de la fase activa (cacheable — 4to y último bloque con cache)
     journey_file = _JOURNEY_FILES.get(estado.fase_journey)

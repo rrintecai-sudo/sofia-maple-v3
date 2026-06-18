@@ -522,6 +522,63 @@ def mensaje_resuelve_hora(mensaje: str, campo_pedido_prev: str | None) -> bool:
     return False
 
 
+async def elegir_dia_de_opciones_llm(
+    mensaje: str, opciones_iso: list[str], now: datetime | None = None
+) -> str | None:
+    """CLAUDE-CONDUCE: cuando el resolver rígido no eligió un día pero YA ofrecimos
+    fechas concretas, el LLM mapea una respuesta vaga ('esta semana', 'la próxima',
+    'cualquiera', 'la más pronto', 'tú dime') a UNA de las opciones ofrecidas.
+
+    El código sigue siendo dueño de QUÉ fechas existen (vienen en `opciones_iso`,
+    calculadas desde lily_availability); el LLM solo hace el JUICIO de cuál encaja.
+    Devuelve un ISO 'YYYY-MM-DD' que SIEMPRE pertenece a `opciones_iso`, o None.
+    """
+    if not opciones_iso:
+        return None
+    openai = get_openai()
+    if not openai.is_configured():
+        return None
+    if now is None:
+        now = datetime.now(TZ_MONTERREY)
+    lineas: list[str] = []
+    for iso in opciones_iso:
+        try:
+            d = datetime.fromisoformat(iso)
+        except ValueError:
+            continue
+        lineas.append(f"- {iso} ({_DIAS_SEMANA_ES[d.weekday()]} {d.day})")
+    if not lineas:
+        return None
+    instructions = (
+        f"Hoy es {now.strftime('%Y-%m-%d')} ({_DIAS_SEMANA_ES[now.weekday()]}). "
+        "Un papá respondió a '¿qué día te queda mejor para la visita?'. Le ofrecimos "
+        "EXACTAMENTE estas fechas disponibles:\n" + "\n".join(lineas) + "\n\n"
+        "Devuelve SOLO un JSON {\"fecha\":\"YYYY-MM-DD\"} eligiendo la fecha de la lista "
+        "que mejor corresponde a su respuesta:\n"
+        "- 'esta semana' -> la primera fecha de la lista en la semana actual.\n"
+        "- 'la proxima'/'la que viene' -> la primera de la semana siguiente.\n"
+        "- 'cualquiera'/'la mas pronto'/'tu dime'/'el que sea' -> la primera de la lista.\n"
+        "- Si su respuesta NO elige dia (pregunta de info, otro tema) -> {\"fecha\":null}.\n"
+        "La fecha DEBE ser una de la lista, copiada igual. Responde SOLO el JSON."
+    )
+    try:
+        raw = await openai.classify(text=mensaje, instructions=instructions)
+    except Exception as exc:  # nunca rompe el turno
+        log.warning("elegir_dia_de_opciones_llm error", extra={"err": str(exc)})
+        return None
+    cleaned = (
+        raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    )
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError:
+        return None
+    fecha = data.get("fecha")
+    if isinstance(fecha, str) and fecha.strip() in opciones_iso:
+        return fecha.strip()
+    return None
+
+
 def _build_system_prompt(now: datetime) -> str:
     fecha_actual = now.strftime("%Y-%m-%d")
     dia_semana = _DIAS_SEMANA_ES[now.weekday()]

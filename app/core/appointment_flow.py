@@ -27,6 +27,7 @@ from app.config import Settings, get_settings
 from app.core.appointment_extractor import (
     TZ_MONTERREY,
     AppointmentDateTime,
+    elegir_dia_de_opciones_llm,
     elegir_opcion_dia,
     es_confirmacion,
     extract_datetime,
@@ -489,6 +490,21 @@ async def handle_appointment_intent(
         or extraer_fecha_relativa(mensaje, now)
         or extraer_proximo_dia_semana(mensaje, now)
     )
+    # CLAUDE-CONDUCE (demo): el resolver rígido no entiende respuestas vagas como
+    # "esta semana"/"cualquiera"/"la más pronto" → se quedaba en loop re-preguntando.
+    # Si YA ofrecimos fechas concretas y el papá está en el paso del día, dejamos que
+    # el LLM elija UNA de esas fechas (el código manda QUÉ fechas existen; Claude solo
+    # mapea la intención). Reemplaza decenas de regex frágiles por un juicio.
+    if not fecha_det and capt.opciones_dia_propuestas and campo_pedido_prev == "dia":
+        elegida = await elegir_dia_de_opciones_llm(
+            mensaje, capt.opciones_dia_propuestas, now=now
+        )
+        if elegida:
+            fecha_det = elegida
+            log.info(
+                "dia_elegido_por_llm",
+                extra={"fecha": elegida, "mensaje": mensaje[:60]},
+            )
     if fecha_det:
         capt.cita_fecha_slot = fecha_det
         capt.opciones_dia_propuestas = []  # ya eligió → limpia las opciones

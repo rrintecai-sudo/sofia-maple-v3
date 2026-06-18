@@ -53,6 +53,22 @@ def limpiar_marcadores_sueltos(texto: str) -> str:
     return re.sub(r"[ \t]{2,}", " ", txt).strip()
 
 
+def limpiar_comillas_huerfanas(texto: str) -> str:
+    """Quita comillas dobles huérfanas y el residuo que deja recortar una oración a
+    media cita (artefacto tipo '". ".'). Conserva las citas BIEN formadas ('"texto"')."""
+    out: list[str] = []
+    for linea in (texto or "").split("\n"):
+        if linea.count('"') % 2 == 1:  # comilla sin par → quita la última huérfana
+            idx = linea.rfind('"')
+            linea = linea[:idx] + linea[idx + 1:]
+        out.append(linea)
+    txt = "\n".join(out)
+    txt = re.sub(r'"\s*\.\s*"', '.', txt)   # residuo '". "' entre cortes
+    txt = re.sub(r'\.\s+\.', '.', txt)        # '. .' que queda tras quitar la comilla
+    txt = re.sub(r'[ \t]{2,}', ' ', txt)
+    return txt.strip()
+
+
 def limpiar_listas_rotas(texto: str) -> str:
     """Quita marcadores de lista VACÍOS que Haiku a veces deja ('1.', '2.', '- ' sin
     contenido) — la lista rota '1. 2. 3.' no debe llegar al usuario."""
@@ -138,4 +154,5 @@ def sanear_texto_libre_haiku(
     paso1 = sanear_frases_prohibidas(texto)
     paso2 = limitar_preguntas(paso1, max_preguntas)
     paso3 = limpiar_listas_rotas(paso2)
-    return limpiar_marcadores_sueltos(paso3)
+    paso4 = limpiar_marcadores_sueltos(paso3)
+    return limpiar_comillas_huerfanas(paso4)

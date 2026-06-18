@@ -182,6 +182,26 @@ def _es_interrogativo(mensaje: str) -> bool:
     return bool(_INTERROGATIVO_RE.search((mensaje or "").strip()))
 
 
+_NIVELES_KW_RE = re.compile(
+    r"\b(maternal|kinder|primaria|secundaria|prepa|preparatoria)\b", re.IGNORECASE
+)
+
+
+def _menciona_multiples_niveles(mensaje: str, capt: Any) -> bool:
+    """True si el papá menciona 2+ niveles DISTINTOS EN ESTE MENSAJE → señal de 'dos
+    hijos en niveles distintos': el funnel se hace a un lado y Haiku corre el protocolo
+    de la KB (uno a la vez, pregunta con cuál empezar).
+
+    Se evalúa SOLO sobre el mensaje (no sobre el estado): así, cuando el papá YA eligió
+    con cuál empezar ('empecemos por kinder'), el mensaje trae un solo nivel y el funnel
+    arranca normal — no se queda 'pegado' por tener 2 hijos guardados."""
+    encontrados = {m.lower() for m in _NIVELES_KW_RE.findall(mensaje or "")}
+    if {"prepa", "preparatoria"} & encontrados:
+        encontrados -= {"prepa", "preparatoria"}
+        encontrados.add("prepa")
+    return len(encontrados) >= 2
+
+
 _DEFER_LILI = "Ese dato te lo confirma Miss Lili en la cita 😊"
 
 # Línea fija de cierre para turnos de info (code-emitida, corta y cálida). Una sola
@@ -543,6 +563,17 @@ async def procesar_turno(
     # no empuja); continuación lo incrementa; al umbral se ordena el empuje; si el papá
     # CONTINÚA tras el empuje, acepta → entra al agendado existente.
     nivel_en_msg = nivel_buscado_de_mensaje(mensaje)
+    # DOS HIJOS / MULTI-NIVEL (protocolo de la KB): si el papá menciona 2+ niveles
+    # distintos (o ya hay 2+ hijos con niveles distintos), el funnel se HACE A UN LADO
+    # → Haiku corre el protocolo del documento (uno a la vez, pregunta con cuál empezar)
+    # en vez de meterse de cabeza a un solo nivel.
+    multi_nivel = _menciona_multiples_niveles(mensaje, capt)
+    if multi_nivel:
+        nivel_en_msg = None
+        log.info(
+            "multi_nivel → funnel a un lado (protocolo dos hijos)",
+            extra={"session_id": session_id},
+        )
     pide_info_nueva = (
         intent_result.intent in _DATA_INTENTS
         or bool(detectar_consulta_oferta(mensaje))
