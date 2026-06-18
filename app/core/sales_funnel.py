@@ -165,6 +165,11 @@ _TONO = (
     " No abras con 'Claro' ni 'Perfecto', no nombres 'BEAR' ni etiquetas tipo "
     "'Concepto: descripción'. MÁXIMO 2-4 frases, cálidas y naturales — breve. SIN "
     "NINGUNA pregunta (el sistema agrega la de cierre). NO pidas edad/grado."
+    # 'alto nivel académico' es término general, NO contenido del grado. La KB: "no lo
+    # coloques como bandera de venta". En grados chicos suena a exigencia/presión.
+    " NO uses la frase 'alto nivel académico' (ni 'nivel académico') en este contenido "
+    "de valor — enfócate en lo concreto del grado (comprensión, autonomía, juego, escena "
+    "observable). Esa frase solo va si el papá pregunta explícito por el nivel académico."
 )
 
 
