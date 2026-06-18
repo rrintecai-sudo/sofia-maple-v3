@@ -58,6 +58,14 @@ async def _send_via_resend(
                 headers={
                     "Authorization": f"Bearer {settings.resend_api_key}",
                     "Content-Type": "application/json",
+                    # Cloudflare (frente a Resend) bloquea el User-Agent por defecto de
+                    # httpx con error 1010 → el correo se rechazaba en silencio. Un UA de
+                    # navegador pasa el filtro de integridad. (Bug real: sin esto NO se
+                    # envía ningún correo, ni en prod.)
+                    "User-Agent": (
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+                    ),
                 },
                 json=cuerpo,
             )
