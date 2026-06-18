@@ -805,8 +805,9 @@ async def test_horario_extendido_solo_estancias_no_escolar() -> None:
 
 
 def test_funnel_usa_contenido_por_grado() -> None:
-    """Bugs 5/6: '2° de Kinder' → el hint trae el contenido del GRADO (rutinas)."""
-    from app.core.sales_funnel import decidir_funnel
+    """Bugs 5/6 (refactor verbatim): '2° de Kinder' → el hint inyecta el texto EXACTO
+    del grado tomado del KB oficial (no beats congelados)."""
+    from app.core.sales_funnel import _kb_contenido, decidir_funnel
     from app.core.state import EstadoCapturado, HijoInfo, NivelEducativo
 
     capt = EstadoCapturado(
@@ -817,11 +818,11 @@ def test_funnel_usa_contenido_por_grado() -> None:
         capt, es_continuacion=False, nivel_en_msg="kinder",
         pide_info_nueva=False, en_agendado=False, umbral=2,
     )
-    from app.core.sales_funnel import _beats_de
     assert "2° de Kinder" in d.hint
-    # El hint trae al menos un beat real del grado (no genérico).
-    beats_2k = _beats_de("2° de Kinder", "kinder")
-    assert any(b in d.hint for b in beats_2k)
+    # El hint trae el texto VERBATIM del grado desde el KB oficial (no genérico).
+    por_grado, _ = _kb_contenido()
+    texto_2k = por_grado.get("2° de kinder", "")
+    assert texto_2k and texto_2k in d.hint
 
 
 def _conv_agendando_secundaria():
@@ -998,14 +999,18 @@ def test_segundo_turno_no_repite_beat() -> None:
     assert not (set(usados) & set(beats_c)), "pausa de contenido repitió beat"
 
 
-def test_beats_agotados_degrada_con_gracia() -> None:
-    """Ajuste 2 — CONDICIÓN 3: cuando se agotan los beats, NO hay error ni mensaje
-    vacío — hint_contenido devuelve (None, [])."""
-    from app.core.sales_funnel import _beats_de, hint_contenido
+def test_contenido_grado_siempre_inyecta_verbatim() -> None:
+    """Refactor verbatim: el contenido por grado ya NO depende de beats discretos —
+    hint_contenido SIEMPRE inyecta el texto EXACTO del grado desde el KB (no degrada a
+    None ni a mensaje vacío), aun pasando un `usados` lleno. El segundo elemento queda
+    [] por compatibilidad con el caller."""
+    from app.core.sales_funnel import _kb_contenido, hint_contenido
 
-    todos = _beats_de("1° de Secundaria", "secundaria")
-    hint, beats = hint_contenido("secundaria", "1° de Secundaria", list(todos))
-    assert hint is None and beats == []
+    hint, beats = hint_contenido("secundaria", "1° de Secundaria", ["lo que sea"])
+    por_grado, _ = _kb_contenido()
+    texto = por_grado.get("1° de secundaria", "")
+    assert texto and texto in hint
+    assert beats == []
 
 
 def test_beats_facetas_distintas_sin_cruce_grado_nivel() -> None:

@@ -63,27 +63,32 @@ def test_load_nonexistent_raises() -> None:
 
 
 def test_build_blocks_bienvenida() -> None:
-    """Estado inicial → identity + rules + vocabulario + bienvenida + dynamic."""
+    """Estado inicial → identity + rules + KB oficial + vocabulario + bienvenida + dynamic."""
     estado = EstadoConversacion.nueva("web:test1")
     blocks = build_system_blocks(estado)
-    # 3 always + 1 journey + 1 dynamic = 5 bloques
-    assert len(blocks) == 5
+    # 2 always + KB oficial + vocabulario + 1 journey + 1 dynamic = 6 bloques
+    assert len(blocks) == 6
     assert all(b["type"] == "text" for b in blocks)
-    # primeros 4 son cacheables (default enable_prompt_caching=True)
-    for b in blocks[:4]:
-        assert b.get("cache_control") == {"type": "ephemeral"}
+    # Anthropic permite máx 4 bloques cacheables: identity, rules, KB y journey.
+    # vocabulario (idx 3) y el dynamic (último) van SIN cache.
+    cacheables = [
+        i for i, b in enumerate(blocks)
+        if b.get("cache_control") == {"type": "ephemeral"}
+    ]
+    assert cacheables == [0, 1, 2, 4]
     # El último NO cacheable
     assert "cache_control" not in blocks[-1]
 
 
 def test_build_blocks_includes_journey_for_phase() -> None:
-    """Fase descubrimiento → carga journey/descubrimiento.md."""
+    """Fase descubrimiento → carga journey/descubrimiento.md (robusto a la posición)."""
     estado = EstadoConversacion.nueva("web:test2")
     estado.fase_journey = FaseJourney.DESCUBRIMIENTO
     blocks = build_system_blocks(estado)
-    journey_text = blocks[3]["text"]
-    assert "DESCUBRIMIENTO" in journey_text
-    assert "ALIANZA ESCUELA-FAMILIA" in journey_text
+    textos = [b["text"] for b in blocks]
+    assert any(
+        "DESCUBRIMIENTO" in t and "ALIANZA ESCUELA-FAMILIA" in t for t in textos
+    )
 
 
 def test_build_blocks_agendado_includes_post_agendado() -> None:
@@ -222,13 +227,14 @@ def test_frases_usadas_aparece_en_dynamic() -> None:
 
 
 def test_estimate_total_tokens_reasonable() -> None:
-    """Total de tokens del prompt debería estar ~5000-8000 (vs ~40000 antiguo)."""
+    """Total de tokens del prompt. Desde que el KB oficial (~56KB) es un bloque del
+    prompt (fuente de verdad de Sofía), el total ronda ~20-24k. Banda amplia para
+    detectar una regresión grande sin ser flaky."""
     estado = EstadoConversacion.nueva("web:size")
     estado.fase_journey = FaseJourney.DESCUBRIMIENTO
     blocks = build_system_blocks(estado)
     total = estimate_total_tokens(blocks)
-    # Banda amplia para no ser flaky pero detectar regresión grande
-    assert 3000 < total < 12000, f"Token estimate fuera de banda: {total}"
+    assert 15000 < total < 32000, f"Token estimate fuera de banda: {total}"
 
 
 def test_caching_can_be_disabled(monkeypatch):
