@@ -53,6 +53,18 @@ def limpiar_marcadores_sueltos(texto: str) -> str:
     return re.sub(r"[ \t]{2,}", " ", txt).strip()
 
 
+_ENFASIS_ALTO_NIVEL_RE = re.compile(
+    r"\*{1,2}\s*(alto nivel(?:\s+acad[ée]mico)?)\s*\*{1,2}", re.IGNORECASE
+)
+
+
+def sanear_enfasis_prohibido(texto: str) -> str:
+    """KB (regla 17): 'alto nivel académico' NUNCA en negritas ni con énfasis — no es
+    una bandera de venta. Quita el markdown de énfasis (** o *) alrededor de la frase,
+    conservando el texto. ENFORZAR, no solo pedir (Haiku la pone en negritas igual)."""
+    return _ENFASIS_ALTO_NIVEL_RE.sub(r"\1", texto or "")
+
+
 def limpiar_comillas_huerfanas(texto: str) -> str:
     """Quita comillas dobles huérfanas y el residuo que deja recortar una oración a
     media cita (artefacto tipo '". ".'). Conserva las citas BIEN formadas ('"texto"')."""
@@ -155,4 +167,5 @@ def sanear_texto_libre_haiku(
     paso2 = limitar_preguntas(paso1, max_preguntas)
     paso3 = limpiar_listas_rotas(paso2)
     paso4 = limpiar_marcadores_sueltos(paso3)
-    return limpiar_comillas_huerfanas(paso4)
+    paso5 = limpiar_comillas_huerfanas(paso4)
+    return sanear_enfasis_prohibido(paso5)

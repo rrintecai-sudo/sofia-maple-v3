@@ -244,8 +244,9 @@ _RESPUESTA_PERSONA_ALT = (
 )
 
 # Re-oferta de la visita tras responder contenido en la etapa de VALOR (aún no agendado).
+# 'conocer el colegio' (no 'conocerlo', que era ambiguo: ¿el niño o el colegio?).
 _REOFERTA_VALOR = (
-    "¿Te animas a conocerlo en una visita? Puede ser esta semana o la siguiente 😊"
+    "¿Te animas a conocer el colegio en una visita? Puede ser esta semana o la siguiente 😊"
 )
 
 
