@@ -558,6 +558,20 @@ async def procesar_turno(
             capt.pendiente_grado_horario = False
             grado_horario_resuelto = True
 
+    # GRADO PARA EL FUNNEL: si el funnel pidió el grado el turno anterior, este turno un
+    # grado SUELTO ("3", "tercero", "1° de primaria") lo captura → contenido específico.
+    # (La EDAD de maternal la captura la extracción normal; aquí solo el grado de K/P/S.)
+    if capt.pendiente_grado_funnel:
+        grado_f = extraer_grado_suelto(mensaje, capt.nivel_buscado_actual)
+        if grado_f:
+            if capt.hijos:
+                capt.hijos[0].grado = grado_f
+            else:
+                from app.core.state import HijoInfo
+
+                capt.hijos = [HijoInfo(nivel=capt.nivel_buscado_actual, grado=grado_f)]
+        capt.pendiente_grado_funnel = False
+
     # FLUJO DE VENTA (3 etapas) — el CÓDIGO decide etapa, contador y MOMENTO del empuje;
     # Haiku solo redacta el hint. pide_info_nueva PAUSA el contador (responde el dato y
     # no empuja); continuación lo incrementa; al umbral se ordena el empuje; si el papá
@@ -618,6 +632,9 @@ async def procesar_turno(
         capt.nivel_buscado_actual = nivel_en_msg
     capt.stage_venta = funnel.stage
     capt.turnos_valor = funnel.turnos_valor
+    # El funnel pidió el grado/edad → marcar para capturar el grado SUELTO el próximo turno.
+    if funnel.pedir_grado:
+        capt.pendiente_grado_funnel = True
     if funnel.beats_usados:  # marca las ideas dichas para no repetirlas
         capt.beats_venta_usados.extend(funnel.beats_usados)
 

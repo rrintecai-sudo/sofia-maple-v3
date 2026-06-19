@@ -134,6 +134,9 @@ class EstadoCapturado(BaseModel):
     # La rama de horarios pidió el grado (primaria/kinder sin grado). El siguiente
     # turno con un grado SUELTO ("3", "1°", "4to") lo resuelve y emite el horario.
     pendiente_grado_horario: bool = False
+    # El FUNNEL pidió el grado/edad (nivel sin grado). El siguiente turno con un grado
+    # SUELTO lo captura → contenido específico del grado (Gaby/Ceci).
+    pendiente_grado_funnel: bool = False
 
     # Flujo de venta de 3 etapas (el CÓDIGO es dueño; Haiku solo redacta).
     # stage_venta: 'enganche' (inicio) → 'valor' (dando bloques de valor) →

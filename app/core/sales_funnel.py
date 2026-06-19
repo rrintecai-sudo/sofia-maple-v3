@@ -24,21 +24,39 @@ from app.core.state import EstadoCapturado
 _KB_PATH = Path(__file__).resolve().parent.parent / "kb" / "sofia_kb_oficial.md"
 
 
+_MODALIDAD_NORM = {
+    "cubs": "cubs", "babies": "baby", "baby": "baby",
+    "infants": "infants", "toddlers": "toddlers",
+}
+
+
 @lru_cache(maxsize=1)
-def _kb_contenido() -> tuple[dict[str, str], dict[str, str]]:
-    """Parsea `sofia_kb_oficial.md` → (por_grado, por_nivel) con el texto VERBATIM del
-    documento. Esto permite INYECTAR el contenido exacto del grado (no pedirle a Haiku
-    que lo busque en todo el documento, donde mezclaba lo general con lo específico)."""
+def _kb_contenido() -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+    """Parsea `sofia_kb_oficial.md` → (por_grado, por_nivel, por_modalidad) con el texto
+    VERBATIM del documento. Esto permite INYECTAR el contenido exacto del grado/modalidad
+    (no pedirle a Haiku que lo busque en todo el documento, donde mezclaba lo general con
+    lo específico)."""
     por_grado: dict[str, str] = {}
     por_nivel: dict[str, str] = {}
+    por_modalidad: dict[str, str] = {}
     if not _KB_PATH.exists():
-        return por_grado, por_nivel
+        return por_grado, por_nivel, por_modalidad
     text = _KB_PATH.read_text(encoding="utf-8")
     # DETALLE POR GRADO: "**1° de Kinder.** <texto>" hasta el próximo **/##.
     for m in re.finditer(
         r"\*\*(\d°\s+de\s+\w+)\.\*\*\s*(.+?)(?=\n\s*\*\*|\n#{2,}|\Z)", text, re.DOTALL
     ):
         por_grado[m.group(1).strip().lower()] = " ".join(m.group(2).split())
+    # MODALIDADES de maternal: "**Babies (12 a 18 meses).** <texto>".
+    for m in re.finditer(
+        r"\*\*(Cubs|Babies|Baby|Infants|Toddlers)\s*\([^)]*\)\.\*\*\s*(.+?)"
+        r"(?=\n\s*\*\*|\n#{2,}|\Z)",
+        text,
+        re.DOTALL,
+    ):
+        key = _MODALIDAD_NORM.get(m.group(1).strip().lower())
+        if key:
+            por_modalidad[key] = " ".join(m.group(2).split())
     # DETALLE POR NIVEL: "**Maternal:** <texto>".
     for m in re.finditer(
         r"\*\*(Maternal|Kinder|Primaria|Secundaria):\*\*\s*(.+?)(?=\n\s*\*\*|\n#{2,}|\Z)",
@@ -46,7 +64,49 @@ def _kb_contenido() -> tuple[dict[str, str], dict[str, str]]:
         re.DOTALL,
     ):
         por_nivel[m.group(1).strip().lower()] = " ".join(m.group(2).split())
-    return por_grado, por_nivel
+    return por_grado, por_nivel, por_modalidad
+
+
+def _modalidad_de_edad(edad_anos: int | None) -> str | None:
+    """Mapea la edad (en años) a la modalidad de maternal. Aproximado por la
+    granularidad en años (cubs <1, baby 1, toddlers 2+); infants (18-24m) cae en
+    'baby' por la edad redondeada. Devuelve None si no hay edad."""
+    if edad_anos is None:
+        return None
+    if edad_anos <= 0:
+        return "cubs"
+    if edad_anos == 1:
+        return "baby"
+    return "toddlers"
+
+
+# Pregunta del grado/edad cuando el papá da SOLO el nivel (Gaby/Ceci): el contenido
+# debe ser específico del grado, no genérico del nivel.
+def _hint_pregunta_grado(nivel: str) -> str:
+    display = _DISPLAY.get(nivel, nivel)
+    if nivel == "maternal":
+        pedir = (
+            "qué EDAD tiene su bebé (en maternal el grupo y lo que se trabaja cambian "
+            "mucho según la edad: Cubs 3-11 meses, Baby 12-18, Infants 18m-2 años, "
+            "Toddlers 2 años en adelante)"
+        )
+    else:
+        pedir = f"en qué GRADO va su hijo (1°, 2° o 3° de {display})"
+    return (
+        f"[ENGANCHE {display} — el papá dio el nivel pero NO el grado/edad. NO des "
+        f"todavía el contenido del nivel (sería genérico). Abre con UNA frase cálida y "
+        f"breve sobre {display} en Maple y la filosofía general del colegio (sin nombrar "
+        f"'BEAR'), y luego pregunta {pedir} — porque el contenido es muy distinto por "
+        f"grado y queremos contarle EXACTAMENTE lo de su etapa. 2-3 frases. La pregunta "
+        f"de cierre la pone el sistema; tú NO repreguntes.{_TONO}]"
+    )
+
+
+def _cta_pregunta_grado(nivel: str) -> str:
+    if nivel == "maternal":
+        return "¿Qué edad tiene tu bebé? Así te cuento justo lo de su etapa 😊"
+    display = _DISPLAY.get(nivel, nivel)
+    return f"¿En qué grado va tu hijo? Así te cuento cómo se vive justo en ese año de {display} 😊"
 
 
 # Continuación del papá (sin pregunta nueva) — el contador incrementa con estos.
@@ -55,6 +115,7 @@ STAGE_ENGANCHE = "enganche"
 STAGE_VALOR = "valor"
 STAGE_CIERRE = "cierre"
 STAGE_AGENDADA = "agendada"
+STAGE_PIDE_GRADO = "pide_grado"  # se pidió el grado/edad; se espera la respuesta
 
 # Diferenciador oficial (modelo BEAR) — de educacion.md. NO nombres "BEAR" al papá
 # salvo que lo pregunte; descríbelo.
@@ -235,21 +296,24 @@ def construir_contenido_grado(
     *,
     n: int = 2,
     incluir_diferenciador: bool = False,
+    edad: int | None = None,
 ) -> tuple[str | None, list[str]]:
     """CLAUDE-CONDUCE (funnel ← KB): el funnel decide CUÁNDO dar valor y de QUÉ
-    nivel/grado; el CONTENIDO lo toma Haiku de la BASE DE CONOCIMIENTO OFICIAL (que
-    vive en su system prompt), no de texto congelado. Así una sola fuente de verdad:
-    si Lili/Gaby actualizan la KB, el contenido de venta se actualiza solo.
-
-    Devuelve (hint, []): el hint instruye, no pega prosa. El segundo elemento se
-    mantiene por compatibilidad con el caller (ya no hay beats discretos que marcar).
-    La frescura la sostiene la instrucción 'toca un aspecto distinto' + el historial
-    que Haiku ya ve.
+    nivel/grado; el CONTENIDO se inyecta TEXTUAL desde la BASE DE CONOCIMIENTO OFICIAL.
+    Una sola fuente de verdad: si Lili/Gaby actualizan la KB, el contenido se actualiza
+    solo. `edad` (años) se usa en maternal para inyectar la MODALIDAD que toca.
+    Devuelve (hint, []).
     """
-    display = _display_grado(nivel, grado)
-    por_grado, por_nivel = _kb_contenido()
-    # Texto EXACTO del grado (preferido) o del nivel (fallback) — verbatim del documento.
-    texto = por_grado.get((grado or "").lower()) or por_nivel.get(nivel.lower(), "")
+    por_grado, por_nivel, por_modalidad = _kb_contenido()
+    # Maternal: el texto específico es el de la MODALIDAD según la edad.
+    modalidad = _modalidad_de_edad(edad) if nivel == "maternal" else None
+    if modalidad and por_modalidad.get(modalidad):
+        texto = por_modalidad[modalidad]
+        display = {"cubs": "Cubs", "baby": "Baby", "infants": "Infants",
+                   "toddlers": "Toddlers"}.get(modalidad, "Maternal")
+    else:
+        display = _display_grado(nivel, grado)
+        texto = por_grado.get((grado or "").lower()) or por_nivel.get(nivel.lower(), "")
 
     instr_dif = (
         f" Antes del contenido del grado, abre con el diferenciador GENERAL de Maple "
@@ -398,6 +462,8 @@ class FunnelDecision:
     turnos_valor: int  # nuevo contador a persistir
     empuje: bool  # se inyectó la instrucción de empuje este turno
     beats_usados: list[str] | None = None  # beats consumidos (a marcar en estado)
+    pedir_grado: bool = False  # se pidió el grado/edad → el orchestrator arma la captura
+    pedir_grado_nivel: str | None = None  # nivel del que se pidió el grado
 
 
 def decidir_funnel(
@@ -430,25 +496,56 @@ def decidir_funnel(
     # Grado canónico capturado ("2° de Kinder") → contenido específico de ese grado.
     h = capt.hijo_efectivo()
     grado = h.grado if (h and h.grado) else None
+    edad = h.edad if h else None
+
+    def _especifico(nv: str | None) -> bool:
+        """¿Tenemos la unidad ESPECÍFICA? grado (K/P/S) o edad/modalidad (maternal)."""
+        if nv == "maternal":
+            return edad is not None
+        return grado is not None
 
     # Pregunta de info nueva → PAUSA: ni incrementa ni empuja ni inyecta hint.
     if pide_info_nueva:
         return FunnelDecision(None, None, False, stage, tv, False)
 
-    # El papá da el nivel → Etapa 1 (diferenciador SIEMPRE + 1 beat). Arranca el contador.
+    # El papá da el nivel.
     if nivel_en_msg is not None:
+        # GABY/CECI: si dio el nivel pero NO el grado/edad, PRIMERO se pide — así el
+        # contenido siempre es específico del grado, no genérico del nivel.
+        if not _especifico(nivel_en_msg):
+            return FunnelDecision(
+                _hint_pregunta_grado(nivel_en_msg),
+                _cta_pregunta_grado(nivel_en_msg),
+                False, STAGE_PIDE_GRADO, 0, False,
+                pedir_grado=True, pedir_grado_nivel=nivel_en_msg,
+            )
+        # Ya hay grado/edad → contenido ESPECÍFICO (Etapa 1).
         hint, beats = construir_contenido_grado(
-            nivel_en_msg, grado, usados, n=1, incluir_diferenciador=True
+            nivel_en_msg, grado, usados, n=1, incluir_diferenciador=True, edad=edad
         )
         return FunnelDecision(
-            hint,
-            _cta_etapa1(nivel_en_msg, grado),
-            False,
-            STAGE_VALOR,
-            1,
-            False,
-            beats_usados=beats,
+            hint, _cta_etapa1(nivel_en_msg, grado),
+            False, STAGE_VALOR, 1, False, beats_usados=beats,
         )
+
+    # El papá ACABA de dar el grado/edad tras pedírselo → contenido ESPECÍFICO (Etapa 1).
+    if stage == STAGE_PIDE_GRADO:
+        nivel = capt.nivel_buscado_actual.value if capt.nivel_buscado_actual else None
+        if nivel and _especifico(nivel):
+            hint, beats = construir_contenido_grado(
+                nivel, grado, usados, n=1, incluir_diferenciador=True, edad=edad
+            )
+            return FunnelDecision(
+                hint, _cta_etapa1(nivel, grado),
+                False, STAGE_VALOR, 1, False, beats_usados=beats,
+            )
+        # Aún no se captó el grado/edad → re-pedir con suavidad (sin avanzar el contador).
+        if nivel:
+            return FunnelDecision(
+                _hint_pregunta_grado(nivel), _cta_pregunta_grado(nivel),
+                False, STAGE_PIDE_GRADO, 0, False,
+                pedir_grado=True, pedir_grado_nivel=nivel,
+            )
 
     # Continuación dentro del funnel (ya en 'valor').
     if stage == STAGE_VALOR and es_continuacion:
@@ -460,8 +557,8 @@ def decidir_funnel(
             return FunnelDecision(None, None, False, stage, tv, False)
         nuevo_tv = tv + 1
         empuje = nuevo_tv >= umbral
-        # Etapa 2: 1-2 beats NO usados. Si se agotaron → hint None → solo la CTA (gracia).
-        hint, beats = construir_contenido_grado(nivel, grado, usados, n=2)
+        # Etapa 2: contenido específico del grado/modalidad.
+        hint, beats = construir_contenido_grado(nivel, grado, usados, n=2, edad=edad)
         return FunnelDecision(
             hint,
             _cta_etapa2(empuje),
