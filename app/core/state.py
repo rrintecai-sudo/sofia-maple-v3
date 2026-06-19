@@ -81,6 +81,9 @@ class HijoInfo(BaseModel):
 
     nombre: str | None = None
     edad: int | None = Field(default=None, ge=0, le=20)
+    # Edad en MESES — solo maternal, para distinguir la modalidad (Infants 18-24m vs
+    # Baby 12-18m, que con la edad en años se confunden). Capturada determinísticamente.
+    edad_meses: int | None = Field(default=None, ge=0, le=240)
     nivel: NivelEducativo | None = None
     grado: str | None = None  # "2° primaria", "3° kinder", etc.
     escuela_actual: str | None = None

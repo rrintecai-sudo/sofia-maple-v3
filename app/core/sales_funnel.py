@@ -67,16 +67,26 @@ def _kb_contenido() -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
     return por_grado, por_nivel, por_modalidad
 
 
-def _modalidad_de_edad(edad_anos: int | None) -> str | None:
-    """Mapea la edad (en años) a la modalidad de maternal. Aproximado por la
-    granularidad en años (cubs <1, baby 1, toddlers 2+); infants (18-24m) cae en
-    'baby' por la edad redondeada. Devuelve None si no hay edad."""
+def _modalidad_de_edad(
+    edad_anos: int | None, edad_meses: int | None = None
+) -> str | None:
+    """Mapea la edad a la modalidad de maternal. Usa los MESES si los hay (preciso:
+    distingue Infants 18-24m de Baby 12-18m); si solo hay años, aproxima. None si no
+    hay edad."""
+    if edad_meses is not None:
+        if edad_meses < 12:
+            return "cubs"
+        if edad_meses < 18:
+            return "baby"
+        if edad_meses < 24:
+            return "infants"
+        return "toddlers"
     if edad_anos is None:
         return None
     if edad_anos <= 0:
         return "cubs"
     if edad_anos == 1:
-        return "baby"
+        return "baby"  # 12-23m sin meses exactos → baby (infants necesita los meses)
     return "toddlers"
 
 
@@ -297,6 +307,7 @@ def construir_contenido_grado(
     n: int = 2,
     incluir_diferenciador: bool = False,
     edad: int | None = None,
+    edad_meses: int | None = None,
 ) -> tuple[str | None, list[str]]:
     """CLAUDE-CONDUCE (funnel ← KB): el funnel decide CUÁNDO dar valor y de QUÉ
     nivel/grado; el CONTENIDO se inyecta TEXTUAL desde la BASE DE CONOCIMIENTO OFICIAL.
@@ -306,7 +317,7 @@ def construir_contenido_grado(
     """
     por_grado, por_nivel, por_modalidad = _kb_contenido()
     # Maternal: el texto específico es el de la MODALIDAD según la edad.
-    modalidad = _modalidad_de_edad(edad) if nivel == "maternal" else None
+    modalidad = _modalidad_de_edad(edad, edad_meses) if nivel == "maternal" else None
     if modalidad and por_modalidad.get(modalidad):
         texto = por_modalidad[modalidad]
         display = {"cubs": "Cubs", "baby": "Baby", "infants": "Infants",
@@ -497,11 +508,12 @@ def decidir_funnel(
     h = capt.hijo_efectivo()
     grado = h.grado if (h and h.grado) else None
     edad = h.edad if h else None
+    edad_meses = h.edad_meses if h else None
 
     def _especifico(nv: str | None) -> bool:
         """¿Tenemos la unidad ESPECÍFICA? grado (K/P/S) o edad/modalidad (maternal)."""
         if nv == "maternal":
-            return edad is not None
+            return edad is not None or edad_meses is not None
         return grado is not None
 
     # Pregunta de info nueva → PAUSA: ni incrementa ni empuja ni inyecta hint.
@@ -521,7 +533,8 @@ def decidir_funnel(
             )
         # Ya hay grado/edad → contenido ESPECÍFICO (Etapa 1).
         hint, beats = construir_contenido_grado(
-            nivel_en_msg, grado, usados, n=1, incluir_diferenciador=True, edad=edad
+            nivel_en_msg, grado, usados, n=1, incluir_diferenciador=True,
+            edad=edad, edad_meses=edad_meses
         )
         return FunnelDecision(
             hint, _cta_etapa1(nivel_en_msg, grado),
@@ -534,7 +547,8 @@ def decidir_funnel(
         nivel = capt.nivel_buscado_actual.value if capt.nivel_buscado_actual else None
         if nivel and _especifico(nivel):
             hint, beats = construir_contenido_grado(
-                nivel, grado, usados, n=1, incluir_diferenciador=False, edad=edad
+                nivel, grado, usados, n=1, incluir_diferenciador=False,
+                edad=edad, edad_meses=edad_meses
             )
             return FunnelDecision(
                 hint, _cta_etapa1(nivel, grado),
@@ -559,7 +573,7 @@ def decidir_funnel(
         nuevo_tv = tv + 1
         empuje = nuevo_tv >= umbral
         # Etapa 2: contenido específico del grado/modalidad.
-        hint, beats = construir_contenido_grado(nivel, grado, usados, n=2, edad=edad)
+        hint, beats = construir_contenido_grado(nivel, grado, usados, n=2, edad=edad, edad_meses=edad_meses)
         return FunnelDecision(
             hint,
             _cta_etapa2(empuje),

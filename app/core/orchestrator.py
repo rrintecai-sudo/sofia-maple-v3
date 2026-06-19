@@ -572,6 +572,19 @@ async def procesar_turno(
                 capt.hijos = [HijoInfo(nivel=capt.nivel_buscado_actual, grado=grado_f)]
         capt.pendiente_grado_funnel = False
 
+    # EDAD EN MESES (maternal): captura DETERMINÍSTICA para distinguir la modalidad
+    # (Infants 18-24m vs Baby 12-18m). El extractor LLM guarda la edad en AÑOS y pierde
+    # los meses → "20 meses" se volvía 1 año → Baby (divergencia). Aquí la rescatamos.
+    _m_meses = re.search(r"\b(\d{1,2})\s*mes", mensaje.lower())
+    if _m_meses:
+        _meses = int(_m_meses.group(1))
+        if 1 <= _meses <= 47:
+            _h = capt.hijo_efectivo()
+            if _h is not None:
+                _h.edad_meses = _meses
+            elif capt.hijos:
+                capt.hijos[0].edad_meses = _meses
+
     # FLUJO DE VENTA (3 etapas) — el CÓDIGO decide etapa, contador y MOMENTO del empuje;
     # Haiku solo redacta el hint. pide_info_nueva PAUSA el contador (responde el dato y
     # no empuja); continuación lo incrementa; al umbral se ordena el empuje; si el papá
