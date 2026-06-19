@@ -579,11 +579,12 @@ async def procesar_turno(
     if _m_meses:
         _meses = int(_m_meses.group(1))
         if 1 <= _meses <= 47:
-            _h = capt.hijo_efectivo()
-            if _h is not None:
-                _h.edad_meses = _meses
-            elif capt.hijos:
-                capt.hijos[0].edad_meses = _meses
+            # Setear en el hijo PERSISTIDO (no en hijo_efectivo(), que es una copia).
+            if not capt.hijos:
+                from app.core.state import HijoInfo
+
+                capt.hijos = [HijoInfo()]
+            capt.hijos[0].edad_meses = _meses
 
     # FLUJO DE VENTA (3 etapas) — el CÓDIGO decide etapa, contador y MOMENTO del empuje;
     # Haiku solo redacta el hint. pide_info_nueva PAUSA el contador (responde el dato y

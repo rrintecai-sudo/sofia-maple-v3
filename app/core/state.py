@@ -192,7 +192,7 @@ class EstadoCapturado(BaseModel):
         for h in self.hijos:
             if h is base:
                 continue
-            for campo in ("nombre", "edad", "nivel", "grado", "escuela_actual", "diagnostico"):
+            for campo in ("nombre", "edad", "edad_meses", "nivel", "grado", "escuela_actual", "diagnostico"):
                 if getattr(merged, campo) is None and getattr(h, campo) is not None:
                     setattr(merged, campo, getattr(h, campo))
         return merged
