@@ -528,12 +528,13 @@ def decidir_funnel(
             False, STAGE_VALOR, 1, False, beats_usados=beats,
         )
 
-    # El papá ACABA de dar el grado/edad tras pedírselo → contenido ESPECÍFICO (Etapa 1).
+    # El papá ACABA de dar el grado/edad tras pedírselo → contenido ESPECÍFICO de una vez
+    # (SIN diferenciador: ya se dio la frase general al pedir el grado).
     if stage == STAGE_PIDE_GRADO:
         nivel = capt.nivel_buscado_actual.value if capt.nivel_buscado_actual else None
         if nivel and _especifico(nivel):
             hint, beats = construir_contenido_grado(
-                nivel, grado, usados, n=1, incluir_diferenciador=True, edad=edad
+                nivel, grado, usados, n=1, incluir_diferenciador=False, edad=edad
             )
             return FunnelDecision(
                 hint, _cta_etapa1(nivel, grado),
