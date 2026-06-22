@@ -347,7 +347,11 @@ def extraer_proximo_dia_semana(texto: str, now: datetime | None = None) -> str |
 _HORA_CIERRE_LILY = 15
 _HOY_RE = re.compile(r"\bhoy\b", re.IGNORECASE)
 _PASADO_MANANA_RE = re.compile(r"\bpasado\s+ma[ñn]ana\b", re.IGNORECASE)
-_MANANA_RE = re.compile(r"\bma[ñn]ana\b", re.IGNORECASE)
+# "mañana" = día siguiente, PERO no cuando es "la mañana"/"en la mañana"/"por la
+# mañana"/"de la mañana" → eso es FRANJA HORARIA, no el día. Sin esta guarda,
+# "en la mañana" (respuesta a la hora) pisaba el día ya elegido (bug real: perdía
+# "jueves 25" y se iba a "mañana, martes 23"). La franja la resuelve el paso de hora.
+_MANANA_RE = re.compile(r"(?<!la\s)\bma[ñn]ana\b", re.IGNORECASE)
 
 
 def _proximo_dia_habil(d: date) -> date:

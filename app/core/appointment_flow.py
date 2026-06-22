@@ -432,6 +432,25 @@ async def _consolidar_y_derivar_hijo(
     return derivado
 
 
+# "en la mañana"/"por la tarde"/"al mediodía" → hora concreta dentro del horario de
+# Lily (8-15h). Solo se usa en el paso de la hora. Si el slot estuviera ocupado, la
+# validación de disponibilidad lo descarta y propone alternativas reales.
+_FRANJA_MANANA_RE = re.compile(r"\b(?:en|por|de|a)\s+la\s+ma[ñn]ana\b", re.IGNORECASE)
+_FRANJA_TARDE_RE = re.compile(
+    r"\b(?:en|por|de|a)\s+la\s+tarde\b|\bmedio\s*d[íi]a\b|\bal\s+mediod[íi]a\b", re.IGNORECASE
+)
+
+
+def _franja_a_hora(mensaje: str) -> str | None:
+    """'en la mañana' → '09:00'; 'en la tarde'/'mediodía' → '13:00'. None si no hay franja."""
+    t = (mensaje or "").lower()
+    if _FRANJA_MANANA_RE.search(t):
+        return "09:00"
+    if _FRANJA_TARDE_RE.search(t):
+        return "13:00"
+    return None
+
+
 async def handle_appointment_intent(
     mensaje: str,
     estado: EstadoConversacion,
@@ -528,6 +547,10 @@ async def handle_appointment_intent(
             hora_det = extraer_hora_de_numero_suelto(mensaje)
         if not hora_det and en_paso_hora and appt_dt.es_alta_confianza and appt_dt.hora:
             hora_det = appt_dt.hora
+        # "en la mañana"/"por la tarde" sin hora exacta → franja concreta (solo en el
+        # paso de la hora, para no confundir "mañana"=día). Evita el loop "no te entendí".
+        if not hora_det and en_paso_hora:
+            hora_det = _franja_a_hora(mensaje)
         if hora_det:
             capt.cita_hora_slot = hora_det
 

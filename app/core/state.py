@@ -140,6 +140,10 @@ class EstadoCapturado(BaseModel):
     # El FUNNEL pidió el grado/edad (nivel sin grado). El siguiente turno con un grado
     # SUELTO lo captura → contenido específico del grado (Gaby/Ceci).
     pendiente_grado_funnel: bool = False
+    # La rama de COSTOS pidió el grado (primaria sin grado: baja $6,100 vs alta $6,300
+    # difieren). El siguiente grado SUELTO lo resuelve y re-emite el PRECIO (no la tabla
+    # cruda con claves internas 'primaria_baja'). Bug real: fuga de etiqueta interna.
+    pendiente_grado_costos: bool = False
 
     # Flujo de venta de 3 etapas (el CÓDIGO es dueño; Haiku solo redacta).
     # stage_venta: 'enganche' (inicio) → 'valor' (dando bloques de valor) →

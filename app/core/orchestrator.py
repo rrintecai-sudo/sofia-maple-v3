@@ -319,16 +319,23 @@ async def _construir_oferta(
             p = await get_precio(nivel)
             lineas.append(f"💰 {p.bloque_costos()}" if p else f"💰 {_DEFER_LILI}")
         else:
-            todos = await get_todos_precios()
-            if todos:
-                tabla = "; ".join(
-                    f"{p.nivel} ${(p.colegiatura_mensual or 0):,.0f}/mes" for p in todos
-                )
+            # No se pudo resolver el nivel exacto. NUNCA volcar la tabla cruda con las
+            # claves internas de BD ('primaria_baja' $6,100; 'primaria_alta' $6,300) — el
+            # papá no debe ver eso (queja real de Gaby). Pedimos el dato en humano:
+            #  - Primaria sin grado → el costo difiere por grado → pedir el grado.
+            #  - Sin nivel claro (o varios hijos) → pedir el nivel.
+            nivel_act = estado.estado_capturado.nivel_buscado_actual
+            if nivel_act and nivel_act.value == "primaria":
+                estado.estado_capturado.pendiente_grado_costos = True
                 lineas.append(
-                    f"💰 Colegiatura mensual por nivel: {tabla}. (Dime el nivel para el detalle exacto.)"
+                    "💰 El costo de Primaria depende del grado. ¿En qué grado va tu "
+                    "peque (1° a 3° o 4° a 6°)?"
                 )
             else:
-                lineas.append(f"💰 {_DEFER_LILI}")
+                lineas.append(
+                    "💰 Con gusto te paso el costo. ¿Para qué nivel es? "
+                    "1️⃣ Maternal · 2️⃣ Kinder · 3️⃣ Primaria · 4️⃣ Secundaria"
+                )
 
     if "horario" in tipos:
         sub, necesita_grado = horario_subnivel_de_estado(estado)
@@ -558,6 +565,22 @@ async def procesar_turno(
             capt.pendiente_grado_horario = False
             grado_horario_resuelto = True
 
+    # GRADO SUELTO para COSTOS: la rama de precios pidió el grado de primaria (baja vs
+    # alta). Un "3"/"segundo"/"4to" lo resuelve → se fija en el hijo y se re-emite el
+    # PRECIO correcto (no la tabla cruda). Igual que el de horario, pero para costos.
+    grado_costos_resuelto = False
+    if capt.pendiente_grado_costos:
+        grado_c = extraer_grado_suelto(mensaje, capt.nivel_buscado_actual)
+        if grado_c:
+            if capt.hijos:
+                capt.hijos[0].grado = grado_c
+            else:
+                from app.core.state import HijoInfo
+
+                capt.hijos = [HijoInfo(nivel=capt.nivel_buscado_actual, grado=grado_c)]
+            capt.pendiente_grado_costos = False
+            grado_costos_resuelto = True
+
     # GRADO PARA EL FUNNEL: si el funnel pidió el grado el turno anterior, este turno un
     # grado SUELTO ("3", "tercero", "1° de primaria") lo captura → contenido específico.
     # (La EDAD de maternal la captura la extracción normal; aquí solo el grado de K/P/S.)
@@ -606,6 +629,7 @@ async def procesar_turno(
         intent_result.intent in _DATA_INTENTS
         or bool(detectar_consulta_oferta(mensaje))
         or grado_horario_resuelto  # resolver el grado = turno de info (horario)
+        or grado_costos_resuelto  # resolver el grado = turno de info (costos)
     )
     # ¿El mensaje parsea como FECHA/HORA válida? (precedencia: la fecha/hora gana).
     es_fecha_valida = capt.cita_fecha_slot is None and mensaje_resuelve_fecha(
@@ -642,7 +666,14 @@ async def procesar_turno(
         umbral=settings.umbral_empuje,
         beats_usados=capt.beats_venta_usados,
     )
-    if nivel_en_msg is not None and capt.nivel_buscado_actual is None:
+    if nivel_en_msg is not None and capt.nivel_buscado_actual != nivel_en_msg:
+        # Cambio de nivel (o primera vez). Si había un grado de OTRO nivel, lo descartamos
+        # para que no se mezcle (bug real: tras "mejor secundaria", el "primero" quedaba
+        # como "1° de Kinder" porque el nivel seguía en kinder). Solo se borra si el grado
+        # no corresponde al nivel nuevo (no pisamos un grado dado en el MISMO mensaje).
+        if capt.nivel_buscado_actual is not None and capt.hijos and capt.hijos[0].grado:
+            if nivel_en_msg.value not in capt.hijos[0].grado.lower():
+                capt.hijos[0].grado = None
         capt.nivel_buscado_actual = nivel_en_msg
     capt.stage_venta = funnel.stage
     capt.turnos_valor = funnel.turnos_valor
@@ -714,6 +745,8 @@ async def procesar_turno(
         tipos_oferta.add("estancias")
     if grado_horario_resuelto:  # el grado suelto re-dispara el horario, ya con el grado
         tipos_oferta.add("horario")
+    if grado_costos_resuelto:  # el grado suelto re-dispara el precio, ya con el grado
+        tipos_oferta.add("costos")
     # Si el papá nombró el nivel en el mensaje ("para kinder, costos") y el estado
     # aún no lo tiene, fíjalo → la oferta emite SOLO ese nivel, no la tabla completa.
     if tipos_oferta and capt.nivel_buscado_actual is None:

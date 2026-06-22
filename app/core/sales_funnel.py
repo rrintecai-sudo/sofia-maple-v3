@@ -18,7 +18,31 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
+from app.core.campus_resolver import (
+    _infer_grado_kinder,
+    _infer_grado_primaria,
+    _infer_grado_secundaria,
+)
 from app.core.state import EstadoCapturado
+
+_DISPLAY_NIVEL_GRADO = {"kinder": "Kinder", "primaria": "Primaria", "secundaria": "Secundaria"}
+
+
+def _grado_de_edad(nivel: str | None, edad: int | None) -> str | None:
+    """Infiere el grado canónico ('2° de Kinder') desde la EDAD para kinder/primaria/
+    secundaria. None si no aplica. El papá responde con la edad ('tiene 4 años') en vez
+    del grado → inferimos el grado y NO nos quedamos en loop pidiéndolo (bug real)."""
+    inferidor = {
+        "kinder": _infer_grado_kinder,
+        "primaria": _infer_grado_primaria,
+        "secundaria": _infer_grado_secundaria,
+    }.get(nivel or "")
+    if inferidor is None or edad is None:
+        return None
+    g = inferidor(edad=edad, grado_texto=None)
+    if g is None:
+        return None
+    return f"{g}° de {_DISPLAY_NIVEL_GRADO[nivel]}"
 
 # Base de conocimiento oficial — fuente del contenido EXACTO por grado/nivel.
 _KB_PATH = Path(__file__).resolve().parent.parent / "kb" / "sofia_kb_oficial.md"
@@ -101,7 +125,12 @@ def _hint_pregunta_grado(nivel: str) -> str:
             "Toddlers 2 años en adelante)"
         )
     else:
-        pedir = f"en qué GRADO va su hijo (1°, 2° o 3° de {display})"
+        rango = {
+            "kinder": "1°, 2° o 3°",
+            "primaria": "1° a 6°",
+            "secundaria": "1°, 2° o 3°",
+        }.get(nivel, "1°, 2° o 3°")
+        pedir = f"en qué GRADO va su hijo ({rango} de {display})"
     return (
         f"[ENGANCHE {display} — el papá dio el nivel pero NO el grado/edad. NO des "
         f"todavía el contenido del nivel (sería genérico). Abre con UNA frase cálida y "
@@ -509,6 +538,14 @@ def decidir_funnel(
     grado = h.grado if (h and h.grado) else None
     edad = h.edad if h else None
     edad_meses = h.edad_meses if h else None
+
+    # Si el papá respondió con la EDAD (no el grado) para K/P/S, inferimos el grado de la
+    # edad (4 años → 2° de Kinder, 7 → 2° de Primaria) en vez de seguir pidiéndolo en loop.
+    if grado is None and edad is not None:
+        nivel_ctx = nivel_en_msg or (
+            capt.nivel_buscado_actual.value if capt.nivel_buscado_actual else None
+        )
+        grado = _grado_de_edad(nivel_ctx, edad)
 
     def _especifico(nv: str | None) -> bool:
         """¿Tenemos la unidad ESPECÍFICA? grado (K/P/S) o edad/modalidad (maternal)."""
