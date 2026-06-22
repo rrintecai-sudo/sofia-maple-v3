@@ -83,11 +83,29 @@ _KB_OFICIAL_HEADER = (
 
 @lru_cache(maxsize=1)
 def load_kb_oficial() -> str:
-    """Carga la base de conocimiento oficial. Cacheada en memoria."""
+    """Carga la base de conocimiento oficial para el system prompt.
+
+    LATENCIA: quita el DETALLE POR GRADO/MODALIDAD (~2.4k tokens) — ese contenido ya se
+    INYECTA por turno desde el funnel (texto exacto del grado/modalidad), así que en el
+    prompt es duplicado puro y solo añade latencia. El archivo completo se conserva para
+    que el funnel lo lea.
+    """
     if not KB_OFICIAL_PATH.exists():
         log.warning("KB oficial no encontrada en %s", KB_OFICIAL_PATH)
         return ""
-    return KB_OFICIAL_PATH.read_text(encoding="utf-8")
+    text = KB_OFICIAL_PATH.read_text(encoding="utf-8")
+    i = text.find("## DETALLE POR GRADO")
+    j = text.find("### Bullying")
+    if i != -1 and j != -1 and j > i:
+        text = (
+            text[:i]
+            + "## DETALLE POR GRADO\n\n*(El contenido específico de cada grado y de cada "
+            "modalidad de maternal se INYECTA en cada turno desde el documento — no se "
+            "repite aquí. Cuando describas un grado, usa el contenido que el sistema te "
+            "inyecta en ese turno.)*\n\n"
+            + text[j:]
+        )
+    return text
 
 
 # Mapeo fase → archivo journey
