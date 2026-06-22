@@ -1245,6 +1245,11 @@ async def procesar_turno(
         # En OFERTA/FUNNEL/CONTENIDO: NADA de sondeo de descubrimiento.
         if lineas_oferta or en_funnel or hint_pausa_contenido:
             response_text = sanear_sondeo(response_text)
+        # SIEMPRE: quita una oración final incompleta (Haiku cortado por el tope de tokens)
+        # ANTES de anexar cualquier CTA — si no, queda algo colgado a media frase
+        # ("…antes de salir (a las 2:00") en medio del mensaje. maximo alto = solo limpia
+        # la cola, no recorta el cuerpo.
+        response_text = recortar_oraciones(response_text, maximo=999)
         if turno_venta:
             response_text = sanear_cifras_ajenas(response_text, set())
             # CAP REAL de longitud: recorta a 4 oraciones COMPLETAS (nunca a media
