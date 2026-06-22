@@ -208,6 +208,27 @@ def _menciona_multiples_niveles(mensaje: str, capt: Any) -> bool:
 
 _DEFER_LILI = "Ese dato te lo confirma Miss Lili en la cita 😊"
 
+# Preguntas que NO son de horario escolar aunque el clasificador LLM las marque así:
+#  - "¿cómo es un día?", "el día a día", "qué hacen en un día" → CONTENIDO de la etapa
+#    (de hecho el funnel cierra con "¿te cuento cómo se ve un día en X?").
+#  - "¿cuántas horas de inglés/francés?" → currículo, no el horario de entrada/salida.
+# Sin esto, todas caían en el callejón "¿de qué nivel necesitas el horario?".
+_DIA_CONTENIDO_RE = re.compile(
+    r"\bc[óo]mo\s+(?:es|se\s+ve|son|ser[íi]a)\s+(?:un|el)\s+d[íi]a\b|"
+    r"\bun\s+d[íi]a\s+(?:t[íi]pico|normal|en|ah[íi]|all[íi])\b|\bd[íi]a\s+a\s+d[íi]a\b|"
+    r"\bla\s+jornada\b|\bqu[ée]\s+hacen?\b|"
+    r"\bcu[áa]ntas?\s+horas?\s+de\s+(?:ingl[ée]s|franc[ée]s|clase|materia|deporte|arte|m[úu]sica)\b",
+    re.IGNORECASE,
+)
+
+# Saludo formal de presentación ("¡Hola! …Soy Sofía, del equipo de admisiones…"). Va SOLO
+# en el primer turno; si Haiku lo repite a media conversación (bug visto), se recorta.
+_SALUDO_REPETIDO_RE = re.compile(
+    r"^\s*¡?\s*hola[^.!?¡]*[.!?]\s*(?:qu[ée]\s+gusto[^.!?¡]*[.!?]\s*)?"
+    r"soy\s+sof[íi]a[^.!?]*?admisiones[^.!?]*[.!?]\s*",
+    re.IGNORECASE,
+)
+
 # Línea fija de cierre para turnos de info (code-emitida, corta y cálida). Una sola
 # pregunta, transaccional (no sondeo).
 _CIERRE_INFO = "¿Quieres saber algo más o agendamos una visita? 😊"
@@ -585,15 +606,26 @@ async def procesar_turno(
     # grado SUELTO ("3", "tercero", "1° de primaria") lo captura → contenido específico.
     # (La EDAD de maternal la captura la extracción normal; aquí solo el grado de K/P/S.)
     if capt.pendiente_grado_funnel:
+        # Fija el nivel al que el funnel preguntó (inmune a que el extractor LLM lo cambie
+        # por el contexto viejo), SALVO que el papá nombre OTRO nivel en este mismo turno.
+        if capt.pendiente_grado_nivel and nivel_buscado_de_mensaje(mensaje) is None:
+            from app.core.state import NivelEducativo
+
+            try:
+                capt.nivel_buscado_actual = NivelEducativo(capt.pendiente_grado_nivel)
+            except ValueError:
+                pass
         grado_f = extraer_grado_suelto(mensaje, capt.nivel_buscado_actual)
         if grado_f:
             if capt.hijos:
                 capt.hijos[0].grado = grado_f
+                capt.hijos[0].nivel = capt.nivel_buscado_actual  # alinea nivel↔grado
             else:
                 from app.core.state import HijoInfo
 
                 capt.hijos = [HijoInfo(nivel=capt.nivel_buscado_actual, grado=grado_f)]
         capt.pendiente_grado_funnel = False
+        capt.pendiente_grado_nivel = None
 
     # EDAD EN MESES (maternal): captura DETERMINÍSTICA para distinguir la modalidad
     # (Infants 18-24m vs Baby 12-18m). El extractor LLM guarda la edad en AÑOS y pierde
@@ -680,6 +712,9 @@ async def procesar_turno(
     # El funnel pidió el grado/edad → marcar para capturar el grado SUELTO el próximo turno.
     if funnel.pedir_grado:
         capt.pendiente_grado_funnel = True
+        # Fija el nivel EXACTO sobre el que se preguntó (para que "primero" se ate a ese
+        # nivel y no a uno viejo repuesto por el extractor) — bug cambio-tema.
+        capt.pendiente_grado_nivel = funnel.pedir_grado_nivel
     if funnel.beats_usados:  # marca las ideas dichas para no repetirlas
         capt.beats_venta_usados.extend(funnel.beats_usados)
 
@@ -737,12 +772,17 @@ async def procesar_turno(
     # cifras permitidas para el guard de salida (abajo). Funciona también DURANTE el
     # agendado.
     tipos_oferta = detectar_consulta_oferta(mensaje)
+    # "¿cómo es un día?" / "cuántas horas de inglés?" NO son horario escolar → son
+    # contenido. No los rutees al callejón "¿de qué nivel necesitas el horario?".
+    es_dia_contenido = bool(_DIA_CONTENIDO_RE.search(mensaje))
     if intent_result.intent == Intent.PREGUNTA_COSTOS:
         tipos_oferta.add("costos")
-    if intent_result.intent == Intent.PREGUNTA_HORARIO:
+    if intent_result.intent == Intent.PREGUNTA_HORARIO and not es_dia_contenido:
         tipos_oferta.add("horario")
     if intent_result.intent == Intent.PREGUNTA_ESTANCIAS:
         tipos_oferta.add("estancias")
+    if es_dia_contenido:
+        tipos_oferta.discard("horario")  # que lo conteste el funnel/Haiku como contenido
     if grado_horario_resuelto:  # el grado suelto re-dispara el horario, ya con el grado
         tipos_oferta.add("horario")
     if grado_costos_resuelto:  # el grado suelto re-dispara el precio, ya con el grado
@@ -1302,6 +1342,15 @@ async def procesar_turno(
                     ),
                 },
             )
+
+    # 10bis. SALUDO REPETIDO: si NO es el primer turno (ya hubo un mensaje del assistant)
+    # y Haiku abre otra vez con la presentación formal, la recortamos (se veía raro que
+    # Sofía se re-presentara a mitad de la charla). Si al recortar quedaría vacío, se deja.
+    if ultimo_assistant_msg:
+        _sin_saludo = _SALUDO_REPETIDO_RE.sub("", response_text, count=1).lstrip()
+        if _sin_saludo and _sin_saludo != response_text:
+            response_text = _sin_saludo
+            log.info("saludo_repetido_recortado", extra={"session_id": session_id})
 
     # 10ter. ANTI-DUPLICADO: nunca enviar IDÉNTICO el mensaje del turno anterior
     # (se veían dos veces el menú o el bloque de estancias). Varía y avanza. No aplica

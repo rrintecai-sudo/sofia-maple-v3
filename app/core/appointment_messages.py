@@ -216,9 +216,10 @@ def render_pregunta_campo(
     if motivo:
         base = f"{motivo} {base}"
     if reintento:
+        # Re-pregunta CÁLIDA: guía el formato SIN "Perdón, no te entendí bien" (suena a
+        # regaño y molestaba — queja de Gaby). El ejemplo orienta sin culpar al papá.
         ejemplo = _EJEMPLO_FORMATO.get(campo)
-        prefijo = "Perdón, no te entendí bien. "
-        return f"{prefijo}{base}" + (f" ({ejemplo})" if ejemplo else "")
+        return f"{base}" + (f" Puedes ponerlo así: {ejemplo} 😊" if ejemplo else "")
     return base
 
 

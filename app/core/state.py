@@ -140,6 +140,10 @@ class EstadoCapturado(BaseModel):
     # El FUNNEL pidió el grado/edad (nivel sin grado). El siguiente turno con un grado
     # SUELTO lo captura → contenido específico del grado (Gaby/Ceci).
     pendiente_grado_funnel: bool = False
+    # Nivel EXACTO sobre el que el funnel pidió el grado. Lo fijamos para que el grado
+    # suelto del próximo turno ("primero") se ate a ESE nivel y no a uno viejo que el
+    # extractor LLM reponga por contexto (bug: "mejor secundaria"→"primero"→"1° de Kinder").
+    pendiente_grado_nivel: str | None = None
     # La rama de COSTOS pidió el grado (primaria sin grado: baja $6,100 vs alta $6,300
     # difieren). El siguiente grado SUELTO lo resuelve y re-emite el PRECIO (no la tabla
     # cruda con claves internas 'primaria_baja'). Bug real: fuga de etiqueta interna.
