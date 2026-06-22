@@ -104,11 +104,12 @@ def extraer_grado_suelto(mensaje: str, nivel: NivelEducativo | None) -> str | No
 # ============================================================
 
 _COSTOS_RE = re.compile(
+    # SOLO palabras de COSTO. Antes incluía "informes/información" (pedido de DATO →
+    # emitía precios), pero "información del colegio" disparaba la tabla de precios de la
+    # nada (queja de Gaby). La KB es clara: NO compartir costos salvo que los pidan
+    # EXPLÍCITO. "información" ahora la maneja Haiku como pregunta general.
     r"\b(?:costos?|cuestan?|precios?|colegiaturas?|mensualidad(?:es)?|"
-    r"inscripci[óo]n(?:es)?|cu[áa]nto\s+(?:cuesta|sale|es|pagar|pago|vale)|"
-    # "quiero informes / información" = pedido de DATO (exploración) → emite costos,
-    # NO entra a agendar (la cita se llama "cita de informes", pero esto es info).
-    r"informes?|informaci[óo]n)\b",
+    r"inscripci[óo]n(?:es)?|cu[áa]nto\s+(?:cuesta|sale|es|pagar|pago|vale))\b",
     re.IGNORECASE,
 )
 # "horario" escolar; "horario EXTENDIDO" NO es horario escolar → es estancia (no mezclar).
