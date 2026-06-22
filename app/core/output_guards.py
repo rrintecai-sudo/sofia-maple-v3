@@ -104,7 +104,17 @@ def recortar_oraciones(texto: str, maximo: int = 4) -> str:
     # Oraciones: bloque hasta un terminador (incluyéndolo y emojis/comillas pegados).
     oraciones = re.findall(r"[^.!?…]*[.!?…]+[\"'»)\s]*|\S[^.!?…]*$", t)
     oraciones = [o for o in oraciones if o.strip()]
-    if len(oraciones) <= maximo:
+    # Si la ÚLTIMA "oración" no tiene terminador, Haiku se cortó a media frase por el tope
+    # de tokens ("…empiezan a interactuar"). La descartamos para no enviar algo colgado
+    # (siempre que quede al menos una oración completa).
+    incompleta_final = (
+        len(oraciones) > 1
+        and not re.search(r"[.!?…]", oraciones[-1])
+        and bool(re.search(r"\w", oraciones[-1]))  # tiene palabras (no un emoji/símbolo suelto)
+    )
+    if incompleta_final:
+        oraciones = oraciones[:-1]
+    if len(oraciones) <= maximo and not incompleta_final:
         return t
     return "".join(oraciones[:maximo]).strip()
 

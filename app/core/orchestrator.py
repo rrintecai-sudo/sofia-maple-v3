@@ -214,10 +214,15 @@ _DEFER_LILI = "Ese dato te lo confirma Miss Lili en la cita 😊"
 #  - "¿cuántas horas de inglés/francés?" → currículo, no el horario de entrada/salida.
 # Sin esto, todas caían en el callejón "¿de qué nivel necesitas el horario?".
 _DIA_CONTENIDO_RE = re.compile(
-    r"\bc[óo]mo\s+(?:es|se\s+ve|son|ser[íi]a)\s+(?:un|el)\s+d[íi]a\b|"
-    r"\bun\s+d[íi]a\s+(?:t[íi]pico|normal|en|ah[íi]|all[íi])\b|\bd[íi]a\s+a\s+d[íi]a\b|"
-    r"\bla\s+jornada\b|\bqu[ée]\s+hacen?\b|"
+    r"\b(?:un|el|su)\s+d[íi]a\b|"  # "cómo es un día", "un día como es", "el día a día"
+    r"\bd[íi]a\s+a\s+d[íi]a\b|\bla\s+jornada\b|\bqu[ée]\s+hacen?\b|"
     r"\bcu[áa]ntas?\s+horas?\s+de\s+(?:ingl[ée]s|franc[ée]s|clase|materia|deporte|arte|m[úu]sica)\b",
+    re.IGNORECASE,
+)
+# …salvo que SÍ pregunten explícitamente por el horario escolar (entrada/salida).
+_HORARIO_EXPLICITO_RE = re.compile(
+    r"\ba\s+qu[ée]\s+hora\b|\bhora\s+de\s+(?:entrada|salida)\b|\bqu[ée]\s+horario\b|"
+    r"\bhorario\s+de\b|\bhora\s+(?:entran?|salen?)\b",
     re.IGNORECASE,
 )
 
@@ -774,7 +779,9 @@ async def procesar_turno(
     tipos_oferta = detectar_consulta_oferta(mensaje)
     # "¿cómo es un día?" / "cuántas horas de inglés?" NO son horario escolar → son
     # contenido. No los rutees al callejón "¿de qué nivel necesitas el horario?".
-    es_dia_contenido = bool(_DIA_CONTENIDO_RE.search(mensaje))
+    es_dia_contenido = bool(_DIA_CONTENIDO_RE.search(mensaje)) and not _HORARIO_EXPLICITO_RE.search(
+        mensaje
+    )
     if intent_result.intent == Intent.PREGUNTA_COSTOS:
         tipos_oferta.add("costos")
     if intent_result.intent == Intent.PREGUNTA_HORARIO and not es_dia_contenido:
