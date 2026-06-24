@@ -44,6 +44,23 @@ def _grado_de_edad(nivel: str | None, edad: int | None) -> str | None:
         return None
     return f"{g}° de {_DISPLAY_NIVEL_GRADO[nivel]}"
 
+
+def _grado_canonico(nivel: str | None, grado_texto: str | None) -> str | None:
+    """Normaliza un grado libre ('cuarto', '4to', '4°', 'cuarto grado') a la forma de la
+    KB ('4° de Primaria') usando el nivel. Si el extractor guardó el grado en bruto, esto
+    hace que el contenido específico matchee igual. None si no parsea."""
+    inferidor = {
+        "kinder": _infer_grado_kinder,
+        "primaria": _infer_grado_primaria,
+        "secundaria": _infer_grado_secundaria,
+    }.get(nivel or "")
+    if inferidor is None or not grado_texto:
+        return None
+    g = inferidor(edad=None, grado_texto=grado_texto)
+    if g is None:
+        return None
+    return f"{g}° de {_DISPLAY_NIVEL_GRADO[nivel]}"
+
 # Base de conocimiento oficial — fuente del contenido EXACTO por grado/nivel.
 _KB_PATH = Path(__file__).resolve().parent.parent / "kb" / "sofia_kb_oficial.md"
 
@@ -538,13 +555,17 @@ def decidir_funnel(
     grado = h.grado if (h and h.grado) else None
     edad = h.edad if h else None
     edad_meses = h.edad_meses if h else None
+    nivel_ctx = nivel_en_msg or (
+        capt.nivel_buscado_actual.value if capt.nivel_buscado_actual else None
+    )
 
+    # Normaliza el grado libre del extractor ("cuarto"/"4to") a la forma de la KB
+    # ("4° de Primaria") para que el contenido ESPECÍFICO matchee y no caiga a genérico.
+    if grado and nivel_ctx:
+        grado = _grado_canonico(nivel_ctx, grado) or grado
     # Si el papá respondió con la EDAD (no el grado) para K/P/S, inferimos el grado de la
     # edad (4 años → 2° de Kinder, 7 → 2° de Primaria) en vez de seguir pidiéndolo en loop.
     if grado is None and edad is not None:
-        nivel_ctx = nivel_en_msg or (
-            capt.nivel_buscado_actual.value if capt.nivel_buscado_actual else None
-        )
         grado = _grado_de_edad(nivel_ctx, edad)
 
     def _especifico(nv: str | None) -> bool:
@@ -575,6 +596,19 @@ def decidir_funnel(
         )
         return FunnelDecision(
             hint, _cta_etapa1(nivel_en_msg, grado),
+            False, STAGE_VALOR, 1, False, beats_usados=beats,
+        )
+
+    # GRADO/EDAD SUELTO sin nombrar el nivel ("cuarto grado") pero el estado YA resolvió
+    # nivel+grado (el extractor lo dedujo) → damos el contenido ESPECÍFICO igual, en lugar
+    # de quedarnos en "Perfecto, cuarto grado de primaria." sin nada (bug real de Gaby).
+    if stage == STAGE_ENGANCHE and nivel_ctx and _especifico(nivel_ctx):
+        hint, beats = construir_contenido_grado(
+            nivel_ctx, grado, usados, n=1, incluir_diferenciador=True,
+            edad=edad, edad_meses=edad_meses,
+        )
+        return FunnelDecision(
+            hint, _cta_etapa1(nivel_ctx, grado),
             False, STAGE_VALOR, 1, False, beats_usados=beats,
         )
 

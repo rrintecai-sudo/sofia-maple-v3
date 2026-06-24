@@ -243,6 +243,13 @@ _MATERIA_INCLUIDA_RE = re.compile(
     r"\bchallenge\s*week\b|\blabor\s+social\b|\bmaterias?\s+especiales?\b",
     re.IGNORECASE,
 )
+# Grado 4°/5°/6° SUELTO ("cuarto grado", "5to", "sexto") = inequívocamente PRIMARIA (esos
+# grados solo existen en primaria). Respaldo si el papá responde "¿qué nivel?" con el grado
+# y no nombra "primaria" (bug real de Gaby: "Cuarto grado" → no daba contenido).
+_GRADO_ALTO_PRIMARIA_RE = re.compile(
+    r"\b(?:cuarto|quinto|sexto)\b|\b[456]\s*(?:°|º|to|vo|mo)\b|\b[456]\s*grado\b",
+    re.IGNORECASE,
+)
 
 # Saludo formal de presentación ("¡Hola! …Soy Sofía, del equipo de admisiones…"). Va SOLO
 # en el primer turno; si Haiku lo repite a media conversación (bug visto), se recorta.
@@ -679,6 +686,20 @@ async def procesar_turno(
     # no empuja); continuación lo incrementa; al umbral se ordena el empuje; si el papá
     # CONTINÚA tras el empuje, acepta → entra al agendado existente.
     nivel_en_msg = nivel_buscado_de_mensaje(mensaje)
+    # Respaldo determinístico: "cuarto/quinto/sexto grado" SIN decir "primaria" es
+    # inequívocamente PRIMARIA 4°-6°. Fijamos nivel + grado canónico para que el funnel
+    # dé el contenido (bug real: "Cuarto grado" → "Qué bueno." sin nada).
+    if nivel_en_msg is None and _GRADO_ALTO_PRIMARIA_RE.search(mensaje):
+        from app.core.state import HijoInfo, NivelEducativo
+
+        nivel_en_msg = NivelEducativo.PRIMARIA
+        _g_alto = extraer_grado_suelto(mensaje, NivelEducativo.PRIMARIA)
+        if _g_alto:
+            if capt.hijos:
+                capt.hijos[0].grado = _g_alto
+                capt.hijos[0].nivel = NivelEducativo.PRIMARIA
+            else:
+                capt.hijos = [HijoInfo(nivel=NivelEducativo.PRIMARIA, grado=_g_alto)]
     # DOS HIJOS / MULTI-NIVEL (protocolo de la KB): si el papá menciona 2+ niveles
     # distintos (o ya hay 2+ hijos con niveles distintos), el funnel se HACE A UN LADO
     # → Haiku corre el protocolo del documento (uno a la vez, pregunta con cuál empezar)
