@@ -699,10 +699,23 @@ async def procesar_turno(
     # con un grado SUELTO sin nombrar el nivel. Resolvemos nivel (+grado/edad) para que el
     # funnel dé el CONTENIDO — no vacío, no "Qué bueno", no grado inventado ("13 años→7°
     # grado", "4 años→3° Kinder"). Solo si aún no hay nivel en el mensaje ni en el estado.
-    if nivel_en_msg is None and capt.nivel_buscado_actual is None:
+    # 4°/5°/6° o cuarto/quinto/sexto = SIEMPRE primaria (inequívoco). Corrige al extractor
+    # si adivinó otro nivel ("sexto" → secundaria) — el sync de abajo realinea nivel+grado.
+    if nivel_en_msg is None and _GRADO_ALTO_PRIMARIA_RE.search(mensaje):
         from app.core.state import HijoInfo, NivelEducativo
 
-        _niv = _gr = _edad = _g_canon = None
+        nivel_en_msg = NivelEducativo.PRIMARIA
+        _g_canon = extraer_grado_suelto(mensaje, NivelEducativo.PRIMARIA)
+        if not capt.hijos:
+            capt.hijos = [HijoInfo()]
+        capt.hijos[0].nivel = NivelEducativo.PRIMARIA
+        if _g_canon:
+            capt.hijos[0].grado = _g_canon
+    # Edad / meses como PRIMER dato (solo si aún no hay nivel) → nivel+grado para contenido.
+    elif nivel_en_msg is None and capt.nivel_buscado_actual is None:
+        from app.core.state import HijoInfo, NivelEducativo
+
+        _niv = _gr = _edad = None
         if _m_meses:  # capturado arriba → maternal (la modalidad la da edad_meses)
             _niv = "maternal"
         elif (_ma := _EDAD_ANOS_RE.search(mensaje)) is not None:
@@ -715,9 +728,6 @@ async def procesar_turno(
                 _niv, _gr = "primaria", _edad - 5  # 6→1° … 11→6°
             elif 12 <= _edad <= 14:
                 _niv, _gr = "secundaria", _edad - 11  # 12→1°, 13→2°, 14→3°
-        elif _GRADO_ALTO_PRIMARIA_RE.search(mensaje):
-            _niv = "primaria"
-            _g_canon = extraer_grado_suelto(mensaje, NivelEducativo.PRIMARIA)
         if _niv:
             nivel_en_msg = NivelEducativo(_niv)
             if not capt.hijos:
@@ -727,8 +737,6 @@ async def procesar_turno(
                 capt.hijos[0].edad = _edad
             if _gr is not None:
                 capt.hijos[0].grado = f"{_gr}° de {_DISPLAY_NIVEL_ORCH[_niv]}"
-            elif _g_canon:
-                capt.hijos[0].grado = _g_canon
     # DOS HIJOS / MULTI-NIVEL (protocolo de la KB): si el papá menciona 2+ niveles
     # distintos (o ya hay 2+ hijos con niveles distintos), el funnel se HACE A UN LADO
     # → Haiku corre el protocolo del documento (uno a la vez, pregunta con cuál empezar)
