@@ -233,6 +233,16 @@ _TERMINOS_MAPLE_RE = re.compile(
     r"\bchallenge\s*week\b|\blego\b|\blabor\s+social\b|\bdisciplina\s+positiva\b",
     re.IGNORECASE,
 )
+# Materias especiales / programas / idiomas que van INCLUIDOS en el programa académico
+# (KB: "incluidas en el horario escolar / programa académico"). Si preguntan si TIENEN
+# COSTO EXTRA, la respuesta es que están incluidos — NO la colegiatura. (NO incluye las
+# academias extracurriculares de la tarde ni estancias, que sí son servicio adicional.)
+_MATERIA_INCLUIDA_RE = re.compile(
+    r"\brob[óo]tica\b|\blego\b|\bprogramaci[óo]n\b|\bfranc[ée]s\b|\bm[úu]sica\b|"
+    r"\beducaci[óo]n\s+f[íi]sica\b|\bkonnect\b|\bglobal\s*breakers?\b|\bsing\s*it\b|"
+    r"\bchallenge\s*week\b|\blabor\s+social\b|\bmaterias?\s+especiales?\b",
+    re.IGNORECASE,
+)
 
 # Saludo formal de presentación ("¡Hola! …Soy Sofía, del equipo de admisiones…"). Va SOLO
 # en el primer turno; si Haiku lo repite a media conversación (bug visto), se recorta.
@@ -808,6 +818,10 @@ async def procesar_turno(
         tipos_oferta.add("estancias")
     if es_dia_contenido:
         tipos_oferta.discard("horario")  # que lo conteste el funnel/Haiku como contenido
+    # "¿la robótica/el francés tienen costo extra?" → NO es la colegiatura; van incluidos.
+    # Que Haiku lo aclare desde la KB en vez de soltar la tabla de precios del nivel.
+    if "costos" in tipos_oferta and _MATERIA_INCLUIDA_RE.search(mensaje):
+        tipos_oferta.discard("costos")
     if grado_horario_resuelto:  # el grado suelto re-dispara el horario, ya con el grado
         tipos_oferta.add("horario")
     if grado_costos_resuelto:  # el grado suelto re-dispara el precio, ya con el grado
