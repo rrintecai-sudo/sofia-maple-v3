@@ -246,8 +246,17 @@ _MATERIA_INCLUIDA_RE = re.compile(
 # Grado 4°/5°/6° SUELTO ("cuarto grado", "5to", "sexto") = inequívocamente PRIMARIA (esos
 # grados solo existen en primaria). Respaldo si el papá responde "¿qué nivel?" con el grado
 # y no nombra "primaria" (bug real de Gaby: "Cuarto grado" → no daba contenido).
+# OJO: el símbolo "°"/"º" no lleva \b al final (no es char de palabra) → "4°" no matcheaba.
 _GRADO_ALTO_PRIMARIA_RE = re.compile(
-    r"\b(?:cuarto|quinto|sexto)\b|\b[456]\s*(?:°|º|to|vo|mo)\b|\b[456]\s*grado\b",
+    r"\b(?:cuarto|quinto|sexto)\b|\b[456]\s*(?:to|vo|mo)\b|\b[456]\s*[°º]|\b[456]\s*grado\b",
+    re.IGNORECASE,
+)
+# "tiene 9 años" / "9 años" → edad en años (para mapear edad→nivel+grado como primer dato).
+_EDAD_ANOS_RE = re.compile(r"\b(\d{1,2})\s*a[ñn]os?\b", re.IGNORECASE)
+_DISPLAY_NIVEL_ORCH = {"kinder": "Kinder", "primaria": "Primaria", "secundaria": "Secundaria"}
+# Ordinal BAJO suelto ("segundo", "tercero", "2°") SIN nivel → ambiguo (K/P/S) → pedir nivel.
+_ORDINAL_BAJO_AMBIGUO_RE = re.compile(
+    r"^\s*(?:primer[oa]?|segund[oa]|tercer[oa]?|[123]\s*[°º]?)\s*(?:grado)?\s*[.!?]*\s*$",
     re.IGNORECASE,
 )
 
@@ -686,20 +695,40 @@ async def procesar_turno(
     # no empuja); continuación lo incrementa; al umbral se ordena el empuje; si el papá
     # CONTINÚA tras el empuje, acepta → entra al agendado existente.
     nivel_en_msg = nivel_buscado_de_mensaje(mensaje)
-    # Respaldo determinístico: "cuarto/quinto/sexto grado" SIN decir "primaria" es
-    # inequívocamente PRIMARIA 4°-6°. Fijamos nivel + grado canónico para que el funnel
-    # dé el contenido (bug real: "Cuarto grado" → "Qué bueno." sin nada).
-    if nivel_en_msg is None and _GRADO_ALTO_PRIMARIA_RE.search(mensaje):
+    # RESPALDO DETERMINÍSTICO (primer dato): el papá responde "¿qué nivel?" con la EDAD o
+    # con un grado SUELTO sin nombrar el nivel. Resolvemos nivel (+grado/edad) para que el
+    # funnel dé el CONTENIDO — no vacío, no "Qué bueno", no grado inventado ("13 años→7°
+    # grado", "4 años→3° Kinder"). Solo si aún no hay nivel en el mensaje ni en el estado.
+    if nivel_en_msg is None and capt.nivel_buscado_actual is None:
         from app.core.state import HijoInfo, NivelEducativo
 
-        nivel_en_msg = NivelEducativo.PRIMARIA
-        _g_alto = extraer_grado_suelto(mensaje, NivelEducativo.PRIMARIA)
-        if _g_alto:
-            if capt.hijos:
-                capt.hijos[0].grado = _g_alto
-                capt.hijos[0].nivel = NivelEducativo.PRIMARIA
-            else:
-                capt.hijos = [HijoInfo(nivel=NivelEducativo.PRIMARIA, grado=_g_alto)]
+        _niv = _gr = _edad = _g_canon = None
+        if _m_meses:  # capturado arriba → maternal (la modalidad la da edad_meses)
+            _niv = "maternal"
+        elif (_ma := _EDAD_ANOS_RE.search(mensaje)) is not None:
+            _edad = int(_ma.group(1))
+            if _edad <= 2:
+                _niv = "maternal"
+            elif 3 <= _edad <= 5:
+                _niv, _gr = "kinder", _edad - 2  # 3→1°, 4→2°, 5→3°
+            elif 6 <= _edad <= 11:
+                _niv, _gr = "primaria", _edad - 5  # 6→1° … 11→6°
+            elif 12 <= _edad <= 14:
+                _niv, _gr = "secundaria", _edad - 11  # 12→1°, 13→2°, 14→3°
+        elif _GRADO_ALTO_PRIMARIA_RE.search(mensaje):
+            _niv = "primaria"
+            _g_canon = extraer_grado_suelto(mensaje, NivelEducativo.PRIMARIA)
+        if _niv:
+            nivel_en_msg = NivelEducativo(_niv)
+            if not capt.hijos:
+                capt.hijos = [HijoInfo()]
+            capt.hijos[0].nivel = NivelEducativo(_niv)
+            if _edad is not None:
+                capt.hijos[0].edad = _edad
+            if _gr is not None:
+                capt.hijos[0].grado = f"{_gr}° de {_DISPLAY_NIVEL_ORCH[_niv]}"
+            elif _g_canon:
+                capt.hijos[0].grado = _g_canon
     # DOS HIJOS / MULTI-NIVEL (protocolo de la KB): si el papá menciona 2+ niveles
     # distintos (o ya hay 2+ hijos con niveles distintos), el funnel se HACE A UN LADO
     # → Haiku corre el protocolo del documento (uno a la vez, pregunta con cuál empezar)
@@ -897,6 +926,22 @@ async def procesar_turno(
             lineas_oferta = [_REORIENTA_SALUDO]
         elif intent_result.intent == Intent.CONFUSO_OTRO and not extraccion_con_datos:
             lineas_oferta = [_REORIENTA_GENERAL]
+
+    # ORDINAL BAJO AMBIGUO ("segundo", "tercero", "2°" SOLO) sin nivel → el grado 1-3 existe
+    # en Kinder, Primaria Y Secundaria. Pedimos el nivel (el grado ya quedó en el estado; al
+    # decir "primaria" el funnel canoniza "2° de Primaria" y da el contenido). Evita el
+    # "😊"/"Perfecto." sin nada.
+    if (
+        not lineas_oferta
+        and funnel.hint is None
+        and nivel_en_msg is None
+        and capt.nivel_buscado_actual is None
+        and _ORDINAL_BAJO_AMBIGUO_RE.match(mensaje or "")
+    ):
+        lineas_oferta = [
+            "¡Perfecto! Para contarte justo lo de su grado, ¿en qué nivel va: "
+            "Kinder, Primaria o Secundaria? 😊"
+        ]
 
     # FUNNEL gracia: Etapa 2 con beats AGOTADOS (hint None pero hay CTA de empuje) →
     # se reduce con gracia emitiendo solo la CTA por código (sin Haiku ni mensaje vacío).
