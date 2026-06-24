@@ -225,6 +225,14 @@ _HORARIO_EXPLICITO_RE = re.compile(
     r"\bhorario\s+de\b|\bhora\s+(?:entran?|salen?)\b",
     re.IGNORECASE,
 )
+# Términos PROPIOS de Maple (marcas/programas). El clasificador LLM no los reconoce y los
+# manda a 'confuso' → menú genérico, en vez de explicarlos. Los reencaminamos a pregunta
+# general para que Haiku responda con el contenido OFICIAL de la KB (aporte de Gaby).
+_TERMINOS_MAPLE_RE = re.compile(
+    r"\bkonnect\b|\bhigh\s*scope\b|\bglobal\s*breakers?\b|\bsing\s*it\b|"
+    r"\bchallenge\s*week\b|\blego\b|\blabor\s+social\b|\bdisciplina\s+positiva\b",
+    re.IGNORECASE,
+)
 
 # Saludo formal de presentación ("¡Hola! …Soy Sofía, del equipo de admisiones…"). Va SOLO
 # en el primer turno; si Haiku lo repite a media conversación (bug visto), se recorta.
@@ -527,6 +535,16 @@ async def procesar_turno(
         )
     )
     extraccion, intent_result = await asyncio.gather(extraccion_task, intent_task)
+
+    # Término PROPIO de Maple ("¿qué es Konnect?", "LEGO", "Global Breakers"…) que el
+    # clasificador mandó a 'confuso' → reencaminar a pregunta general para que Haiku lo
+    # explique desde la KB en vez de soltar el menú genérico.
+    if intent_result.intent == Intent.CONFUSO_OTRO and _TERMINOS_MAPLE_RE.search(mensaje):
+        intent_result = IntentResult(
+            intent=Intent.PREGUNTA_GENERAL_MAPLE,
+            confidence=1.0,
+            razonamiento_breve="término propio de Maple → general",
+        )
 
     # 4-pre. RE-ARMADO (2026-06-02). Una sesión que YA cerró una cita (CERRADO) y
     # se reusa (en WhatsApp la sesión = el teléfono, persiste para siempre) puede
