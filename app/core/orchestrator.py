@@ -292,6 +292,13 @@ _NL_CERTIF_ING_RE = re.compile(
     r"\bingl[ée]s\b.*\bcertificad",
     re.IGNORECASE,
 )
+# Ubicación/dirección → respuesta determinística con la dirección COMPLETA (un guard la
+# cortaba en "Col." porque el punto de la abreviatura parece fin de oración).
+_UBICACION_RE = re.compile(
+    r"\bd[óo]nde\s+(?:est[áa]n|queda|se\s+ubica|los\s+encuentro)|\bubicaci[óo]n\b|"
+    r"\bdirecci[óo]n\b|\bc[óo]mo\s+llego\b|\ben\s+qu[ée]\s+(?:zona|parte|colonia)\b|\bsucursal",
+    re.IGNORECASE,
+)
 # Preguntas de ADAPTACIÓN/personalidad (tímido, inquieto…) → seguridad emocional, NO precios.
 _ADAPTA_RE = re.compile(
     r"\bt[íi]mid|\binquiet|\bse\s+adapt|\badaptar[íi]a|\bsocializ|\bberrinch|\bnervios|"
@@ -304,6 +311,15 @@ def _respuesta_especial(mensaje: str) -> str | None:
     """Respuesta determinística (code-only, sin Haiku) para temas que NO están en la KB
     (evita invención) o para preguntas de adaptación (evita el menú de precios)."""
     m = mensaje or ""
+    if _UBICACION_RE.search(m):
+        return (
+            "Estamos en Saltillo, Coahuila, con dos campus 📍\n"
+            "• Campus 1: José Figueroa Siller 156, Col. Doctores — Maternal, Kinder y "
+            "Primaria (hasta 5°)\n"
+            "• Campus 2: Blvd. V. Carranza 5064, Col. Doctores — 6° de Primaria a Secundaria\n"
+            "Si te queda algo retirado, no te preocupes — muchas familias vienen de distintas "
+            "zonas. ¿Te gustaría agendar una visita para conocernos? 😊"
+        )
     if _NL_PSICO_RE.search(m):
         return (
             "Maple es una escuela inclusiva y acompaña a cada niño según lo que necesita 💛 "
