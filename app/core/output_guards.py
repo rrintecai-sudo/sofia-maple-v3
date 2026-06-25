@@ -77,8 +77,28 @@ def limpiar_comillas_huerfanas(texto: str) -> str:
     txt = "\n".join(out)
     txt = re.sub(r'"\s*\.\s*"', ".", txt)  # residuo '". "' entre cortes
     txt = re.sub(r"\.\s+\.", ".", txt)  # '. .' que queda tras quitar la comilla
+    # Puntuación rota tras recortar un inciso ('. , a conectar' / ', ,' / coma al inicio).
+    txt = re.sub(r"\.\s*,\s*", ". ", txt)  # ". ," → ". "
+    txt = re.sub(r",\s*,+", ",", txt)  # comas repetidas
+    txt = re.sub(r"(^|\n)[ \t]*,[ \t]*", r"\1", txt)  # coma huérfana al inicio de línea
+    txt = re.sub(r"[ \t]+([.,;:!?])", r"\1", txt)  # espacio antes de puntuación
     txt = re.sub(r"[ \t]{2,}", " ", txt)
     return txt.strip()
+
+
+_PSICO_INVENTO_RE = re.compile(r"psicopedagog|psic[óo]log|terapeut", re.IGNORECASE)
+
+
+def sanear_invento_psico(texto: str) -> str:
+    """Quita oraciones que mencionen psicopedagogía/psicólogo/terapeuta — NUNCA están en la
+    KB, Haiku las inventa (un 'equipo de psicopedagogía' inexistente). Mejor omitir la frase
+    que afirmar un recurso que no existe."""
+    if not _PSICO_INVENTO_RE.search(texto or ""):
+        return texto or ""
+    partes = re.findall(r"[^.!?…]*[.!?…]+|\S[^.!?…]*$", texto or "")
+    keep = [p for p in partes if not _PSICO_INVENTO_RE.search(p)]
+    out = "".join(keep).strip() if keep else (texto or "")
+    return re.sub(r"\n{3,}", "\n\n", re.sub(r"[ \t]{2,}", " ", out)).strip()
 
 
 def limpiar_listas_rotas(texto: str) -> str:
@@ -174,4 +194,5 @@ def sanear_texto_libre_haiku(texto: str, *, max_preguntas: int = MAX_PREGUNTAS_P
     paso3 = limpiar_listas_rotas(paso2)
     paso4 = limpiar_marcadores_sueltos(paso3)
     paso5 = limpiar_comillas_huerfanas(paso4)
-    return sanear_enfasis_prohibido(paso5)
+    paso6 = sanear_invento_psico(paso5)  # quita 'psicopedagogía/psicólogo' inventado
+    return sanear_enfasis_prohibido(paso6)
