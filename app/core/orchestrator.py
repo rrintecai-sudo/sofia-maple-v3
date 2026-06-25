@@ -983,6 +983,14 @@ async def procesar_turno(
     # Que Haiku lo aclare desde la KB en vez de soltar la tabla de precios del nivel.
     if "costos" in tipos_oferta and _MATERIA_INCLUIDA_RE.search(mensaje):
         tipos_oferta.discard("costos")
+    # "¿cuánto cuesta el horario extendido/estancia?" → el costo es de la ESTANCIA, no la
+    # colegiatura. Sin nivel mencionado, descartamos costos para no soltar el menú de nivel.
+    if (
+        "estancias" in tipos_oferta
+        and "costos" in tipos_oferta
+        and nivel_buscado_de_mensaje(mensaje) is None
+    ):
+        tipos_oferta.discard("costos")
     if grado_horario_resuelto:  # el grado suelto re-dispara el horario, ya con el grado
         tipos_oferta.add("horario")
     if grado_costos_resuelto:  # el grado suelto re-dispara el precio, ya con el grado

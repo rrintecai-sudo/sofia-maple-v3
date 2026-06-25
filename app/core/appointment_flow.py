@@ -759,7 +759,10 @@ async def handle_appointment_intent(
                 f"Propón EXACTAMENTE estas alternativas: {alts_str}. Una sola pregunta breve.]"
             )
             capt.ultimo_campo_pedido = "hora"
-            msg_col = render_pregunta_campo("hora", motivo="Esa hora ya está ocupada.")
+            _horas_oc = _formatear_horas(avail.alternativas[:6]) if avail.alternativas else None
+            msg_col = render_pregunta_campo(
+                "hora", horas_libres=_horas_oc, motivo="Esa hora ya está ocupada."
+            )
         else:  # supabase_error — transitorio, deja a Haiku pedir confirmación
             hint = (
                 "[FLUJO AGENDADO — no pude verificar disponibilidad ahora. "
