@@ -199,11 +199,22 @@ def _menciona_multiples_niveles(mensaje: str, capt: Any) -> bool:
     Se evalúa SOLO sobre el mensaje (no sobre el estado): así, cuando el papá YA eligió
     con cuál empezar ('empecemos por kinder'), el mensaje trae un solo nivel y el funnel
     arranca normal — no se queda 'pegado' por tener 2 hijos guardados."""
-    encontrados = {m.lower() for m in _NIVELES_KW_RE.findall(mensaje or "")}
+    m = mensaje or ""
+    encontrados = {x.lower() for x in _NIVELES_KW_RE.findall(m)}
     if {"prepa", "preparatoria"} & encontrados:
         encontrados -= {"prepa", "preparatoria"}
         encontrados.add("prepa")
-    return len(encontrados) >= 2
+    if len(encontrados) >= 2:
+        return True
+    # DOS HIJOS por edad: "dos niños", o "uno de 4 y otra de 9" (dos edades con otro/otra).
+    ml = m.lower()
+    if re.search(r"\bdos\s+(?:hijos?|ni[ñn]os?|peques?|nen[eo]s?|chamacos?|ni[ñn]as?)\b", ml):
+        return True
+    if "otro" in ml or "otra" in ml:
+        edades_ctx = [int(e) for e in re.findall(r"\bde\s+(\d{1,2})\b", ml)]
+        if len({e for e in edades_ctx if 0 < e <= 17}) >= 2:
+            return True
+    return False
 
 
 _DEFER_LILI = "Ese dato te lo confirma Miss Lili en la cita 😊"
@@ -259,6 +270,78 @@ _ORDINAL_BAJO_AMBIGUO_RE = re.compile(
     r"^\s*(?:primer[oa]?|segund[oa]|tercer[oa]?|[123]\s*[°º]?)\s*(?:grado)?\s*[.!?]*\s*$",
     re.IGNORECASE,
 )
+
+# ANTI-INVENTO: temas que NO están en la KB. Sofía inventaba (psicopedagogía, comedor,
+# # alumnos por salón, examen de admisión) en vez de diferir. Respuesta determinística que
+# NO inventa y lleva a la visita. (alberca/transporte ya difieren bien; no se incluyen.)
+_NL_PSICO_RE = re.compile(r"\bpsic[óo]log|\bpsicopedag|\bterapeut|\bterapias?\b", re.IGNORECASE)
+_NL_COMEDOR_RE = re.compile(r"\bcomedor\b|\bqu[ée]\s+(?:les\s+)?dan\s+de\s+comer\b", re.IGNORECASE)
+_NL_CUPO_RE = re.compile(
+    r"\bcu[áa]ntos?\s+(?:alumnos|ni[ñn]os|estudiantes)\b|"
+    r"\b(?:alumnos|ni[ñn]os|estudiantes)\s+por\s+(?:sal[óo]n|grupo)\b|\bcupos?\b|"
+    r"\bcu[áa]ntos?\s+por\s+(?:grupo|sal[óo]n)\b",
+    re.IGNORECASE,
+)
+_NL_EXAMEN_RE = re.compile(
+    r"\bexamen\s+de\s+(?:admisi|ingreso)|\bprueba\s+de\s+(?:admisi|ingreso)|\bhacen?\s+examen\b",
+    re.IGNORECASE,
+)
+# Certificado oficial de inglés → NO emiten Cambridge/TOEFL (debe decirlo claro, no desviar).
+_NL_CERTIF_ING_RE = re.compile(
+    r"\bcertificad[oa]s?\b.*\b(?:ingl[ée]s|idioma)\b|\b(?:cambridge|toefl|ielts)\b|"
+    r"\bingl[ée]s\b.*\bcertificad",
+    re.IGNORECASE,
+)
+# Preguntas de ADAPTACIÓN/personalidad (tímido, inquieto…) → seguridad emocional, NO precios.
+_ADAPTA_RE = re.compile(
+    r"\bt[íi]mid|\binquiet|\bse\s+adapt|\badaptar[íi]a|\bsocializ|\bberrinch|\bnervios|"
+    r"\bllora\s+mucho|\ble\s+cuesta\s+(?:socializar|relacionar|hacer\s+amigos)",
+    re.IGNORECASE,
+)
+
+
+def _respuesta_especial(mensaje: str) -> str | None:
+    """Respuesta determinística (code-only, sin Haiku) para temas que NO están en la KB
+    (evita invención) o para preguntas de adaptación (evita el menú de precios)."""
+    m = mensaje or ""
+    if _NL_PSICO_RE.search(m):
+        return (
+            "Maple es una escuela inclusiva y acompaña a cada niño según lo que necesita 💛 "
+            "El detalle de cómo se da ese acompañamiento te lo explican mejor en la visita. "
+            "¿Te gustaría agendar para conocerlo?"
+        )
+    if _NL_COMEDOR_RE.search(m):
+        return (
+            "En Maple los desayunos y snacks están incluidos 😊 El detalle del menú te lo "
+            "muestran cuando vengas a conocernos. ¿Te gustaría agendar una visita?"
+        )
+    if _NL_CUPO_RE.search(m):
+        return (
+            "Trabajamos con grupos pequeños para que cada niño reciba atención personalizada 😊 "
+            "El número exacto por grupo y la disponibilidad te los confirman en la visita. "
+            "¿Te gustaría agendar?"
+        )
+    if _NL_EXAMEN_RE.search(m):
+        return (
+            "El proceso de admisión te lo explica nuestro equipo en la cita de informes 😊 "
+            "¿Te gustaría que agendemos para que te cuenten los detalles?"
+        )
+    if _NL_CERTIF_ING_RE.search(m):
+        return (
+            "No emitimos certificados oficiales tipo Cambridge o TOEFL. Lo que sí "
+            "construimos es un nivel real de inglés (entre B2 y C1 al terminar la "
+            "trayectoria) que le permite presentar esos exámenes por su cuenta con "
+            "seguridad. ¿Te cuento cómo trabajamos el inglés por etapas?"
+        )
+    if _ADAPTA_RE.search(m):
+        return (
+            "Entiendo tu inquietud 💛 En Maple lo primero que cuidamos es que tu hijo se sienta "
+            "seguro y acompañado — esa es la base de todo. Cada niño tiene su ritmo y aquí lo "
+            "respetamos, sin presión; lo notas cuando llega más tranquilo y confiado. "
+            "¿Te gustaría conocer cómo lo acompañamos, en una visita?"
+        )
+    return None
+
 
 # Saludo formal de presentación ("¡Hola! …Soy Sofía, del equipo de admisiones…"). Va SOLO
 # en el primer turno; si Haiku lo repite a media conversación (bug visto), se recorta.
@@ -711,8 +794,12 @@ async def procesar_turno(
         capt.hijos[0].nivel = NivelEducativo.PRIMARIA
         if _g_canon:
             capt.hijos[0].grado = _g_canon
-    # Edad / meses como PRIMER dato (solo si aún no hay nivel) → nivel+grado para contenido.
-    elif nivel_en_msg is None and capt.nivel_buscado_actual is None:
+    # Edad / meses como PRIMER dato (solo si aún no hay nivel Y no son DOS hijos) → nivel+grado.
+    elif (
+        nivel_en_msg is None
+        and capt.nivel_buscado_actual is None
+        and not _menciona_multiples_niveles(mensaje, capt)
+    ):
         from app.core.state import HijoInfo, NivelEducativo
 
         _niv = _gr = _edad = None
@@ -893,6 +980,13 @@ async def procesar_turno(
     lineas_oferta: list[str] = (
         await _construir_oferta(estado, tipos_oferta, mensaje) if tipos_oferta else []
     )
+    # ANTI-INVENTO / ADAPTACIÓN: temas fuera de la KB (psicólogo, comedor, # alumnos, examen)
+    # o de personalidad (tímido) → respuesta determinística que NO inventa y NO suelta el menú
+    # de precios. Tiene PRIORIDAD: sobreescribe la oferta mal ruteada (comedor→estancia, etc.).
+    if not en_agendado:
+        _esp = _respuesta_especial(mensaje)
+        if _esp:
+            lineas_oferta = [_esp]
     # RESPUESTAS PROACTIVAS code-emitidas (Bloque B-3) cuando NO hay consulta de oferta,
     # el FUNNEL no actuó, y Haiku quedaría suelto (se quedaba seco / rebotaba "estoy por
     # acá"). El nivel suelto ahora lo maneja el FUNNEL (Etapa 1, sin precio). Solo fuera
