@@ -78,6 +78,35 @@ class PrecioResult:
         )
         return frase + "."
 
+    def bloque_gastos_completo(self) -> str:
+        """Desglose COMPLETO de gastos iniciales + total. Se usa cuando el papá los pide
+        EXPLÍCITAMENTE ('cuánto son las cuotas/el seguro/el total/qué más se paga') — antes
+        Sofía evadía esto y entraba en loop (queja real). Los montos vienen de la BD."""
+        disp = {
+            "kinder": "Kinder", "maternal": "Maternal", "secundaria": "Secundaria",
+            "primaria_baja": "Primaria (1° a 3°)", "primaria_alta": "Primaria (4° a 6°)",
+        }.get(self.nivel, self.nivel.replace("_", " ").title())
+        conceptos: list[tuple[str, object]] = [
+            ("Inscripción", self.inscripcion),
+            ("Seguro escolar", self.seguro_escolar),
+            ("Seguro de orfandad", self.seguro_orfandad),
+            ("Recursos educativos", self.recursos_educativos),
+            ("Gastos escolares", self.gastos_escolares),
+            ("Desayunos y snacks", self.desayunos_snacks),
+            ("Talleres", self.talleres),
+        ]
+        cole = self.colegiatura_mensual or Decimal("0")
+        lineas = [f"💰 Te paso el detalle completo de {disp}:", f"• Colegiatura: ${cole:,.0f} al mes ({self.num_colegiaturas} al año, agosto a junio)"]
+        lineas.append("")
+        lineas.append("Gastos iniciales (se cubren UNA sola vez al ingresar):")
+        for nombre, monto in conceptos:
+            if monto:
+                lineas.append(f"• {nombre}: ${Decimal(monto):,.0f}")
+        if self.total_gastos_iniciales:
+            lineas.append(f"\n**Total de gastos iniciales: ${self.total_gastos_iniciales:,.0f}**")
+        lineas.append("\nNo hay cobros sorpresa después de esto. ¿Quieres que te cuente algo más o agendamos una visita? 😊")
+        return "\n".join(lineas)
+
 
 async def get_todos_precios(
     *, ciclo_escolar: str = CICLO_ACTUAL, settings: Settings | None = None

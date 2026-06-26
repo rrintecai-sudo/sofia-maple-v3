@@ -229,6 +229,17 @@ _ESCALACION_LOOP = (
 )
 
 
+# El papá pide el DESGLOSE / total / cuotas extra → dar el detalle completo (no evadir).
+_GASTOS_DESGLOSE_RE = re.compile(
+    r"\bgastos?\s+iniciales?\b|\bcuotas?\s+(?:extra|adicional|inicial|otra)|"
+    r"\bqu[ée]\s+m[áa]s\s+se\s+paga\b|\bdesglose\b|\bel\s+total\b|"
+    r"\bcu[áa]nto\s+(?:es\s+|sale\s+|ser[íi]a\s+)?(?:en\s+)?total\b|\bcu[áa]nto\s+sale\s+todo\b|"
+    r"\bcon\s+todo\s+incluido\b|\btodo\s+junto\b|\bel\s+seguro\b|\blos\s+seguros\b|"
+    r"\botras?\s+cuotas?\b|\bqu[ée]\s+otras?\s+(?:cuotas|cosas|cobros)\b|\bcobros?\s+(?:extra|sorpresa)",
+    re.IGNORECASE,
+)
+
+
 def _nucleo_respuesta(t: str) -> str:
     """Quita el prefijo 'Como te comentaba,' para comparar el CONTENIDO real entre turnos
     (el loop alternaba con/sin ese prefijo, así que sin esto no se detectaba)."""
@@ -529,9 +540,15 @@ async def _construir_oferta(
 
     if "costos" in tipos:
         nivel = precio_nivel_de_estado(estado)
+        # ¿pide el DESGLOSE/total/cuotas extra? → damos el detalle completo (no evadir, era
+        # el loop #1: "cuánto son las cuotas/el seguro/el total/qué más se paga/con todo").
+        pide_desglose = bool(_GASTOS_DESGLOSE_RE.search(mensaje))
         if nivel:
             p = await get_precio(nivel)
-            lineas.append(f"💰 {p.bloque_costos()}" if p else f"💰 {_DEFER_LILI}")
+            if p:
+                lineas.append(p.bloque_gastos_completo() if pide_desglose else f"💰 {p.bloque_costos()}")
+            else:
+                lineas.append(f"💰 {_DEFER_LILI}")
         else:
             # No se pudo resolver el nivel exacto. NUNCA volcar la tabla cruda con las
             # claves internas de BD ('primaria_baja' $6,100; 'primaria_alta' $6,300) — el
