@@ -306,9 +306,19 @@ _ORDINAL_BAJO_AMBIGUO_RE = re.compile(
 _NL_PSICO_RE = re.compile(r"\bpsic[óo]log|\bpsicopedag|\bterapeut|\bterapias?\b", re.IGNORECASE)
 _NL_COMEDOR_RE = re.compile(r"\bcomedor\b|\bqu[ée]\s+(?:les\s+)?dan\s+de\s+comer\b", re.IGNORECASE)
 _NL_CUPO_RE = re.compile(
-    r"\bcu[áa]ntos?\s+(?:alumnos|ni[ñn]os|estudiantes)\b|"
-    r"\b(?:alumnos|ni[ñn]os|estudiantes)\s+por\s+(?:sal[óo]n|grupo)\b|\bcupos?\b|"
-    r"\bcu[áa]ntos?\s+por\s+(?:grupo|sal[óo]n)\b",
+    r"\bcu[áa]ntos?\s+(?:alumnos|ni[ñn]os|estudiantes|beb[ée]s)\b|"
+    r"\b(?:alumnos|ni[ñn]os|estudiantes|beb[ée]s)\s+por\s+(?:sal[óo]n|grupo|maestra?)\b|"
+    r"\bcupos?\b|\bcu[áa]ntos?\s+por\s+(?:grupo|sal[óo]n|maestra?)\b|\bratio\b|"
+    r"\bproporci[óo]n\b|\bmaestras?\s+por\b",
+    re.IGNORECASE,
+)
+# Datos puntuales que Maple NO tiene digitalizados (instalaciones específicas, lista de
+# útiles/uniformes, etc.) → diferir con HONESTIDAD y ofrecer conseguirlo, NO ir a horario
+# ni repetir en loop (queja real: "canchas?" → daba el horario 3 veces).
+_NL_NODATO_RE = re.compile(
+    r"\bcanchas?\b|\balberca\b|\bgimnasio\b|\binstalaciones\b|\bsal[óo]n\s+de\b|"
+    r"\buniformes?\b|\b[úu]tiles\b|\blista\s+de\s+[úu]tiles\b|\bexcursion|\bmateriales?\b|"
+    r"\beventos?\b|\bcanch",
     re.IGNORECASE,
 )
 _NL_EXAMEN_RE = re.compile(
@@ -407,6 +417,12 @@ def _respuesta_especial(mensaje: str) -> str | None:
         return (
             "El proceso de admisión te lo explica nuestro equipo en la cita de informes 😊 "
             "¿Te gustaría que agendemos para que te cuenten los detalles?"
+        )
+    if _NL_NODATO_RE.search(m):
+        return (
+            "Buena pregunta 😊 Ese detalle puntual no lo tengo a la mano aquí, pero te lo "
+            "consigo con el equipo y te lo paso sin problema. ¿Me compartes tu WhatsApp para "
+            "mandártelo? También lo ves directo cuando vengas a conocer el colegio."
         )
     if _NL_CERTIF_ING_RE.search(m):
         return (
