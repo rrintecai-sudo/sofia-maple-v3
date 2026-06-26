@@ -219,6 +219,21 @@ def _menciona_multiples_niveles(mensaje: str, capt: Any) -> bool:
 
 _DEFER_LILI = "Ese dato te lo confirma Miss Lili en la cita 😊"
 
+# ANTI-LOOP: cuando el papá re-pregunta algo que no pudimos detallar, NO repetir el mismo
+# bloque (queja #1 de los papás simulados) → ESCALAR con Lily / ofrecer la visita.
+_ESCALACION_LOOP = (
+    "Veo que esto te importa y no quiero darte vueltas 🙏 Para darte el dato exacto y que "
+    "resuelvas todo al instante, lo mejor es que te conecte con Lily, de nuestro equipo de "
+    "admisiones. ¿Me compartes tu nombre y tu WhatsApp para que te contacte hoy mismo? O si "
+    "prefieres, agendamos una visita y ahí te explican cada detalle. 😊"
+)
+
+
+def _nucleo_respuesta(t: str) -> str:
+    """Quita el prefijo 'Como te comentaba,' para comparar el CONTENIDO real entre turnos
+    (el loop alternaba con/sin ese prefijo, así que sin esto no se detectaba)."""
+    return re.sub(r"^\s*como te comentaba,?\s*", "", (t or "").strip(), flags=re.IGNORECASE).strip()
+
 # Preguntas que NO son de horario escolar aunque el clasificador LLM las marque así:
 #  - "¿cómo es un día?", "el día a día", "qué hacen en un día" → CONTENIDO de la etapa
 #    (de hecho el funnel cierra con "¿te cuento cómo se ve un día en X?").
@@ -227,7 +242,10 @@ _DEFER_LILI = "Ese dato te lo confirma Miss Lili en la cita 😊"
 _DIA_CONTENIDO_RE = re.compile(
     r"\b(?:un|el|su)\s+d[íi]a\b|"  # "cómo es un día", "un día como es", "el día a día"
     r"\bd[íi]a\s+a\s+d[íi]a\b|\bla\s+jornada\b|\bqu[ée]\s+hacen?\b|"
-    r"\bcu[áa]ntas?\s+horas?\s+de\s+(?:ingl[ée]s|franc[ée]s|clase|materia|deporte|arte|m[úu]sica)\b",
+    r"\bhoras?\b[^.?!\n]{0,18}\b(?:ingl[ée]s|franc[ée]s)\b|"  # "horas (son) de inglés"
+    r"\b(?:ingl[ée]s|franc[ée]s)\b[^.?!\n]{0,18}\bhoras?\b|"  # "inglés … horas"
+    r"\bcu[áa]nto\s+(?:ingl[ée]s|franc[ée]s)\b|\bqu[ée]\s+tanto\s+ingl[ée]s\b|"
+    r"\bcu[áa]ntas?\s+horas?\s+de\s+(?:clase|materia|deporte|arte|m[úu]sica)\b",
     re.IGNORECASE,
 )
 # …salvo que SÍ pregunten explícitamente por el horario escolar (entrada/salida).
@@ -1625,16 +1643,18 @@ async def procesar_turno(
             response_text = _sin_saludo
             log.info("saludo_repetido_recortado", extra={"session_id": session_id})
 
-    # 10ter. ANTI-DUPLICADO: nunca enviar IDÉNTICO el mensaje del turno anterior
-    # (se veían dos veces el menú o el bloque de estancias). Varía y avanza. No aplica
-    # al cierre D.4 (ese mensaje es único por cita).
+    # 10ter. ANTI-LOOP: si la respuesta REPITE el núcleo del turno anterior (el papá re-
+    # preguntó algo que no pudimos detallar y reemitiríamos el mismo bloque), NO repetimos
+    # — ESCALAMOS a Lily / visita. Antes solo anteponía "Como te comentaba" y seguía el loop
+    # 3-5 veces (queja #1 real de los papás: "me repites lo mismo, esto parece un bot tonto").
     if (
         not _es_cierre
         and ultimo_assistant_msg
-        and response_text.strip() == ultimo_assistant_msg.strip()
+        and _nucleo_respuesta(response_text) == _nucleo_respuesta(ultimo_assistant_msg)
+        and _nucleo_respuesta(response_text) != _nucleo_respuesta(_ESCALACION_LOOP)
     ):
-        response_text = _variar_respuesta(response_text)
-        log.info("anti_duplicado_aplicado", extra={"session_id": session_id})
+        response_text = _ESCALACION_LOOP
+        log.info("anti_loop_escalacion", extra={"session_id": session_id})
 
     # 10quinquies. SALVAVIDAS — NUNCA enviar vacío ni un ACK MUERTO ("Qué bueno.", "Claro,
     # con gusto te cuento.", "Perfecto.") sin nada más. Bug real (Gaby): "Me encanta" →
