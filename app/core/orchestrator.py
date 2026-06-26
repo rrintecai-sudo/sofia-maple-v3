@@ -307,10 +307,47 @@ _ADAPTA_RE = re.compile(
 )
 
 
+def _grado_de_edad_texto(e: int) -> str | None:
+    if 3 <= e <= 5:
+        return f"{e - 2}° de Kinder"
+    if 6 <= e <= 11:
+        return f"{e - 5}° de Primaria"
+    if 12 <= e <= 14:
+        return f"{e - 11}° de Secundaria"
+    if e <= 2:
+        return "Maternal"
+    return None
+
+
+def _respuesta_dos_hijos(mensaje: str) -> str | None:
+    """DOS HIJOS por edad → respuesta determinística que nombra el grado de cada uno y
+    pregunta con cuál empezar (antes: a veces menú genérico, a veces respuesta muerta)."""
+    ml = (mensaje or "").lower()
+    es_dos = bool(
+        re.search(r"\bdos\s+(?:hijos?|ni[ñn]os?|ni[ñn]as?|peques?|nen[eo]s?)\b", ml)
+    ) or bool(re.search(r"\buno\s+de\s+\d+.*?(?:otr[oa]|uno)\s+de\s+\d", ml))
+    if not es_dos:
+        return None
+    pares = re.findall(r"(\d{1,2})\s*a[ñn]os|\bde\s+(\d{1,2})\b", ml)
+    edades = [int(a or b) for a, b in pares if (a or b) and 0 < int(a or b) <= 17]
+    if len(edades) < 2:
+        return None
+    g1, g2 = _grado_de_edad_texto(edades[0]), _grado_de_edad_texto(edades[1])
+    if not g1 or not g2:
+        return None
+    return (
+        f"¡Qué bien, dos! 😊 Por sus edades, el de {edades[0]} estaría en {g1} y el de "
+        f"{edades[1]} en {g2}. ¿Con cuál te gustaría que empecemos para contarte a detalle?"
+    )
+
+
 def _respuesta_especial(mensaje: str) -> str | None:
     """Respuesta determinística (code-only, sin Haiku) para temas que NO están en la KB
     (evita invención) o para preguntas de adaptación (evita el menú de precios)."""
     m = mensaje or ""
+    _dh = _respuesta_dos_hijos(m)
+    if _dh:
+        return _dh
     if _UBICACION_RE.search(m):
         return (
             "Estamos en Saltillo, Coahuila, con dos campus 📍\n"
@@ -1598,6 +1635,26 @@ async def procesar_turno(
     ):
         response_text = _variar_respuesta(response_text)
         log.info("anti_duplicado_aplicado", extra={"session_id": session_id})
+
+    # 10quinquies. SALVAVIDAS — NUNCA enviar vacío ni un ACK MUERTO ("Qué bueno.", "Claro,
+    # con gusto te cuento.", "Perfecto.") sin nada más. Bug real (Gaby): "Me encanta" →
+    # mensaje EN BLANCO; "Así es" → "Qué bueno." y muerto. Si pasa, movemos la conversación.
+    _rt = (response_text or "").strip()
+    _ack_muerto = bool(
+        re.fullmatch(
+            r"(?:qu[ée]\s+bueno|claro(?:,?\s*(?:con\s+gusto\s*)?te\s+cuento)?|perfecto|"
+            r"excelente|entendido|de\s+acuerdo|genial|s[íi]|ok|aj[áa]|muy\s+bien)"
+            r"[.!\s😊🙂🌱💛]*",
+            _rt,
+            re.IGNORECASE,
+        )
+    )
+    if (not _rt or _ack_muerto) and not _es_cierre:
+        response_text = (
+            "¡Qué gusto! 😊 ¿Te gustaría que te cuente de algún nivel o grado en específico, "
+            "los costos, o prefieres que agendemos una visita para que conozcas el colegio?"
+        )
+        log.info("salvavidas_respuesta_muerta", extra={"session_id": session_id})
 
     # 11. Persistir respuesta del assistant
     await _persist_assistant_message(
