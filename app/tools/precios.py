@@ -104,7 +104,7 @@ class PrecioResult:
                 lineas.append(f"• {nombre}: ${Decimal(monto):,.0f}")
         if self.total_gastos_iniciales:
             lineas.append(f"\n**Total de gastos iniciales: ${self.total_gastos_iniciales:,.0f}**")
-        lineas.append("\nNo hay cobros sorpresa después de esto. ¿Quieres que te cuente algo más o agendamos una visita? 😊")
+        lineas.append("\nNo hay cobros sorpresa después de esto 😊")
         return "\n".join(lineas)
 
 
